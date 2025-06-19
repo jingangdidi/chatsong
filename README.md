@@ -14,6 +14,7 @@
 - Support invoking different models within the same conversation
 - Support web search and urls
 - Support upload and parse zip, html, pdf, and text file
+- Support add local model in config.txt (e.g. provide by llama-server)
 
 ## Simple usage
 **structure**
