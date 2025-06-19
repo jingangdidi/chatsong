@@ -3,14 +3,14 @@
 
 **A lightweight, portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
 
-<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png" width="600">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
 ## Features
 - 🚀 Single-file executable - no installation required
 - 🔄 Unified multi-API support for LLM providers
 - ⚡ Optimized for efficiency with minimal footprint
 - Customize models and prompts within the config file
-- Support saving Q&A records as a single HTML file
+- 1️⃣​ Support saving Q&A records as a single HTML file
 - Support invoking different models within the same conversation
 - Support web search and urls
 - Support upload and parse zip, html, pdf, and text file
