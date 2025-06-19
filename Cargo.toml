@@ -1,0 +1,36 @@
+[package]
+name = "chatsong"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+argh = { version = "0.1.10" }
+thiserror = { version = "1.0" }
+reqwest = { version = "0.12", features = ["blocking"] }
+chrono = { version = "0.4" }
+openai_dive = { version = "=1.1.0", features = ["stream", "download"] }
+futures = { version = "0.3" }
+uuid = { version = "1.10.0", features = ["v4"] }
+axum = { version = "0.7.6", features = ["multipart"] }
+tokio = { version = "1.34", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+tracing = { version = "0.1.32" }
+tracing-subscriber = { version = "0.3.9", features = ["env-filter"] }
+once_cell = { version = "1.19" }
+async-stream = { version = "0.3.6" }
+axum-extra = { version = "0.9.4", features = ["cookie"] }
+time = { version = "0.3.36" }
+tiktoken-rs = { version = "0.6.0" }
+anyhow = { version = "1.0" }
+scraper = { version = "0.20.0" }
+ignore = { version = "0.4.22" }
+termtree = { version = "0.4" }
+glob = { version = "0.3.1" }
+zip = { version = "2.2" }
+pdf-extract = { version = "0.7.9" }
+ron = { version = "0.10.1" }
+base64 = { version = "0.22" }
+
