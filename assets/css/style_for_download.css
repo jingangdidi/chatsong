@@ -1,0 +1,259 @@
+    :root {
+        --font-family: monospace, KaiTi, fangsong; /* 字体 */
+        --font-color: #0f0f0f; /* 字体颜色，黑色 */
+        --background-color: #f6f6f6; /* 背景颜色，白色 */
+        --shadow-color: #e8e8e8; /* 阴影颜色，灰色 */
+        --textarea-border-color: #719ece; /* 输入框输入问题时的颜色，蓝色 */
+        --sub-bar-hover-color: rgb(247,151,29); /* 下拉项hover时颜色 */
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        background-color: var(--background-color);
+        margin: 0;
+        padding: 0;
+        color: var(--font-color);
+        padding: 1px;
+        padding-top: 2px;
+    }
+
+    #right-part {
+        position: absolute;
+        right: 0px;
+        width: 100%;
+        height: 98vh;
+    }
+
+    /* 左侧时间 */
+    .left-time {
+        font-size: 16px;
+        font-family: var(--font-family);
+        display: flex;
+        justify-content: left;
+        padding-left: 90px;
+        color: var(--font-color);
+        margin-bottom: -20px;
+    }
+
+    /* 右侧时间 */
+    .right-time {
+        font-size: 16px;
+        font-family: var(--font-family);
+        display: flex;
+        justify-content: right;
+        padding-right: 90px;
+        color: var(--font-color);
+        margin-left: auto; /* 右对齐 */
+        margin-right: 0; /* 右对齐 */
+        margin-bottom: -20px;
+    }
+
+    /* 右侧 */
+    .content {
+        background-color: var(--background-color);
+        margin: 0px;
+        /*border-left: 1px solid var(--font-color);*/
+        box-shadow: 0 0 2px 2px var(--shadow-color);
+    }
+
+    /* 对话区域 */
+    .chat-content-area {
+        overflow: auto;
+        height: 98vh;
+        overflow-x: hidden;
+    }
+
+    /* think思维链颜色 */
+    think {
+        color: #87CEFA; /* 淡蓝色 */
+    }
+
+    /* 头像大小 */
+    /*
+    https://www.sliderrevolution.com/resources/css-neumorphism/
+    https://codepen.io/jouanmarcel/pen/RwweKqb
+    */
+    .chatgpt-icon {
+        width: 40px;
+        transition: transform 0.2s ease, opacity 0.2s ease; /* 点击头像复制内容的动态效果 */
+        /*box-shadow: -7px -7px 20px 0px #fff9,
+            -4px -4px 5px 0px #fff9,
+            7px 7px 20px 0px #0002,
+            4px 4px 5px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001;*/
+        /*box-shadow: 5px 5px 10px rgba(163, 177, 198, 0.6), -5px -5px 10px rgba(255, 255, 255, 0.5);*/
+        /*box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;*/ /* 凹进去 */
+        border: 1px solid #8F9092;
+        box-shadow: 0 4px 3px 1px #FCFCFC, 0 6px 8px #D6D7D9, 0 -4px 4px #CECFD1, 0 -6px 4px #FEFEFE, inset 0 0 3px 0 #CECFD1;
+        border-radius: 20px;
+        padding: 2px;
+    }
+
+    .gpt-chat-box .chatgpt-icon {
+        margin-right: 4px; /* 右侧回答头像与回答内容间隙，左侧提问不知道哪里设置的已经有间隙了 */
+    }
+
+    /* hover头像的动态效果 */
+    .chatgpt-icon:hover {
+        border-color: var(--textarea-border-color);
+    }
+
+    /* 点击头像复制内容的动态效果 */
+    .chatgpt-icon:active {
+        transform: scale(0.95);
+        opacity: 0.8;
+        box-shadow: 0 4px 3px 1px #FCFCFC, 0 6px 8px #D6D7D9, 0 -4px 4px #CECFD1, 0 -6px 4px #FEFEFE, inset 0 0 10px 0px var(--textarea-border-color);
+    }
+
+    /* 提问 */
+    .user-chat-box {
+        max-width: 80%; /* 显示内容的宽度 */
+        display: block;
+        padding: 20px;
+        padding-right: 50px;
+        color: var(--font-color);
+        /*float: right; 使用float会多行在一行 */
+        margin-left: auto; /* 右对齐 */
+        margin-right: 0; /* 右对齐 */
+        /*border: 1px solid red;*/
+    }
+
+    /* 提问的头像和内容靠右对齐 */
+    .q_icon_query {
+        display: flex;
+        justify-content: right;
+    }
+
+    /* 这个很重要，把提问的整行占满，否则问题占不满该行则回答会在同一行，但是预设的问题不需要设置这个 */
+    /* .new_query_need_this {
+        margin-left: 100%; 不要改这个，为什么这样可以不知道，自己试出来的
+    } */
+
+    /* 回答 */
+    .gpt-chat-box {
+        max-width: 80%; /* 显示内容的宽度 */
+        display: block;
+        padding: 20px;
+        padding-left: 50px;
+        color: var(--font-color);
+        /*float: left; 使用float会多行在一行 */
+        /*border: 1px solid blue;*/
+    }
+
+    /* 这个很重要，把回答的整行占满，否则回答占不满该行则下个问题会在同一行，但是预设的回答不需要设置这个 */
+    /* .new_answer_need_this {
+        margin-right: 100%; 不要改这个，为什么这样可以不知道，自己试出来的
+    } */
+
+    /* 头像 */
+    .chat-icon {
+        display: table-cell;
+        margin: 0;
+        padding: 0;
+        /*border: 1px solid green;*/
+    }
+
+    /* 头像对应的内容 */
+    .chat-txt {
+        display: table-cell;
+        margin: 0;
+        padding: 0;
+        /*border: 1px solid yellow;*/
+        background-color: var(--background-color);
+        box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white; /* 凹进去 */
+        /*box-shadow: -7px -7px 20px 0px #fff9,
+            -4px -4px 5px 0px #fff9,
+            7px 7px 20px 0px #0002,
+            4px 4px 5px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001;*/ /* 凸出来 */
+    }
+
+    /* 显示图片时的大小 */
+    .chat-txt img {
+        max-width: 30vw;
+        max-height: 30vh;
+        object-fit: contain;
+        /*border: 1px solid var(--textarea-border-color);*/
+        outline: none !important;
+        box-shadow: 0 0 10px var(--textarea-border-color), inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    /* 限制语音图标大小 */
+    .voice-size {
+        width: 4vw;
+    }
+
+    /* 回答靠左，提问靠右 */
+    .left, .right {
+        font-size: 16px;
+        font-family: var(--font-family);
+        width: auto;
+        max-width: 60vw; /* 100%，这里不要用百分比，否则一行很长的代码会使整个区域宽度超出对话区 */
+        padding: 14px;
+        word-wrap: break-word;
+        margin: 4px;
+        vertical-align: middle; /* 垂直居中  */
+    }
+
+    /* 回答内容 */
+    .left {
+        color: var(--font-color);
+        /*background: var(--shadow-color);*/
+        border-radius: 0 16px 16px 16px;
+    }
+
+    .left img {
+        border-radius: 0 16px 16px 16px;
+    }
+
+    /* 提问内容 */
+    .right {
+        color: var(--font-color);
+        /*background: var(--shadow-color);*/
+        border-radius: 16px 0 16px 16px;
+        white-space: pre-wrap; /* https://stackoverflow.com/questions/48695754/how-to-set-an-elements-textcontent-without-the-string-getting-trimmed */
+    }
+
+    .right img {
+        border-radius: 16px 0 16px 16px;
+    }
+
+    footer {
+        display: flex;
+        color: var(--font-color);
+        width: 99%;
+        height: 2vh;
+        font-size: 12px;
+        justify-content: center;
+        align-items: center;
+        position: absolute;
+        bottom: 0px;
+    }
+
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    /* Track */
+    ::-webkit-scrollbar-track {
+        -webkit-box-shadow: inset 0 0 6px var(--shadow-color);
+        -webkit-border-radius: 10px;
+        border-radius: 10px;
+    }
+
+    /* Handle */
+    ::-webkit-scrollbar-thumb {
+        -webkit-border-radius: 10px;
+        border-radius: 10px;
+        background: #565869;
+        -webkit-box-shadow: inset 0 0 6px var(--shadow-color);
+    }
