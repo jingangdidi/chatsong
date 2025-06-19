@@ -1,0 +1,637 @@
+    :root {
+        --font-family: monospace, KaiTi, fangsong; /* 字体 */
+        --font-color: #0f0f0f; /* 字体颜色，黑色 */
+        --background-color: #f6f6f6; /* 背景颜色，白色 */
+        --shadow-color: #e8e8e8; /* 阴影颜色，灰色 */
+        --textarea-border-color: #719ece; /* 输入框输入问题时的颜色，蓝色 */
+        --sub-bar-hover-color: rgb(247,151,29); /* 下拉项hover时颜色 */
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        background-color: var(--background-color);
+        margin: 0;
+        padding: 0;
+        color: var(--font-color);
+        padding: 1px;
+        padding-top: 2px;
+    }
+
+    #left-part {
+        position: absolute;
+        left: 0px;
+        width: 15%;
+        height: 95vh;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #right-part {
+        position: absolute;
+        right: 0px;
+        width: 85%;
+        height: 95vh;
+    }
+
+    /* 左侧时间 */
+    .left-time {
+        font-size: 16px;
+        font-family: var(--font-family);
+        display: flex;
+        justify-content: left;
+        padding-left: 90px;
+        color: var(--font-color);
+        margin-bottom: -20px;
+    }
+
+    /* 右侧时间 */
+    .right-time {
+        font-size: 16px;
+        font-family: var(--font-family);
+        display: flex;
+        justify-content: right;
+        padding-right: 90px;
+        color: var(--font-color);
+        margin-left: auto; /* 右对齐 */
+        margin-right: 0; /* 右对齐 */
+        margin-bottom: -20px;
+    }
+
+    /* 上传文件后保持当前页面 https://stackoverflow.com/questions/5733808/submit-form-and-stay-on-same-page */
+    .hide {
+        position: absolute;
+        top: -1px;
+        left: -1px;
+        width: 1px;
+        height: 1px;
+    }
+
+    #upload-file {
+        display: inline-block;
+        margin-left: -5px;
+        outline: none;
+        cursor: pointer;
+        color: var(--font-color);
+        border: none;
+        border-radius: 5px;
+        max-width: 85%;
+    }
+
+    /* 左侧设置参数 */
+    .side-nav {
+        background-color: var(--background-color);
+        margin: 0px;
+        box-shadow: 0 0 2px 2px var(--shadow-color);
+        height: 95vh;
+    }
+
+    /*
+    输入框、下拉选择框样式参考：
+    https://codepen.io/prathkum/pen/OJRvVzY
+    https://codepen.io/swapnet/pen/QWwPVwE
+    https://www.sliderrevolution.com/resources/css-forms/
+    */
+
+    /* 左侧下拉、输入参数框 */
+    .left_para {
+        display: block;
+        height: 3.5vmin; /* 输入框高度 */
+        width: 90%;
+        outline: none;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        padding-left: 15px;
+        font-size: 2vmin;
+    }
+
+    /* 左侧label字体 */
+    label {
+        font-family: var(--font-family);
+    }
+
+    /* 输入参数间距 */
+    .top_add_space {
+        margin-left: 10px;
+        margin-top: 1vh;
+    }
+
+    /* input输入框 */
+    input {
+        transition: all 0.3s ease;
+        background: var(--background-color);
+        box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    /* 输入框 */
+    input:focus, /* 鼠标或tab选中时边框颜色 */
+    input:valid:required { /* 输入有效内容且是必选，保持边框颜色 */
+    /*input:not(:placeholder-shown) { 输入完后即使鼠标点击别处，仍然显示颜色 */
+        border-color: var(--textarea-border-color);
+    }
+
+    /* 选择框 */
+    select {
+        transition: all 0.3s ease;
+        background: var(--background-color);
+        color: var(--font-color);
+        box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    /* 选择框 */
+    select:focus, /* 鼠标或tab选中时边框颜色 */
+    select:valid:required { /* 输入有效内容且是必选，保持边框颜色 */
+        border-color: var(--textarea-border-color);
+    }
+
+    /* switch开始*/
+    /*
+    neumorphism toggle switch
+    https://codepen.io/somali_12/pen/YzqEbdp
+    https://codepen.io/halvves/pen/ExjxaKj?editors=1100
+    https://codepen.io/Skagoo/pen/wvJPmay
+    https://codepen.io/pouriversal/pen/zYxVOeg
+    https://codepen.io/comehope/pen/zjoOgX
+    https://codepen.io/jh3y/pen/LYgjpYZ
+    https://codepen.io/oscar-jite/pen/YzEKQpm
+    https://codepen.io/caesura/pen/QWNjvOX
+    https://codepen.io/myacode/pen/PoqQQNM
+    https://www.sliderrevolution.com/resources/css-neumorphism/
+    */
+
+    .switch-toggle input[type="checkbox"] {
+        opacity: 0;
+        height: 0;
+        margin: 0;
+    }
+
+    .switch-toggle input[type="checkbox"] + label {
+        position: relative;
+        display: block;
+        width: 90%;
+        height: 3.5vmin; /* 输入框高度 */
+        border-radius: 8px;
+        cursor: pointer;
+        /*box-shadow: inset -8px -8px 15px rgba(255,255,255,.6), inset 10px 10px 10px rgba(0,0,0, .25);*/
+        box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    .switch-toggle input[type="checkbox"] + label::before {
+        position: absolute;
+        content: 'No';
+        font-size: 13px;
+        text-align: center;
+        top: 0.5vmin;
+        left: 2%;
+        width: 40%;
+        height: 2.5vmin;
+        line-height: 2.5vmin; /* 设为与height相同，实现文本内容居中 */
+        border-radius: 8px;
+        background-color: #d1dad3;
+        box-shadow: -3px -3px 5px rgba(255,255,255,.5), 3px 3px 5px rgba(0,0,0,.25);
+        transition: 0.3s ease-in-out;
+        /*transition: 0.3s cubic-bezier(0.25, 1, 0.5, 1);*/
+    }
+
+    .switch-toggle input[type="checkbox"]:checked + label::before {
+        left: 58%;
+        content: 'Yes';
+        color: #fff;
+        background-color: var(--textarea-border-color); /*#00b33c;*/
+        box-shadow: -3px -3px 5px rgba(255,255,255,.5), 3px 3px 5px var(--textarea-border-color); /*#00b33c;*/
+    }
+    /* switch结束*/
+
+    /* 超链接 */
+    a {
+        text-decoration: none;
+        color: var(--font-color);
+    }
+
+    .para-btn {
+        height: 1.5vmin;
+        padding-right: 10px;
+    }
+
+    /* 左侧按钮上方border */
+    /*#left-down {
+        box-shadow: 0 0 2px 2px var(--shadow-color);
+    }*/
+
+    /* 左侧按钮 */
+    .side-nav ul {
+        list-style: none;
+        padding: 0;
+        padding-right: 10px;
+        /*margin-top: 20px;*/
+    }
+
+    /* https://uiverse.io/ke1221/ancient-walrus-24 */
+    .side-nav li {
+        padding-left: 10px;
+        cursor: pointer;
+        border: 1px solid #e8e8e8;
+        transition: all 0.3s;
+        box-shadow: 6px 6px 12px #c5c5c5, -6px -6px 12px #ffffff;
+        margin: 10px;
+        border-radius: 8px;
+        height: 4.5vmin;
+        width: 90%;
+    }
+
+    .side-nav li a {
+        display: block;
+        /*border: 1px solid red;*/
+        line-height: 4.5vmin; /* 设为与height相同，实现文本内容居中 */
+    }
+
+    .side-nav li form {
+        line-height: 4.5vmin; /* 设为与height相同，实现文本内容居中 */
+    }
+
+    .side-nav li:active {
+        box-shadow: inset 4px 4px 12px #c5c5c5, inset -4px -4px 12px #ffffff;
+    }
+
+    .side-nav li:hover {
+        /*background-color: var(--shadow-color);*/
+        border-color: var(--textarea-border-color);
+    }
+
+    .side-nav i {
+        margin-right: 10px;
+    }
+
+    /* 右侧 */
+    .content {
+        background-color: var(--background-color);
+        margin: 0px;
+        /*border-left: 1px solid var(--font-color);*/
+        box-shadow: 0 0 2px 2px var(--shadow-color);
+    }
+
+    /* 右下输入问题时边框颜色 */
+    textarea:focus { 
+        outline: none !important;
+        border-color: var(--textarea-border-color);
+        box-shadow: 0 0 10px var(--textarea-border-color);
+    }
+
+    /* 右下输入问题 */
+    .chat-inputs-container {
+        border-top: 2px solid var(--shadow-color);
+        padding: 5px;
+        /*box-shadow: 0 0 2px 2px var(--shadow-color);*/
+        /*border: 1px solid green;*/
+    }
+
+    /* 输入问题框居中 */
+    .chat-inputs-inner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 8vh;
+        /*border: 1px solid blue;*/
+    }
+
+    .chat-inputs-inner textarea {
+        width: 80%;
+        padding: 10px;
+        background-color: var(--background-color);
+        border-radius: 8px;
+        outline: none;
+        /*border: none;*/
+        color: var(--font-color);
+        resize: none;
+        height: 5vh;
+        overflow-y: hidden; /* hover时才显示 */
+        border: 0px solid transparent;
+        box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    .chat-inputs-inner textarea:hover {
+        overflow-y: auto;
+    }
+
+    /* 右下输入问题时边框颜色 */
+    textarea:focus { 
+        outline: none !important;
+        /*border: 1px solid var(--textarea-border-color);*/
+        box-shadow: 0 0 10px var(--textarea-border-color), inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    /* 提交问题图标 */
+    .search_btn {
+        padding: 10px;
+        color: var(--font-color);
+        cursor: pointer;
+        width: 40px; /*针对图片 */
+    }
+
+    .search_btn:hover {
+        color: var(--textarea-border-color);
+    }
+
+    .search_btn:active {
+        transform: scale(0.6);
+        transition-duration: 0.06s;
+    }
+
+    /* 对话区域 */
+    .chat-content-area {
+        overflow: auto;
+        height: 85vh;
+        overflow-x: hidden;
+    }
+
+    /* think思维链颜色 */
+    think {
+        color: #87CEFA; /* 淡蓝色 */
+    }
+
+    /* 头像大小 */
+    /*
+    https://www.sliderrevolution.com/resources/css-neumorphism/
+    https://codepen.io/jouanmarcel/pen/RwweKqb
+    */
+    .chatgpt-icon {
+        width: 40px;
+        transition: transform 0.2s ease, opacity 0.2s ease; /* 点击头像复制内容的动态效果 */
+        /*box-shadow: -7px -7px 20px 0px #fff9,
+            -4px -4px 5px 0px #fff9,
+            7px 7px 20px 0px #0002,
+            4px 4px 5px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001;*/
+        /*box-shadow: 5px 5px 10px rgba(163, 177, 198, 0.6), -5px -5px 10px rgba(255, 255, 255, 0.5);*/
+        /*box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;*/ /* 凹进去 */
+        border: 1px solid #8F9092;
+        box-shadow: 0 4px 3px 1px #FCFCFC, 0 6px 8px #D6D7D9, 0 -4px 4px #CECFD1, 0 -6px 4px #FEFEFE, inset 0 0 3px 0 #CECFD1;
+        border-radius: 20px;
+        padding: 2px;
+    }
+
+    .gpt-chat-box .chatgpt-icon {
+        margin-right: 4px; /* 右侧回答头像与回答内容间隙，左侧提问不知道哪里设置的已经有间隙了 */
+    }
+
+    /* hover头像的动态效果 */
+    .chatgpt-icon:hover {
+        border-color: var(--textarea-border-color);
+    }
+
+    /* 点击头像复制内容的动态效果 */
+    .chatgpt-icon:active {
+        transform: scale(0.95);
+        opacity: 0.8;
+        box-shadow: 0 4px 3px 1px #FCFCFC, 0 6px 8px #D6D7D9, 0 -4px 4px #CECFD1, 0 -6px 4px #FEFEFE, inset 0 0 10px 0px var(--textarea-border-color);
+    }
+
+    /* 提问 */
+    .user-chat-box {
+        max-width: 80%; /* 显示内容的宽度 */
+        display: block;
+        padding: 20px;
+        padding-right: 50px;
+        color: var(--font-color);
+        /*float: right; 使用float会多行在一行 */
+        margin-left: auto; /* 右对齐 */
+        margin-right: 0; /* 右对齐 */
+        /*border: 1px solid red;*/
+    }
+
+    /* 提问的头像和内容靠右对齐 */
+    .q_icon_query {
+        display: flex;
+        justify-content: right;
+    }
+
+    /* 这个很重要，把提问的整行占满，否则问题占不满该行则回答会在同一行，但是预设的问题不需要设置这个 */
+    /* .new_query_need_this {
+        margin-left: 100%; 不要改这个，为什么这样可以不知道，自己试出来的
+    } */
+
+    /* 回答 */
+    .gpt-chat-box {
+        max-width: 80%; /* 显示内容的宽度 */
+        display: block;
+        padding: 20px;
+        padding-left: 50px;
+        color: var(--font-color);
+        /*float: left; 使用float会多行在一行 */
+        /*border: 1px solid blue;*/
+    }
+
+    /* 这个很重要，把回答的整行占满，否则回答占不满该行则下个问题会在同一行，但是预设的回答不需要设置这个 */
+    /* .new_answer_need_this {
+        margin-right: 100%; 不要改这个，为什么这样可以不知道，自己试出来的
+    } */
+
+    /* 头像 */
+    .chat-icon {
+        display: table-cell;
+        margin: 0;
+        padding: 0;
+        /*border: 1px solid green;*/
+    }
+
+    /* 头像对应的内容 */
+    .chat-txt {
+        display: table-cell;
+        margin: 0;
+        padding: 0;
+        /*border: 1px solid yellow;*/
+        background-color: var(--background-color);
+        box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white; /* 凹进去 */
+        /*box-shadow: -7px -7px 20px 0px #fff9,
+            -4px -4px 5px 0px #fff9,
+            7px 7px 20px 0px #0002,
+            4px 4px 5px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001,
+            inset 0px 0px 0px 0px #fff9,
+            inset 0px 0px 0px 0px #0001;*/ /* 凸出来 */
+    }
+
+    /* 显示图片时的大小 */
+    .chat-txt img {
+        max-width: 30vw;
+        max-height: 30vh;
+        object-fit: contain;
+        /*border: 1px solid var(--textarea-border-color);*/
+        outline: none !important;
+        box-shadow: 0 0 10px var(--textarea-border-color), inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    /* 限制语音图标大小 */
+    .voice-size {
+        width: 4vw;
+    }
+
+    /* 回答靠左，提问靠右 */
+    .left, .right {
+        font-size: 16px;
+        font-family: var(--font-family);
+        width: auto;
+        max-width: 60vw; /* 100%，这里不要用百分比，否则一行很长的代码会使整个区域宽度超出对话区 */
+        padding: 14px;
+        word-wrap: break-word;
+        margin: 4px;
+        vertical-align: middle; /* 垂直居中  */
+    }
+
+    /* 回答内容 */
+    .left {
+        color: var(--font-color);
+        /*background: var(--shadow-color);*/
+        border-radius: 0 16px 16px 16px;
+    }
+
+    .left img {
+        border-radius: 0 16px 16px 16px;
+    }
+
+    /* 提问内容 */
+    .right {
+        color: var(--font-color);
+        /*background: var(--shadow-color);*/
+        border-radius: 16px 0 16px 16px;
+        white-space: pre-wrap; /* https://stackoverflow.com/questions/48695754/how-to-set-an-elements-textcontent-without-the-string-getting-trimmed */
+    }
+
+    .right img {
+        border-radius: 16px 0 16px 16px;
+    }
+
+    /* 以下是图片hover下载 */
+    /* https://codepen.io/chrisdothtml/pen/OVmgwK */
+    /* 使用DeepSeek将以上链接的html和css转为常规html和css */
+    /* 单个图块样式 */
+    .tile {
+        opacity: 0.99; /* 轻微透明度（解决某些渲染问题） */
+        overflow: hidden; /* 隐藏溢出内容 */
+        position: relative; /* 相对定位（用于子元素绝对定位） */
+    }
+
+    /* 图块悬停时的渐变遮罩 */
+    .tile::before {
+        content: ''; /* 伪元素必须设置content */
+        background: linear-gradient(
+            to bottom,
+            rgba(0, 0, 0, 0) 0%,
+            rgba(0, 0, 0, 0.7) 100%
+        ); /* 渐变遮罩 */
+        width: 100%; /* 宽度100% */
+        height: 50%; /* 高度50% */
+        opacity: 0; /* 初始透明 */
+        position: absolute; /* 绝对定位 */
+        top: 100%; /* 初始位置在底部 */
+        left: 0; /* 左对齐 */
+        z-index: 2; /* 层级高于图片 */
+        transition-property: top, opacity; /* 过渡效果 */
+        transition-duration: 0.3s; /* 过渡时间 */
+    }
+
+    /* 图片样式 */
+    .tile img {
+        display: block; /* 块级显示 */
+        max-width: 100%; /* 最大宽度100% */
+        backface-visibility: hidden; /* 防止3D变换时的闪烁 */
+        -webkit-backface-visibility: hidden; /* Safari兼容 */
+    }
+
+    /* 详情文字区域 */
+    .tile .details {
+        font-size: 16px; /* 字体大小 */
+        padding: 20px; /* 内边距 */
+        position: absolute; /* 绝对定位 */
+        bottom: 0; /* 底部对齐 */
+        left: 0; /* 左对齐 */
+        z-index: 3; /* 层级最高 */
+    }
+
+    /* 详情文字样式 */
+    .tile .details a {
+        display: block; /* 块级显示 */
+        opacity: 0; /* 初始透明 */
+        color: #fff; /* 白色文字 */
+        position: relative; /* 相对定位 */
+        top: 100px; /* 初始位置在下方 */
+        transition-property: top, opacity; /* 过渡效果 */
+        transition-duration: 0.3s; /* 过渡时间 */
+        transition-delay: 0s; /* 无延迟 */
+    }
+
+    /* 标题样式 */
+    .tile .details .title {
+        line-height: 1; /* 行高1 */
+        font-weight: 600; /* 加粗 */
+        font-size: 18px; /* 字体大小 */
+        cursor: pointer;
+        text-stroke: 1px white;
+    }
+
+    /* 描述文字样式 */
+    .tile .details .info {
+        line-height: 1.2; /* 行高1.2 */
+        margin-top: 5px; /* 上边距 */
+        font-size: 12px; /* 字体大小 */
+    }
+
+    /* 悬停/聚焦时的动画效果 */
+    .tile:focus, .tile:hover {
+        /* 渐变遮罩显示 */
+        &::before {
+            opacity: 1;
+            top: 50%;
+        }
+        /* 文字显示 */
+        a {
+            opacity: 1;
+            top: 0;
+        }
+        /* 标题延迟显示 */
+        .title {
+            transition-delay: 0.15s;
+        }
+        /* 描述延迟显示 */
+        .info {
+            transition-delay: 0.25s;
+        }
+    }
+    /* 以上是图片hover下载 */
+
+    footer {
+        display: flex;
+        color: var(--font-color);
+        width: 99%;
+        height: 3.5vh;
+        font-size: 12px;
+        justify-content: center;
+        align-items: center;
+        position: absolute;
+        bottom: 0px;
+    }
+
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    /* Track */
+    ::-webkit-scrollbar-track {
+        -webkit-box-shadow: inset 0 0 6px var(--shadow-color);
+        -webkit-border-radius: 10px;
+        border-radius: 10px;
+    }
+
+    /* Handle */
+    ::-webkit-scrollbar-thumb {
+        -webkit-border-radius: 10px;
+        border-radius: 10px;
+        background: #565869;
+        -webkit-box-shadow: inset 0 0 6px var(--shadow-color);
+    }
