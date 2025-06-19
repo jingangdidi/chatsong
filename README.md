@@ -6,15 +6,15 @@
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
 ## Features
-- 🚀 Single-file executable - no installation required
+- ​🪶​ Single-file executable - no installation required
 - 🔄 Unified multi-API support for LLM providers
 - ⚡ Optimized for efficiency with minimal footprint
-- Customize models and prompts within the config file
+- 🗝️​ Customize models and prompts within the config file
 - 1️⃣​ Support saving Q&A records as a single HTML file
-- Support invoking different models within the same conversation
-- Support web search and urls
-- Support upload and parse zip, html, pdf, and text file
-- Support add local model in config.txt (e.g. provide by llama-server)
+- 📚​ Support invoking different models within the same conversation
+- ​🌐​ Support web search and urls
+- ​📤​ Support upload and parse zip, html, pdf, and text file
+- 💻​ Support add local model in config.txt (e.g. provide by llama-server)
 
 ## Simple usage
 **structure**
