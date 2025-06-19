@@ -43,7 +43,7 @@ This section remains pending completion and will be duly supplemented.
 ```
 Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-g <graph>] [-m <maxage>] [-r] [-l] [-o <outpath>]
 
-http server for ChatGPT api
+server for LLM api
 
 Options:
   -c, --config      config file, contain api_key, endpoint, model name
@@ -51,10 +51,8 @@ Options:
   -p, --port        port, default: 8080
   -e, --engine-key  search engine key, used for google search
   -s, --search-key  search api key, used for google search
-  -g, --graph       graph file, default: search for the latest *.graph file in
-                    the output path
-  -m, --maxage      cookie max age, default: 1DAY, support: SECOND, MINUTE,
-                    HOUR, DAY, WEEK
+  -g, --graph       graph file, default: search for the latest *.graph file in the output path
+  -m, --maxage      cookie max age, default: 1DAY, support: SECOND, MINUTE, HOUR, DAY, WEEK
   -r, --share       allow sharing of all chat logs
   -l, --english     chat page show english
   -o, --outpath     output path, default: ./chat-log
