@@ -13,7 +13,7 @@ use tracing_subscriber::{
 
 /// PARAS: 存储命令行参数的全局变量
 /// api::configure: 路由
-use server_for_api::{
+use chatsong::{
     parse_paras::PARAS,
     api::configure,
     ctrlc::wait_for_signal,
