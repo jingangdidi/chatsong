@@ -9,6 +9,8 @@
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
+
 ## 👑 特点
 - 💪 单个可执行文件（~10M），无需安装
 - 🔐 隐私安全，所有问答记录都本地存储，且随意删除
