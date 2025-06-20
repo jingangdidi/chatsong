@@ -9,7 +9,7 @@
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
-<img src="https://github.com/jingangdidi/chatsong/assets/image/demo_2x.gif">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
 
 ## 👑 Features
 - ​💪​ Single-file executable - no installation required
