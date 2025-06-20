@@ -3,14 +3,15 @@
 
 [中文文档](https://github.com/jingangdidi/chatsong/blob/main/README_zh.md)
 
-**A lightweight, portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
+**A lightweight(~10M), portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
+
+**轻量级大语言模型api调用工具，无需安装，仅一个~9M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
 ## Features
 - ​🪶​ Single-file executable - no installation required
 - 🔄 Unified multi-API support for LLM providers
-- ⚡ Optimized for efficiency with minimal footprint
 - 🎨​ Customize models and prompts within the config file
 - 1️⃣​ Support saving Q&A records as a single HTML file
 - 📚​ Support invoking different models within the same conversation
