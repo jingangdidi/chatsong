@@ -96,17 +96,17 @@ Options:
     outpath: "./chat-log",   // 必填，问答记录的保存路径
     model_config: [
         Config(
-            provider: "openai", // 必填，且不能重复
-            api_key: "sk-xxx",
-            endpoint: "https://api.xxx",
+            provider: "openai",          // 必填，且不能重复
+            api_key: "sk-xxx",           // 必填
+            endpoint: "https://api.xxx", // 必填
             models: [
                 Model(
-                    name: "gpt-4.1-mini-2025-04-14",
-                    pricing: "(in: 0.0028/k, out: 0.0112/k)",
-                    discription: "OpenAI gpt-4.1 model",
-                    group: "gpt-4.1",
-                    is_default: false,
-                    is_cof: false,
+                    name: "gpt-4.1-mini-2025-04-14",          // 必填
+                    pricing: "(in: 0.0028/k, out: 0.0112/k)", // 可以空着
+                    discription: "OpenAI gpt-4.1 model",      // 可以空着
+                    group: "gpt-4.1",                         // 必填
+                    is_default: false,                        // 必填
+                    is_cof: false,                            // 必填
                 ),
                 Model(
                     name: "gpt-4.1-nano-2025-04-14",
