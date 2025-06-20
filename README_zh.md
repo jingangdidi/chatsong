@@ -10,18 +10,18 @@
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
 ## 特点
-- ​🪶​ 单个可执行文件（~9M），无需安装
-- 隐私安全，所有问答记录都本地存储，且随意删除
-- 🔄 支持同时调用多种大模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）
+- 💪 单个可执行文件（~9M），无需安装
+- 🔐 隐私安全，所有问答记录都本地存储，且随意删除
+- 🤖 支持同时调用多种大模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）
 - 🎨​ 在config.txt中自定义要用的模型以及prompt
 - 1️⃣​ 支持将问答记录保存至单个HTML文件
 - 📚​ 支持在同一对话中调用不同模型
 - ​🌐​ 支持网络搜索和指定url内容的提取
 - ​📤​ 支持上传zip、html、pdf文件，自动解析内容, 以及常规文本文件
 - 💻​ 支持调用本地部署的大模型（比如调用本地llama-server部署的大模型）
-- 支持markdown显示：代码高亮、mermaid流程图
-- 支持统计每个对话的token用量
-- 支持设置每次提问包含多少条上下文信息，极大的节省token用量
+- ✨ 支持markdown显示：代码高亮、mermaid流程图
+- 📊 支持统计每个对话的token用量
+- 💰 支持设置每次提问包含多少条上下文信息，极大的节省token用量
 
 ## 使用示例
 **目录结构**
