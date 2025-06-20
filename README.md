@@ -16,7 +16,7 @@
 - ​📤​ Support upload and parse zip, html, pdf, and text file
 - 💻​ Support add local model in config.txt (e.g. provide by llama-server)
 
-## Simple usage
+## Quick-Start
 **structure**
 ```
 some dir
@@ -24,19 +24,19 @@ some dir
 ├─ config.txt # config file
 └─ chat-log   # save chat log
 ```
-**download pre-built binaries**
+**1. download a pre-built binary**
 
 [latest release](https://github.com/jingangdidi/chatsong/releases)
 
-**1. start server**
+**2. start server**
 ```
 ./chatsong
 ```
-**2. visit directly in your browser**
+**3. visit directly in your browser**
 
 [http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)
 
-**3. terminate the service**
+**4. terminate the service**
 ```
 press `Ctrl+C` to automatically save all chat records to the output directory while simultaneously updating the graph file
 ```
@@ -45,6 +45,13 @@ press `Ctrl+C` to automatically save all chat records to the output directory wh
 [YouTube demo vedio](https://youtu.be/IOfFhxuk6Xc)
 
 This section remains pending completion and will be duly supplemented.
+
+## Building from source
+```
+git clone https://github.com/jingangdidi/chatsong.git
+cd chatsong
+cargo build --release
+```
 
 ## Arguments
 ```
