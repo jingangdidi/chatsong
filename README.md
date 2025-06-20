@@ -24,6 +24,9 @@ some dir
 ├─ config.txt # config file
 └─ chat-log   # save chat log
 ```
+**download pre-built binaries**
+[latest release](https://github.com/jingangdidi/chatsong/releases)
+
 **1. start server**
 ```
 ./chatsong
