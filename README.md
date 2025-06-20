@@ -1,6 +1,8 @@
 # chatsong
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/jingangdidi/chatsong/blob/main/LICENSE)
 
+[中文文档](https://github.com/jingangdidi/chatsong/blob/main/README_zh.md)
+
 **A lightweight, portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
