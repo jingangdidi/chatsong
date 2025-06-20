@@ -35,7 +35,11 @@
 
 [latest release](https://github.com/jingangdidi/chatsong/releases)
 
-**2. 开启服务**
+**2. 准备config.txt**
+
+填写自己要用的模型，以及api key、api地址等，详见[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)
+
+**3. 开启服务**
 ```
 ./chatsong
 ```
@@ -83,16 +87,16 @@ Options:
 ## 📝 config.txt
 ```
 (
-    ip_address: "127.0.0.1",
-    port: 8080,
-    google_engine_key: "", # used for web search
-    google_search_key: "", # used for web search
-    maxage: "1DAY",        # cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
-    show_english: true,    # true: show english page，false: show chinese page
-    outpath: "./chat-log", # where to save chat log files
+    ip_address: "127.0.0.1", // 必填
+    port: 8080,              // 必填
+    google_engine_key: "",   // 可以空着，网络搜索时要用
+    google_search_key: "",   // 可以空着，网络搜索时要用
+    maxage: "1DAY",          // 必填，cookie的maxage，支持：SECOND, MINUTE, HOUR, DAY, WEEK
+    show_english: true,      // 必填，true表示英文页面，fasle表示中文页面
+    outpath: "./chat-log",   // 必填，问答记录的保存路径
     model_config: [
         Config(
-            provider: "openai",
+            provider: "openai", // 必填，且不能重复
             api_key: "sk-xxx",
             endpoint: "https://api.xxx",
             models: [
