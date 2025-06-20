@@ -20,6 +20,8 @@
 - ​📤​ Support upload and parse zip, html, pdf, and text file
 - 💻​ Support add local model in config.txt (e.g. provide by llama-server)
 - Markdown support: code highlight, mermaid
+- Support counting the token usage for each conversation
+- Support setting how many contextual messages to include in each query, greatly saving token usage
 
 ## Quick-Start
 **structure**
