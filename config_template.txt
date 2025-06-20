@@ -1,24 +1,24 @@
 (
-    ip_address: "127.0.0.1",
-    port: 8080,
-    google_engine_key: "",
-    google_search_key: "",
-    maxage: "1DAY", // cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
-    show_english: true, // true: show english page，false: show chinese page
-    outpath: "./chat-log",
+    ip_address: "127.0.0.1", // required
+    port: 8080,              // required
+    google_engine_key: "",   // optional, used for web search
+    google_search_key: "",   // optional, used for web search
+    maxage: "1DAY",          // required, cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
+    show_english: true,      // required, true: show english page，false: show chinese page
+    outpath: "./chat-log",   // required, where to save chat log files
     model_config: [
         Config(
-            provider: "openai",
-            api_key: "sk-xxx",
-            endpoint: "https://api.xxx",
+            provider: "openai",          // required
+            api_key: "sk-xxx",           // required
+            endpoint: "https://api.xxx", // required
             models: [
                 Model(
-                    name: "gpt-3.5-turbo",
-                    pricing: "(in: 0.0035/k, out: 0.0105/k)",
-                    discription: "OpenAI gpt-3.5 model",
-                    group: "GPT3",
-                    is_default: false,
-                    is_cof: false,
+                    name: "gpt-3.5-turbo",                    // required
+                    pricing: "(in: 0.0035/k, out: 0.0105/k)", // optional
+                    discription: "OpenAI gpt-3.5 model",      // optional, information displayed when mouse hover this model
+                    group: "GPT3",                            // required, models that are adjacent and belong to the same group will be placed together in the dropdown menu
+                    is_default: false,                        // required, should it be used as the default model
+                    is_cof: false,                            // required, does it support deep reasoning
                 ),
                 Model(
                     name: "gpt-4.1-mini-2025-04-14",
