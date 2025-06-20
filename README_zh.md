@@ -5,12 +5,12 @@
 
 **A lightweight(~10M), portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
 
-**轻量级大语言模型api调用工具，无需安装，仅一个~9M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
+**轻量级大语言模型api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
 ## 特点
-- 💪 单个可执行文件（~9M），无需安装
+- 💪 单个可执行文件（~10M），无需安装
 - 🔐 隐私安全，所有问答记录都本地存储，且随意删除
 - 🤖 支持同时调用多种大模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）
 - 🎨​ 在config.txt中自定义要用的模型以及prompt
