@@ -11,7 +11,7 @@
 
 ## Features
 - ​💪​ Single-file executable - no installation required
-- 🔒 Privacy first, all data is stored locally
+- 🔐 Privacy first, all data is stored locally
 - 🤖 Unified multi-API support for LLM providers
 - 🎨​ Customize models and prompts within the config file
 - 1️⃣​ Support saving Q&A records as a single HTML file
