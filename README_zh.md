@@ -9,7 +9,7 @@
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
-## 特点
+## 👑 特点
 - 💪 单个可执行文件（~10M），无需安装
 - 🔐 隐私安全，所有问答记录都本地存储，且随意删除
 - 🤖 支持同时调用多种大模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）
@@ -23,7 +23,7 @@
 - 📊 支持统计每个对话的token用量
 - 💰 支持设置每次提问包含多少条上下文信息，极大的节省token用量
 
-## 使用示例
+## 🚀 使用示例
 **目录结构**
 ```
 你的路径
@@ -48,19 +48,19 @@
 按下`Ctrl+C`将自动保存所有问答记录等信息至输出路径，下次开启服务可基于之前的问答继续提问。
 ```
 
-## 详细示例
+## 📺 详细示例
 [YouTube示例视频](https://youtu.be/IOfFhxuk6Xc)
 
 该部分会继续补充添加
 
-## 从源码编译
+## 🛠 从源码编译
 ```
 git clone https://github.com/jingangdidi/chatsong.git
 cd chatsong
 cargo build --release
 ```
 
-## 命令行参数
+## 🚥 命令行参数
 ```
 Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-g <graph>] [-m <maxage>] [-r] [-l] [-o <outpath>]
 
@@ -80,7 +80,7 @@ Options:
   --help, help      display usage information
 ```
 
-## config.txt
+## 📝 config.txt
 ```
 (
     ip_address: "127.0.0.1",
