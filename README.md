@@ -9,7 +9,7 @@
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/shortcut.png">
 
-## Features
+## 👑 Features
 - ​💪​ Single-file executable - no installation required
 - 🔐 Privacy first, all data is stored locally
 - 🤖 Unified multi-API support for LLM providers
@@ -23,7 +23,7 @@
 - 📊 Support counting the token usage for each conversation
 - 💰 Support setting how many contextual messages to include in each query, greatly saving token usage
 
-## Quick-Start
+## 🚀 Quick-Start
 **structure**
 ```
 some dir
@@ -48,19 +48,19 @@ some dir
 press `Ctrl+C` to automatically save all chat records to the output directory while simultaneously updating the graph file
 ```
 
-## Detailed Instructions
+## 📺 Detailed Instructions
 [YouTube demo vedio](https://youtu.be/IOfFhxuk6Xc)
 
 This section remains pending completion and will be duly supplemented.
 
-## Building from source
+## 🛠 Building from source
 ```
 git clone https://github.com/jingangdidi/chatsong.git
 cd chatsong
 cargo build --release
 ```
 
-## Arguments
+## 🚥 Arguments
 ```
 Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-g <graph>] [-m <maxage>] [-r] [-l] [-o <outpath>]
 
@@ -80,7 +80,7 @@ Options:
   --help, help      display usage information
 ```
 
-## config.txt
+## 📝 config.txt
 ```
 (
     ip_address: "127.0.0.1",
