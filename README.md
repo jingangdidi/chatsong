@@ -35,15 +35,19 @@ some dir
 
 [latest release](https://github.com/jingangdidi/chatsong/releases)
 
-**2. start server**
+**2. prepare config.txt**
+
+add your models, api key, endpoint, etc, see [config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt) for details.
+
+**3. start server**
 ```
 ./chatsong
 ```
-**3. visit directly in your browser**
+**4. visit directly in your browser**
 
 [http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)
 
-**4. terminate the service**
+**5. terminate the service**
 ```
 press `Ctrl+C` to automatically save all chat records to the output directory while simultaneously updating the graph file
 ```
@@ -83,26 +87,26 @@ Options:
 ## 📝 config.txt
 ```
 (
-    ip_address: "127.0.0.1",
-    port: 8080,
-    google_engine_key: "", # used for web search
-    google_search_key: "", # used for web search
-    maxage: "1DAY",        # cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
-    show_english: true,    # true: show english page，false: show chinese page
-    outpath: "./chat-log", # where to save chat log files
+    ip_address: "127.0.0.1", // required
+    port: 8080,              // required
+    google_engine_key: "",   // optional, used for web search
+    google_search_key: "",   // optional, used for web search
+    maxage: "1DAY",          // required, cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
+    show_english: true,      // required, true: show english page，false: show chinese page
+    outpath: "./chat-log",   // required, where to save chat log files
     model_config: [
         Config(
-            provider: "openai",
-            api_key: "sk-xxx",
-            endpoint: "https://api.xxx",
+            provider: "openai",          // required
+            api_key: "sk-xxx",           // required
+            endpoint: "https://api.xxx", // required
             models: [
                 Model(
-                    name: "gpt-4.1-mini-2025-04-14",
-                    pricing: "(in: 0.0028/k, out: 0.0112/k)",
-                    discription: "OpenAI gpt-4.1 model",
-                    group: "gpt-4.1",
-                    is_default: false,
-                    is_cof: false,
+                    name: "gpt-4.1-mini-2025-04-14",          // required
+                    pricing: "(in: 0.0028/k, out: 0.0112/k)", // optional
+                    discription: "OpenAI gpt-4.1 model",      // optional
+                    group: "gpt-4.1",                         // required
+                    is_default: false,                        // required
+                    is_cof: false,                            // required
                 ),
                 Model(
                     name: "gpt-4.1-nano-2025-04-14",
