@@ -33,7 +33,7 @@ pub static PARAS: Lazy<ParsedParas> = Lazy::new(|| {
 });
 
 #[derive(FromArgs)]
-/// http server for ChatGPT api
+/// http server for LLM api
 struct Paras {
     /// config file, contain api_key, endpoint, model name
     #[argh(option, short = 'c')]
