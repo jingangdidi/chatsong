@@ -386,7 +386,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
 <!-- js -->
 <script type='text/javascript'>
 ";
-    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {} // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n", PARAS.addr_str, PARAS.port, v, logs_len);
+    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n", PARAS.addr_str, PARAS.port, v, logs_len);
     result += r###"    var emptyInput = true; // 全局变量，存储输入问题是否为空
     var no_message = true; // 是否没有获取到效回复，没有获取到，则将添加的msg_res删掉
     var already_clear_log = false; // 是否已清除了当前的记录
@@ -415,7 +415,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         for (let i = 0; i < event.target.files.length; i++) {
             const file = event.target.files[i];
             if (file) {
-                insert_right_image() // 先插入右侧的空内容，后面写入图片或上传文件的文件名
+                insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
                 let new_id = 'm'+(current_id-1);
                 const msg_req_right = document.getElementById(new_id);
                 if (file.type.startsWith('image/')) { // 插入显示上传的图片或文件名
@@ -441,7 +441,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     function clear_all_child(id_name) {
         const parent = document.getElementById(id_name)
         while (parent.firstChild) {
-            parent.firstChild.remove()
+            parent.firstChild.remove();
         }
     }
     // 更新相关uuid的下拉项
@@ -1213,7 +1213,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
 <!-- js -->
 <script type='text/javascript'>
 ";
-    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {} // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n", PARAS.addr_str, PARAS.port, v, logs_len);
+    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n", PARAS.addr_str, PARAS.port, v, logs_len);
     result += r###"    var emptyInput = true; // 全局变量，存储输入问题是否为空
     var no_message = true; // 是否没有获取到效回复，没有获取到，则将添加的msg_res删掉
     var already_clear_log = false; // 是否已清除了当前的记录
@@ -1242,7 +1242,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         for (let i = 0; i < event.target.files.length; i++) {
             const file = event.target.files[i];
             if (file) {
-                insert_right_image() // 先插入右侧的空内容，后面写入图片或上传文件的文件名
+                insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
                 let new_id = 'm'+(current_id-1);
                 const msg_req_right = document.getElementById(new_id);
                 if (file.type.startsWith('image/')) { // 插入显示上传的图片或文件名
@@ -1268,7 +1268,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     function clear_all_child(id_name) {
         const parent = document.getElementById(id_name)
         while (parent.firstChild) {
-            parent.firstChild.remove()
+            parent.firstChild.remove();
         }
     }
     // 更新相关uuid的下拉项
