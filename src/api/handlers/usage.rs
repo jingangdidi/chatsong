@@ -13,6 +13,7 @@ pub async fn usage(uri: OriginalUri) -> Result<String, StatusCode> {
 Usage Instructions
     1. Standard Dialogue
         Submit queries by pressing Enter after each input. Consecutive inputs are permitted. An empty submission indicates completion, rendering the input field inactive.
+        If you are not satisfied with the answer obtained from the input question and want to ask again using a different model, you do not need to input any content. Simply press enter and the last question will be asked again without the need to input the same question again.
         For lengthy content, you can save the text to a file and upload it, then submit without additional input.
         Example: \"What is Rust programming language?\"
 
@@ -43,54 +44,78 @@ Usage Instructions
         For model whisper-1: Upload audio. Submit \"transc\" to extract text or \"transl\" for English translation.
 
 Sidebar Settings
-    1. start new chat
-        Select a prompt to initiate a dialogue; otherwise, continue the current conversation.
-    2. models
-        Choose the active model (switchable mid-dialogue).
-    3. reasoning effort
-        Adjust reasoning effort (for compatible models).
-    4. new chat title (optional)
-        Assign a name for easy navigation between dialogues.
-    5. uuid
-        Unique dialogue identifier. Enter a prior UUID to resume a previous dialogue.
-    6. related UUIDs
-        Dropdown list of past dialogues for quick access (lower priority than manual UUID entry).
-    7. temperature
-        Modulates output randomness.
-    8. stream
-        Yes: Real-time, incremental display.
-        No: Wait for complete response before display.
-    9. web search
-        Yes: Queries leverage online resources or specified URLs.
-        No: Responding based on the model's intrinsic knowledge repository.
-    10. send messages
-        Configures how many prior messages (Q&A pairs) are included with submissions:
-        unlimited: Retain all history or reset with current query.
-        fixed counts: Include N prior messages (e.g., 5, 10, 100).  
-        prompt-integrated options: Prepend the dialogue prompt if defined.
-    11. voice
-        Choose audio synthesis voice (for TTS models).
-    12. Save chat log
-        Download dialogue history as an HTML file (UUID and optional name in filename).
-    13. file Upload
-        Upload your files, multiple documents are supported.
-    14. Usage
-        Access documentation.
-    15. current prompt
-        Displays the active prompt name.
-    16. current uuid
-        Identifier for the ongoing dialogue.
-    17. input token
-        The total input tokens used in the current dialogue.
-    18. output token
-        The total output tokens used in the current dialogue.
+    It is divided into two parts: \"front\" and \"back\". \"Front\" is a commonly used parameter, while \"back\" is an infrequently used parameter. By default, only the \"front\" parameter is displayed. You can click the settings button in the lower left corner to switch between the \"front\" and \"back\".
+    Front parameters:
+        1. start new chat
+            Select a prompt to initiate a dialogue; otherwise, continue the current conversation.
+        2. new chat title (optional)
+            Assign a name for easy navigation between dialogues.
+        3. models
+            Choose the active model (switchable mid-dialogue).
+        4. contextual messages
+            Every time you submit a question, you need to bring along the previous few conversation messages (including the question and reply, including the current submitted question), discard earlier irrelevant conversation messages, and save tokens as the smaller the message.
+            A pair of Q&A includes: one or more consecutive question messages and one or more consecutive answer messages.
+            unlimit: Every time a question is submitted, all previous Q&A records will be included.
+            1 Q&A pair: Only include the current input question (which can be multiple consecutive messages); If there are no input questions, it is the last question (which can be multiple consecutive messages).
+            2 Q&A pairs: Contains all messages from the latest 1 Q&A pair, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is all the messages from the second to last Q&A pair, as well as the last question (which can be multiple consecutive messages).
+            3 Q&A pairs: Contains all messages from the latest 2 Q&A pairs, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is all the messages from the third-to-last and second-to-last Q&A pairs, as well as the last question (which can be multiple consecutive messages).
+            4 Q&A pairs: Contains all messages from the latest 3 Q&A pairs, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is all the messages from the fourth-to-last, third-to-last and second-to-last Q&A pairs, as well as the last question (which can be multiple consecutive messages).
+            5 Q&A pairs: Contains all messages from the latest 3 Q&A pairs, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is all the messages from the fifth-to-last, fourth-to-last, third-to-last and second-to-last Q&A pairs, as well as the last question (which can be multiple consecutive messages).
+            prompt + 1 Q&A pair: Only include prompt(if specified when creating the chat) and the current input question (which can be multiple consecutive messages); If there are no input questions, it is prompt(if specified when creating the chat) and the last question (which can be multiple consecutive messages).
+            prompt + 2 Q&A pairs: Contains prompt(if specified when creating the chat) and all messages from the latest 1 Q&A pair, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is prompt(if specified when creating the chat) and all the messages from the second to last Q&A pair, as well as the last question (which can be multiple consecutive messages).
+            prompt + 3 Q&A pairs: Contains prompt(if specified when creating the chat) and all messages from the latest 2 Q&A pairs, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is prompt(if specified when creating the chat) and all the messages from the third-to-last and second-to-last Q&A pairs, as well as the last question (which can be multiple consecutive messages).
+            prompt + 4 Q&A pairs: Contains prompt(if specified when creating the chat) and all messages from the latest 3 Q&A pairs, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is prompt(if specified when creating the chat) and all the messages from the fourth-to-last, third-to-last and second-to-last Q&A pairs, as well as the last question (which can be multiple consecutive messages).
+            prompt + 5 Q&A pairs: Contains prompt(if specified when creating the chat) and all messages from the latest 3 Q&A pairs, as well as the current input question (which can be multiple consecutive messages); If there is no input question, it is prompt(if specified when creating the chat) and all the messages from the fifth-to-last, fourth-to-last, third-to-last and second-to-last Q&A pairs, as well as the last question (which can be multiple consecutive messages).
+            1 message: Only contains the current one input message; If there is no input question, it is the last question message.
+            2 messages: Contains the latest 1 message and the current one input message; If there is no input question, the latest or consecutive answer message will be ignored, and 2 messages will be counted forward from the most recent question messages.
+            3 messages: Contains the latest 2 messages, as well as the current one input message; If there is no input question, the latest or consecutive answer information will be ignored, and 3 messages will be counted forward from the most recent question message.
+            4 messages: Contains the latest 3 messages, as well as the current one input message; If there is no input question, the latest or consecutive answer information will be ignored, and 4 messages will be counted forward from the most recent question message.
+            5 messages: Contains the latest 4 messages, as well as the current one input message; If there is no input question, the latest or consecutive answer information will be ignored, and 5 messages will be counted forward from the most recent question message.
+            prompt + 1 message: Only contains prompt(if specified when creating the chat) and the current one input message; If there is no input question, it is prompt(if specified when creating the chat) and the last question message.
+            prompt + 2 messages: Contains prompt(if specified when creating the chat) and the latest 1 message and the current one input message; If there is no input question, the latest or consecutive answer message will be ignored, and prompt(if specified when creating the chat) and 2 messages will be counted forward from the most recent question messages.
+            prompt + 3 messages: Contains prompt(if specified when creating the chat) and the latest 2 messages, as well as the current one input message; If there is no input question, the latest or consecutive answer information will be ignored, and prompt(if specified when creating the chat) and 3 messages will be counted forward from the most recent question message.
+            prompt + 4 messages: Contains prompt(if specified when creating the chat) and the latest 3 messages, as well as the current one input message; If there is no input question, the latest or consecutive answer information will be ignored, and prompt(if specified when creating the chat) and 4 messages will be counted forward from the most recent question message.
+            prompt + 5 messages: Contains prompt(if specified when creating the chat) and the latest 4 messages, as well as the current one input message; If there is no input question, the latest or consecutive answer information will be ignored, and prompt(if specified when creating the chat) and 5 messages will be counted forward from the most recent question message.
+        5. web search
+            Yes: Queries leverage online resources or specified URLs.
+            No: Responding based on the model's intrinsic knowledge repository.
+        6. Save chat log
+            Download dialogue history as an HTML file (UUID and optional name in filename).
+        7. file Upload
+            Upload your files, multiple documents are supported.
+        8. Usage
+            Access documentation.
+        9. current prompt
+            Displays the active prompt name.
+        10. current uuid
+            Identifier for the ongoing dialogue.
+        11. input token
+            The total input tokens used in the current dialogue.
+        12. output token
+            The total output tokens used in the current dialogue.
+    Back parameters:
+        1. reasoning effort
+            Adjust reasoning effort (for compatible models).
+        2. uuid
+            Unique dialogue identifier. Enter a prior UUID to resume a previous dialogue.
+        3. related UUIDs
+            Dropdown list of past dialogues for quick access (lower priority than manual UUID entry).
+        4. temperature
+            Modulates output randomness.
+        5. stream
+            Yes: Real-time, incremental display.
+            No: Wait for complete response before display.
+        6. voice
+            Choose audio synthesis voice (for TTS models).
+        
 ", PARAS.addr_str, PARAS.port, uri.path())
     } else {
         format!("main page: http://{}:{}{}
 
 对话说明
     1. 常规对话
-        输入问题，回车提交问题，可连续输入多次，不输入内容直接回车表示输入完毕，等待回复，此时输入框无效。
+        输入问题，回车提交问题，可连续输入多次（比如一个复杂的问题分多次进行描述），不输入内容直接回车表示输入完毕，等待回复，此时输入框无效。
+        如果输入问题获取到答案后对答案不满意，想要换个模型再问一次，此时不需要输入任何内容，直接回车，就会把最后一个问题再问一次而不需要再输入一次同样的问题。
         如果输入内容太长，也可将输入内容保存至文件中，上传文件，然后不输入内容直接回车即可。
         例如：“What is rust language?”
 
@@ -125,63 +150,67 @@ Sidebar Settings
         当选取的模型是whisper-1时，上传音频文件。输入“transc”，从音频中提取文本；输入“transl”，将音频内容翻译为英文
 
 页面左侧设置说明
-    1. 开启新会话
-        下拉选择一个prompt，会开启一个新对话，不选择则始终基于当前对话进行问答
-    2. 模型
-        选择要使用的模型，同一对话可以切换使用不同模型
-    3. 思考的深度
-        设置思考的深度，仅对支持thinking的模型有效
-    4.新对话名称（可选）
-        开启新对话时，可以输入一个名称，方便在不同对话间切换时快速找到目标对话
-    5. uuid
-        每个对话会有一个uuid，可以输入之前对话的uuid切换到之前的对话，基于之前对话进行问答
-    6. 相关uuid
-        与当前uuid相关的uuid，可以下拉选择之前的对话，下次提问将跳转到选择的对话，相比输入uuid要方便，优先级没有输入uuid高
-    7. 温度
-        控制生成内容的随机性
-    8. 流式输出
-        Yes表示输出内容实时逐字显示，No表示等回答完成后一次性显示（在完成回答之前会一直等待）
-    9. 网络搜索
-        Yes表示对输入的问题进行网络搜索，或解析输入的url内容，基于搜索或解析的内容进行回答，No表示基于模型自身的知识库进行回答
-    10. 保留最新对话数
-        每次提交问题时，需要带上之前几条对话记录（包括问题与回复，包括当前提交的问题），越小越节省token
-        unlimit：无限制，每次提交问题都带上之前所有的问答记录
-        unlimit+drop：舍弃本次提问前的所有记录，从本次提问开始无限制
-        unlimit+prompt+drop：舍弃本次提问前的所有记录，如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上从本次提问开始的所有问答记录；如果该对话没有指定prompt，则与选择“unlimit+drop”相同
-        1：每次提交问题只提交当前的问题
-        1+prompt：如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上当前的问题；如果该对话没有指定prompt，则与选择“1”相同
-        1+prompt+drop：舍弃本次提问前的所有记录，从本次提问开始，按照“1+prompt”的规则提问
-        5：每次提交问题除了当前问题外，还包含之前的4条问答记录
-        5+prompt：如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上包括当前问题的最近5条记录；如果该对话没有指定prompt，则与选择“5”相同
-        5+prompt+drop：舍弃本次提问前的所有记录，从本次提问开始，按照“5+prompt”的规则提问
-        10：每次提交问题除了当前问题外，还包含之前的9条问答记录
-        10+prompt：如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上包括当前问题的最近10条记录；如果该对话没有指定prompt，则与选择“10”相同
-        10+prompt+drop：舍弃本次提问前的所有记录，从本次提问开始，按照“10+prompt”的规则提问
-        20：每次提交问题除了当前问题外，还包含之前的19条问答记录
-        20+prompt：如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上包括当前问题的最近20条记录；如果该对话没有指定prompt，则与选择“20”相同
-        20+prompt+drop：舍弃本次提问前的所有记录，从本次提问开始，按照“20+prompt”的规则提问
-        50：每次提交问题除了当前问题外，还包含之前的49条问答记录
-        50+prompt：如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上包括当前问题的最近50条记录；如果该对话没有指定prompt，则与选择“50”相同
-        50+prompt+drop：舍弃本次提问前的所有记录，从本次提问开始，按照“50+prompt”的规则提问
-        100：每次提交问题除了当前问题外，还包含之前的99条问答记录
-        100+prompt：如果该对话有指定prompt，则始终将prompt作为提交问题的第一条信息，然后再加上包括当前问题的最近100条记录；如果该对话没有指定prompt，则与选择“100”相同
-        100+prompt+drop：舍弃本次提问前的所有记录，从本次提问开始，按照“100+prompt”的规则提问
-    11. 声音
-        生成音频时，可选择音频的声音
-    12. Save chat log
-        点击可下载当前对话的问答记录，仅1个html文件，文件名含有该对话的uuid，如果创建该对话时输入了对话名称，也会包含在文件名中
-    13. 上传文件
-        点击选择要上传的文件，支持多选
-    14. Usage
-        查看使用说明
-    15. current prompt
-        显示当前对话的prompt名称
-    16. current uuid
-        当前对话的uuid，使用该uuid可切换不同对话
-    17. input token
-        当前对话输入问题的token总数
-    18. output token
-        当前对话输出内容的token总数
+    分为“正面”和“反面”两部分，“正面”是常用的参数，“反面”是不常用的参数，默认只显示“正面”参数，可点击左下角的设置按钮切换正面和反面。
+    正面参数：
+        1. 开启新对话
+            下拉选择一个prompt，会开启一个新对话，不选择则始终基于当前对话进行问答
+        2.新对话名称（可选）
+            开启新对话时，可以输入一个名称，方便在不同对话间切换时快速找到目标对话
+        3. 模型
+            选择要使用的模型，同一对话可以切换使用不同模型
+        4. 上下文消息数
+            每次提交问题时，需要带上之前几条对话信息（包括问题与回复，包括当前提交的问题），舍弃更早的无关对话信息，越小越节省token
+            一对问答包括：一个或多个连续的问题信息和一个或多个连续的答案信息
+            不限制：每次提交问题都带上之前所有的问答记录
+            1对Q&A：只包含当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是最后一个问题（可以是多条连续的信息）
+            2对Q&A：包含最新的1对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是倒数第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            3对Q&A：包含最新的2对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是倒数第3、第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            4对Q&A：包含最新的3对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是倒数第4、第3、第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            5对Q&A：包含最新的4对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是倒数第5、第4、第3、第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            prompt + 1对Q&A：只包含prompt（如果创建该对话时有指定）和当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是prompt（如果创建该对话时有指定）和最后一个问题（可以是多条连续的信息）
+            prompt + 2对Q&A：包含prompt（如果创建该对话时有指定）和最新的1对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是prompt（如果创建该对话时有指定）和倒数第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            prompt + 3对Q&A：包含prompt（如果创建该对话时有指定）和最新的2对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是prompt（如果创建该对话时有指定）和倒数第3、第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            prompt + 4对Q&A：包含prompt（如果创建该对话时有指定）和最新的3对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是prompt（如果创建该对话时有指定）和倒数第4、第3、第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            prompt + 5对Q&A：包含prompt（如果创建该对话时有指定）和最新的4对问答的所有信息，以及当前输入问题（可以是多条连续的信息）；如果没有输入问题，则是prompt（如果创建该对话时有指定）和倒数第5、第4、第3、第2对问答的所有信息，以及最后一个问题（可以是多条连续的信息）
+            1条信息：只包含当前输入的一条问题信息；如果没有输入问题，则是最后一条问题信息
+            2条信息：包含最新的1条回答信息，以及当前输入的一条问题信息；如果没有输入问题，则是除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数2条信息
+            3条信息：包含最新的2条信息，以及当前输入的一条问题信息；如果没有输入问题，则是除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数3条信息
+            4条信息：包含最新的3条信息，以及当前输入的一条问题信息；如果没有输入问题，则是除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数4条信息
+            5条信息：包含最新的3条信息，以及当前输入的一条问题信息；如果没有输入问题，则是除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数5条信息
+            prompt + 1条信息：只包含prompt（如果创建该对话时有指定）和当前输入的一条问题信息；如果没有输入问题，则是prompt（如果创建该对话时有指定）和最后一条问题信息
+            prompt + 2条信息：包含prompt（如果创建该对话时有指定）和最新的1条回答信息，以及当前输入的一条问题信息；如果没有输入问题，则是prompt（如果创建该对话时有指定）和除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数2条信息
+            prompt + 3条信息：包含prompt（如果创建该对话时有指定）和最新的2条信息，以及当前输入的一条问题信息；如果没有输入问题，则是prompt（如果创建该对话时有指定）和除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数3条信息
+            prompt + 4条信息：包含prompt（如果创建该对话时有指定）和最新的3条信息，以及当前输入的一条问题信息；如果没有输入问题，则是prompt（如果创建该对话时有指定）和除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数4条信息
+            prompt + 5条信息：包含prompt（如果创建该对话时有指定）和最新的3条信息，以及当前输入的一条问题信息；如果没有输入问题，则是prompt（如果创建该对话时有指定）和除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数5条信息
+        5. 网络搜索
+            Yes表示对输入的问题进行网络搜索，或解析输入的url内容，基于搜索或解析的内容进行回答，No表示基于模型自身的知识库进行回答
+        6. 保存当前对话
+            点击可下载当前对话的问答记录，仅1个html文件，文件名含有该对话的uuid，如果创建该对话时输入了对话名称，也会包含在文件名中
+        7. 上传文件
+            点击选择要上传的文件，支持多选
+        8. 使用说明
+            查看使用说明
+        9. 当前prompt
+            显示当前对话的prompt名称
+        10. 当前uuid
+            当前对话的uuid，使用该uuid可切换不同对话
+        11. 输入的总token
+            当前对话输入问题的token总数
+        12. 输出的总token
+            当前对话输出内容的token总数
+    反面参数：
+        1. 思考的深度
+            设置思考的深度，仅对支持thinking的模型有效
+        2. uuid
+            每个对话会有一个uuid，可以输入之前对话的uuid切换到之前的对话，基于之前对话进行问答
+        3. 相关uuid
+            与当前uuid相关的uuid，可以下拉选择之前的对话，下次提问将跳转到选择的对话，相比输入uuid要方便，优先级没有输入uuid高
+        4. 温度
+            控制生成内容的随机性
+        5. 流式输出
+            Yes表示输出内容实时逐字显示，No表示等回答完成后一次性显示（在完成回答之前会一直等待）
+        6. 声音
+            生成音频时，可选择音频的声音
 ", PARAS.addr_str, PARAS.port, uri.path())
     })
 }
