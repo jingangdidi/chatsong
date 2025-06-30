@@ -52,20 +52,20 @@ impl ChatData {
 /// 记录用户信息
 #[derive(Serialize, Deserialize)]
 pub struct Info {
-    pub uuid:       String,                     // 每个用户一个uuid，如果指定了之前的uuid，则不重新生成，实现对话隔离，https://github.com/uuid-rs/uuid
-    pub chat_name:  String,                     // 创建对话时，可以输入该对话的名称，方便在相关uuid下拉选项中选择，并作为保存的chat记录文件名
-    pub messages:   Vec<ChatData>,              // 问答记录
-    //pub messages:   Vec<ChatMessage>,           // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
-    //pub time:       Vec<String>,                // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
-    //pub query:      Vec<String>,                // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
-    pub file:       String,                     // 存储chat记录的文件，格式：`指定输出路径/uuid/时间戳.log`，这里的时间戳是本次访问的时间
-    pub token:      [usize;2],                  // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
-    pub prompt:     Option<ChatMessage>,        // 该uuid所用的prompt
-    pub prompt_str: Option<[String; 2]>,        // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
-    pub num_q:      usize,                      // 记录当前uuid客户端提交的问题数量，用于服务端命令行显示
-    pub lpd_offset: (usize, bool, bool, usize), // 第1项表示限制（limit）的数量，第2项表示每次提问是否包含prompt，第3项是否舍弃（drop）当前uuid的问答记录的当前所有message，第4项是要舍弃的message数量，用于实现当前uuid内的问答隔离。例如之前选择保留最近的5个对话，现在想改为不限制，但是又不想包含之前的问答记录，则可以使用`unlimited drop`
-    pub save:       bool,                       // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
-    pub pop:        usize,                      // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
+    pub uuid:       String,               // 每个用户一个uuid，如果指定了之前的uuid，则不重新生成，实现对话隔离，https://github.com/uuid-rs/uuid
+    pub chat_name:  String,               // 创建对话时，可以输入该对话的名称，方便在相关uuid下拉选项中选择，并作为保存的chat记录文件名
+    pub messages:   Vec<ChatData>,        // 问答记录
+    //pub messages:   Vec<ChatMessage>,     // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
+    //pub time:       Vec<String>,          // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+    //pub query:      Vec<String>,          // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
+    pub file:       String,               // 存储chat记录的文件，格式：`指定输出路径/uuid/时间戳.log`，这里的时间戳是本次访问的时间
+    pub token:      [usize;2],            // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
+    pub prompt:     Option<ChatMessage>,  // 该uuid所用的prompt
+    pub prompt_str: Option<[String; 2]>,  // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
+    pub num_q:      usize,                // 记录当前uuid客户端提交的问题数量，用于服务端命令行显示
+    pub qa_msg_p:   (usize, usize, bool), // 第1项表示限制问答对的数量，第2项表示限制消息的数量，第3项表示每次提问是否包含prompt。注意前2项只有一个生效，0表示不使用
+    pub save:       bool,                 // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
+    pub pop:        usize,                // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
 }
 
 /// 实现Info的方法
@@ -85,20 +85,20 @@ impl Info {
         let tmp_chat_file = format!("{}/{}/{}.log", PARAS.outpath, uuid, Local::now().format("%Y-%m-%d_%H-%M-%S").to_string()); // 存储chat记录的文件，格式：指定输出路径/uuid/时间戳.log，例如：`2024-04-04_12-49-50.log`
         // 初始化Info对象
         Info {
-            uuid:       uuid.to_string(),              // 每个用户一个uuid，如果指定了之前的uuid，则不重新生成，实现对话隔离，https://github.com/uuid-rs/uuid
-            chat_name:  tmp_chat_name,                 // 创建对话时，可以输入该对话的名称，方便在相关uuid下拉选项中选择，并作为保存的chat记录文件名
-            messages:   vec![],                        // 问答记录
-            //messages:   vec![],                        // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
-            //time:       vec![],                        // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
-            //query:      vec![],                        // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
-            file:       tmp_chat_file,                 // 存储chat记录的文件，格式：`指定输出路径/uuid/时间戳.log`，这里的时间戳是本次访问的时间
-            token:      [0, 0],                        // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
-            prompt:     None,                          // 该uuid所用的prompt
-            prompt_str: None,                          // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
-            num_q:      0,                             // 记录当前uuid客户端提交的问题数量，用于服务端命令行显示
-            lpd_offset: (usize::MAX, false, false, 0), // 第1项表示限制（limit）的数量，第2项表示每次提问是否包含prompt，第3项是否舍弃（drop）当前uuid的问答记录的当前所有message，第4项是要舍弃的message数量，用于实现当前uuid内的问答隔离。例如之前选择保留最近的5个对话，现在想改为不限制，但是又不想包含之前的问答记录，则可以使用`unlimited drop`
-            save:       false,                         // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
-            pop:        0,                             // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
+            uuid:       uuid.to_string(),               // 每个用户一个uuid，如果指定了之前的uuid，则不重新生成，实现对话隔离，https://github.com/uuid-rs/uuid
+            chat_name:  tmp_chat_name,                  // 创建对话时，可以输入该对话的名称，方便在相关uuid下拉选项中选择，并作为保存的chat记录文件名
+            messages:   vec![],                         // 问答记录
+            //messages:   vec![],                         // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
+            //time:       vec![],                         // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+            //query:      vec![],                         // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
+            file:       tmp_chat_file,                  // 存储chat记录的文件，格式：`指定输出路径/uuid/时间戳.log`，这里的时间戳是本次访问的时间
+            token:      [0, 0],                         // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
+            prompt:     None,                           // 该uuid所用的prompt
+            prompt_str: None,                           // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
+            num_q:      0,                              // 记录当前uuid客户端提交的问题数量，用于服务端命令行显示
+            qa_msg_p:   (usize::MAX, usize::MAX, true), // 第1项表示限制问答对的数量，第2项表示限制消息的数量，第3项表示每次提问是否包含prompt。注意前2项只有一个生效，0表示不使用
+            save:       false,                          // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
+            pop:        0,                              // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
         }
     }
 
@@ -155,11 +155,123 @@ impl Info {
     }
 
     /// 从messages中提取所有的message，返回Vec<ChatMessage>
-    fn get_inner_messages(&self, skip: usize) -> Vec<ChatMessage> {
-        if skip == 0 {
+    fn get_inner_messages(&self, skip_pre: usize, skip_suf: usize) -> Vec<ChatMessage> {
+        if skip_pre == 0 && skip_suf == 0 {
             self.messages.iter().map(|m| m.message.clone()).collect()
         } else {
-            self.messages.iter().skip(skip).map(|m| m.message.clone()).collect()
+            //self.messages.iter().skip(skip_pre).map(|m| m.message.clone()).collect()
+            self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().map(|m| m.message.clone()).collect()
+        }
+    }
+
+    /// 根据限制的问答对数量，获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
+    /// 一对问答对可以有连续多个问题，以及连续多条答案，例如下面的示例，question1和answer4之间的多个消息都属于一对问答：
+    /// +----------------------+
+    /// |            question1 | 可能一条信息没有把问题描述完
+    /// |            question2 | 又接着发了一条补充说明
+    /// |            question3 | 又接着发了一条补充说明
+    /// | answer1              | 获取的答案不满意
+    /// | answer2              | 换个模型又回答一次
+    /// | answer3              | 再换个模型回答一次
+    /// | answer4              | 再换个模型回答一次
+    /// +----------------------+
+    /// 有2点需要注意：
+    /// 1. 最后一个信息不是问题而是回答：说明上次回答之后，用户没有输入新问题，而是直接又发起请求，此时将忽略最后1个回答或连续的多个回答，用最后一个问题继续提问。比如用户对答案不满意，更换了模型基于同一问题再问一次，这样就省去再输入一次问题
+    /// 2. 如果连续的答案不在最后，而是在整个对话的中间：此时会把一个问题对应的连续多个回答视为一对问答
+    /// 比如下面示例：
+    /// 如果正常情况0要获取2对问答信息，则会获取到4条信息作为上下文：question2 + question3 + answer2 + question4
+    /// 如果特殊情况1要获取2对问答信息，则会获取到4条信息作为上下文：question1 + answer1 + question2 + question3
+    /// 如果特殊情况2要获取3对问答信息，则会获取到8条信息作为上下文：question1 + answer1 + question2 + question3 + answer2 + answer3 + answer4 + question4
+    /// +------------------------------------------------------------------------+
+    /// |             0                      1                      2            |
+    /// | +----------------------+----------------------+----------------------+ |
+    /// | |            question1 |            question1 |            question1 | |
+    /// | | answer1              | answer1              | answer1              | |
+    /// | |            question2 |            question2 |            question2 | |
+    /// | |            question3 |            question3 |            question3 | |
+    /// | | answer2              | answer2              | answer2              | |
+    /// | |            question4 | answer3              | answer3              | |
+    /// | +----------------------| answer4              | answer4              | |
+    /// |                        +----------------------|            question4 | |
+    /// |                                               +----------------------+ |
+    /// +------------------------------------------------------------------------+
+    /// 正常情况0有3对问答对话：第1对（question1 + answer1）、第2对（question2 + answer2）、第3对（question3）
+    /// 特殊情况1有2对问答对话：第1对（question1 + answer1）、第2对（question2 + answer2 + answer3 + answer4）
+    /// 特殊情况2有3对问答对话：第1对（question1 + answer1）、第2对（question2 + answer2 + answer3 + answer4）、第3对（question3）
+    fn context_msg_num_by_qa(&self) -> (usize, usize, usize) {
+        if self.qa_msg_p.0 == 0 || self.qa_msg_p.0 == usize::MAX { // 不通过问答对限制，或不限制问答对
+            (0, self.messages.len(), 0)
+        } else {
+            let mut keep_qa_num = 0; // 要保留的问答对数量
+            let mut keep_msg_num = 0; // 要保留的消息数量
+            let mut skip_last_answer_num = 0; // 要忽略的最后连续一个或多个的回答数量
+            let mut is_answer = false; // 是否是回答
+            for m in self.messages.iter().rev() {
+                if let &ChatMessage::Assistant{..} = &m.message {
+                    if keep_qa_num == 0 { // 该回答是最后一对问答的回答
+                        if keep_msg_num == 0 { // 最后一个信息是回答（或连续多个都是回答），用户在最后一个回答之后没有输入新问题，此时用户可能对最后一个问题的答案（一个或连续多个）不满意，要对最后一个问题再回答一次
+                            skip_last_answer_num += 1;
+                            continue
+                        } else { // 最后一个信息不是回答，用户在最后一个回答之后输入了新问题；或者用户在最后一个回答之后没有输入新问题，想要对最后一个问题再回答一次
+                            keep_qa_num = 2; // 此时还没有获取新答案，但也要算一对Q&A，因此这里设为2。比如`self.qa_msg_p.0`是1，则最终keep_msg_num就是最后一个回答之后的所有问题
+                        }
+                    } else {
+                        if !is_answer { // 这里is_answer是true说明上一条信息也是回答，连续回答视为一对问答，因此只统计最后一个，即最后一个回答和问题，以及中间其他回答算作一对问答
+                            keep_qa_num += 1; // 一对完整问答只统计最后一个回答，中间其他回答不统计
+                        }
+                    }
+                    if keep_qa_num > self.qa_msg_p.0 {
+                        break
+                    }
+                    if !is_answer {
+                        is_answer = true;
+                    }
+                } else if is_answer {
+                    is_answer = false;
+                }
+                keep_msg_num += 1;
+            }
+            (self.messages.len() - keep_msg_num - skip_last_answer_num, keep_msg_num, skip_last_answer_num)
+        }
+    }
+
+    /// 根据限制的消息数量，获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
+    /// 直接按照消息数统计，就没有按照问答对那么麻烦了，有1点需要注意：
+    /// 最后一个信息不是问题而是回答：说明上次回答之后，用户没有输入新问题，而是直接又发起请求，此时将忽略最后1个回答或连续的多个回答，用最后一个问题继续提问。比如用户对答案不满意，更换了模型基于同一问题再问一次，这样就省去再输入一次问题
+    /// 比如下面示例：
+    /// 如果正常情况0要获取3条信息，则会获取到：question3 + answer2 + question4
+    /// 如果特殊情况1要获取3条信息，则会获取到：answer1 + question2 + question3
+    /// +-------------------------------------------------+
+    /// |             0                      1            |
+    /// | +----------------------+----------------------+ |
+    /// | |            question1 |            question1 | |
+    /// | | answer1              | answer1              | |
+    /// | |            question2 |            question2 | |
+    /// | |            question3 |            question3 | |
+    /// | | answer2              | answer2              | |
+    /// | |            question4 | answer3              | |
+    /// | +----------------------| answer4              | |
+    /// |                        +----------------------+ |
+    /// +-------------------------------------------------+
+    fn context_msg_num(&self) -> (usize, usize, usize) {
+        if self.qa_msg_p.1 == 0 || self.qa_msg_p.1 == usize::MAX { // 不通过消息数限制，或不限制消息数
+            (0, self.messages.len(), 0)
+        } else {
+            let mut keep_msg_num = 0; // 要保留的消息数量
+            let mut skip_last_answer_num = 0; // 要忽略的最后连续一个或多个的回答数量
+            for m in self.messages.iter().rev() {
+                if let &ChatMessage::Assistant{..} = &m.message {
+                    if keep_msg_num == 0 { // 最后一个信息是回答，用户在最后一个回答之后没有输入新问题，此时用户可能对最后一个问题的答案（一个或连续多个）不满意，要对最后一个问题再回答一次
+                        skip_last_answer_num += 1;
+                        continue
+                    }
+                }
+                keep_msg_num += 1;
+                if keep_msg_num >= self.qa_msg_p.1 {
+                    break
+                }
+            }
+            (self.messages.len() - keep_msg_num - skip_last_answer_num, keep_msg_num, skip_last_answer_num)
         }
     }
 }
@@ -168,11 +280,7 @@ impl Info {
 pub static DATA: Lazy<Mutex<HashMap<String, Info>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// 向DATA中指定uuid中插入新ChatMessage，uuid不存在则创建
-/// lpd: 表示limit数量、提问是否包含prompt、offset大小，只有下拉改变了`保留最新对话数`时才更新limit、提问是否包含prompt、offset
-/// Some((limit, with_prompt, true)): 第1项表示设置的limit数量，第2项表示提问是否包含prompt，如果与当前`lpd_offset`的第1或第2或第3项不相同则更新当前`lpd_offset`，第3项true表示将offset更新为当前总messages数
-/// Some((limit, with_prompt, false)): 第1项表示设置的limit数量，第2项表示提问是否包含prompt，如果与当前`lpd_offset`的第1或第2或第3项不相同则更新当前`lpd_offset`，第3项表示false表示将offset更新为0
-/// None: 不更新limit数量、提问是否包含prompt、offset
-pub fn insert_message(uuid: &str, message: ChatMessage, time: String, query: DataType, lpd: Option<(usize, bool, bool)>, model: &str, chat_name: Option<String>) {
+pub fn insert_message(uuid: &str, message: ChatMessage, time: String, query: DataType, qa_msg_p: Option<(usize, usize, bool)>, model: &str, chat_name: Option<String>) {
     let mut data = DATA.lock().unwrap();
     // 如果指定uuid不在服务端，则从本地log文件加载或创建新Info对象
     if !data.contains_key(uuid) {
@@ -189,17 +297,12 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, query: Dat
         }
     }
     let info = data.get_mut(uuid).unwrap();
-    // 在插入新message之前先更新limit、提问是否包含prompt、offset
-    if let Some((limit, with_prompt, offset)) = lpd {
-        if limit != info.lpd_offset.0 || with_prompt != info.lpd_offset.1 || offset != info.lpd_offset.2 { // 客户端下拉选项`保留最新对话数`改变时才更新limit数量、提问是否包含prompt、offset
-            info.lpd_offset.0 = limit; // 更新limit
-            info.lpd_offset.1 = with_prompt; // 更新提问是否包含prompt
-            info.lpd_offset.2 = offset;
-            if offset { // 将offset更新为当前总messages数
-                info.lpd_offset.3 = info.messages.len();
-            } else { // 将offset设为0
-                info.lpd_offset.3 = 0;
-            }
+    // 在插入新message之前先更新限制的问答对数量、限制的消息数量、提问是否包含prompt
+    if let Some((qa, msg, with_prompt)) = qa_msg_p {
+        if qa != info.qa_msg_p.0 || msg != info.qa_msg_p.1 || with_prompt != info.qa_msg_p.2 { // 客户端下拉选项`上下文消息数`改变时才更新限制的问答对数量、限制的消息数量、提问是否包含prompt
+            info.qa_msg_p.0 = qa;
+            info.qa_msg_p.1 = msg;
+            info.qa_msg_p.2 = with_prompt;
         }
     }
     // 更新问题数和最后是否保存该uuid的chat记录
@@ -214,7 +317,7 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, query: Dat
         },
     }
     // 插入本次的message、时间、原始问题
-    if lpd.is_some() { // 目前用户提出的问题都是Some，不需要加模型名称
+    if qa_msg_p.is_some() { // 目前用户提出的问题都是Some，不需要加模型名称
         info.messages.push(ChatData::new(message, time, query));
     } else { // 目前模型回答的内容都是None
         info.messages.push(ChatData::new(message, format!("{} {}", time, model), query)); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
@@ -266,72 +369,43 @@ pub fn remove_uuid(uuid: &str) {
 }
 
 /// 从DATA中获取指定uuid的ChatMessage
-/// info.lpd_offset.1表示是否将prompt作为第一个message，不计算在num内，即最终返回num+1个message
+/// info.qa_msg_p.2表示是否将prompt作为第一个message，不计算在问答对或消息数量内，即最终返回`1个prompt + num个问答对`或`1个prompt + num个message`
 /// update_token: 是否将计算获取到的messages的token，并更新到该uuid的输入总token中
 pub fn get_messages(uuid: &str, update_token: bool) -> Vec<ChatMessage> {
     let mut data = DATA.lock().unwrap();
     match data.get_mut(uuid) {
         Some(info) => {
-            // 先获取去除前offset个message的问答记录
-            let mut messages: Vec<ChatMessage> = if info.messages.len() <= info.lpd_offset.3 {
-                vec![]
-            } else {
-                info.get_inner_messages(info.lpd_offset.3)
+            let final_messages = if info.qa_msg_p.0 == usize::MAX && info.qa_msg_p.1 == usize::MAX { // 没有对问答对或消息数进行限制
+                info.get_inner_messages(0, 0)
+            } else { // 通过问答对或消息数进行了限制，需要跳过前指定数量个消息
+                // 总消息数
+                let total_num = info.messages.len();
+                // 获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
+                // 理论上`skip_msg_num`可能为0，但不可能等于总消息数，`keep_msg_num`肯定大于0，最大就是总消息数
+                let (skip_msg_num, keep_msg_num, skip_last_answer_num) = if info.qa_msg_p.0 > 0 && info.qa_msg_p.0 < usize::MAX { // 对问答对数量进行限制
+                    info.context_msg_num_by_qa()
+                } else if info.qa_msg_p.1 > 0 && info.qa_msg_p.1 < usize::MAX { // 对消息数量进行限制
+                    info.context_msg_num()
+                } else {
+                    unreachable!()
+                };
+                // 获取要保留的消息
+                let mut messages: Vec<ChatMessage> = info.get_inner_messages(skip_msg_num, skip_last_answer_num);
+                // 把prompt插入到第一位
+                if info.qa_msg_p.2 {
+                    if let Some(p) = &info.prompt {
+                        if total_num != keep_msg_num { // 把prompt插入到第一位，如果相等则已经包含了prompt则不必再插入
+                            messages.insert(0, p.clone());
+                        }
+                    }
+                }
+                messages
             };
-            let total_num = info.messages.len();
-            if info.lpd_offset.1 {
-                match &info.prompt {
-                    Some(p) => { // 该uuid有prompt
-                        if total_num <= info.lpd_offset.0 {
-                            //messages.insert(0, p.clone()); // 此时不需要再插入prompt，因为已经包含了
-                            if update_token {
-                                let tokens = token_count_messages(&messages);
-                                info.token[0] += tokens[0]+tokens[1];
-                            }
-                            messages
-                        } else { // 已有的ChatMessage多于指定数量，则截取最新的指定数量个ChatMessage
-                            messages.drain(0..total_num-info.lpd_offset.0);
-                            messages.insert(0, p.clone()); // 将prompt插入到第一个位置
-                            if update_token {
-                                let tokens = token_count_messages(&messages);
-                                info.token[0] += tokens[0]+tokens[1];
-                            }
-                            messages
-                        }
-                    },
-                    None => { // 该uuid没有prompt
-                        if total_num <= info.lpd_offset.0 {
-                            if update_token {
-                                let tokens = token_count_messages(&messages);
-                                info.token[0] += tokens[0]+tokens[1];
-                            }
-                            messages
-                        } else { // 已有的ChatMessage多于指定数量，则截取最新的指定数量个ChatMessage
-                            messages.drain(0..total_num-info.lpd_offset.0);
-                            if update_token {
-                                let tokens = token_count_messages(&messages);
-                                info.token[0] += tokens[0]+tokens[1];
-                            }
-                            messages
-                        }
-                    },
-                }
-            } else {
-                if total_num <= info.lpd_offset.0 {
-                    if update_token {
-                        let tokens = token_count_messages(&messages);
-                        info.token[0] += tokens[0]+tokens[1];
-                    }
-                    messages
-                } else { // 已有的ChatMessage多于指定数量，则截取最新的指定数量个ChatMessage
-                    messages.drain(0..total_num-info.lpd_offset.0);
-                    if update_token {
-                        let tokens = token_count_messages(&messages);
-                        info.token[0] += tokens[0]+tokens[1];
-                    }
-                    messages
-                }
+            if update_token { // 计算获取到的上下文所有问题和答案的总token，加到输入总token上，因为这些上下文都要发给api
+                let tokens = token_count_messages(&final_messages);
+                info.token[0] += tokens[0]+tokens[1];
             }
+            final_messages
         },
         None => vec![],
     }
