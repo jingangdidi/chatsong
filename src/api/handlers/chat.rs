@@ -159,38 +159,33 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
         Some(c) => c.value().to_string(),
         None => "".to_string(),
     };
-    // 提问时最多提交最近的几个message，以及是否始终包含prompt、offset设为总messages数还是0
-    // 返回(limit, prompt, drop)
-    let lpd: Option<(usize, bool, bool)> = match params.get("num") {
+    // 提问时最多提交几对问答，或几个消息，以及是否包含prompt
+    // 返回(问答对数量, 消息数量, 是否包含prompt)
+    let qa_msg_p: Option<(usize, usize, bool)> = match params.get("num") {
         Some(n) => match n.as_str() {
-            "unlimit" => Some((usize::MAX, false, false)), // Some((无限制, 不需要再插入prompt, offset设为0))
-            "unlimit-drop" => Some((usize::MAX, false, true)), // (Some((无限制, 不需要再插入prompt, offset设为总messages数))
-            "unlimit-prompt-drop" => Some((usize::MAX, true, true)), // (Some((无限制, 保留prompt, offset设为总messages数))
-            num_prompt_drop => { // 格式：num-[prompt]-[drop]，num是指定的数量，必选且必须在第一项，prompt和drop可选
-                let tmp: Vec<&str> = num_prompt_drop.split("-").collect();
-                let num = tmp[0].parse::<usize>().map_err(|e| MyError::ParseStringError{from: n.to_string(), to: "usize".to_string(), error: e})?;
-                match tmp.len() {
-                    1 => { // 指定单个数值
-                        Some((num, false, false)) // Some((限制的数量, 不保留prompt, offset设为0))
-                    },
-                    2 => { // 指定了2个值：num-prompt（保留prompt，offset设为0）或num-drop（不保留prompt，offset设为总messages数）
-                        match tmp[1] {
-                            "prompt" => Some((num, true, false)), // Some((限制的数量, 保留prompt, offset设为0))
-                            "drop"   => Some((num, false, true)), // Some((限制的数量, 不保留prompt, offset设为总messages数))
-                            _ => return Err(MyError::ParaError{para: n.to_string()}), // 参数错误
-                        }
-                    },
-                    3 => { // 指定了3个值：num-prompt-drop（保留prompt, offset设为总messages数）
-                        match (tmp[1], tmp[2]) {
-                            ("prompt", "drop") | ("drop", "prompt") => Some((num, true, true)), // Some((限制的数量, 保留prompt, offset设为总messages数))
-                            _ => return Err(MyError::ParaError{para: n.to_string()}), // 参数错误
-                        }
-                    },
-                    _ => return Err(MyError::ParaError{para: n.to_string()}), // 参数错误
+            "unlimit" => Some((usize::MAX, usize::MAX, true)), // Some((无限制, 无限制, 包含prompt))
+            p_num_qa_msg => { // 格式：`数量qa`（指定数量个问答对，不包含prompt）、`p数量qa`（指定数量个问答对，包含prompt）、`数量`（指定数量个消息，不包含prompt）、`p数量`（指定数量个消息，包含prompt）
+                if p_num_qa_msg.ends_with("qa") { // 问答对
+                    let p_num = p_num_qa_msg.strip_suffix("qa").unwrap(); // 这里可以直接unwrap
+                    if p_num.starts_with("p") { // `p数量qa`（指定数量个问答对，包含prompt），例如：`p1qa`
+                        let num = p_num.strip_prefix("p").unwrap().parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num.strip_prefix("p").unwrap().to_string(), to: "usize".to_string(), error: e})?;
+                        Some((num, 0, true)) // Some((指定问答对数量, 0, 包含prompt))
+                    } else { // `数量qa`（指定数量个问答对，不包含prompt），例如：`1qa`
+                        let num = p_num.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num.to_string(), to: "usize".to_string(), error: e})?;
+                        Some((num, 0, false)) // Some((指定问答对数量, 0, 不包含prompt))
+                    }
+                } else { // 视为指定的消息数
+                    if p_num_qa_msg.starts_with("p") { // `p数量`（指定数量个消息，包含prompt），例如：`p1`
+                        let num = p_num_qa_msg.strip_prefix("p").unwrap().parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.strip_prefix("p").unwrap().to_string(), to: "usize".to_string(), error: e})?;
+                        Some((0, num, true)) // Some((0, 指定消息数量, 包含prompt))
+                    } else { // `数量`（指定数量个消息，不包含prompt），例如：`1`
+                        let num = p_num_qa_msg.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.to_string(), to: "usize".to_string(), error: e})?;
+                        Some((0, num, false)) // Some((0, 指定消息数量, 不包含prompt))
+                    }
                 }
             },
         },
-        None => None, // 这里None表示不修改limit、是否包含prompt、offset数
+        None => None, // 这里None表示不修改问答对或消息数、以及是否包含prompt
     };
     // 解析传递的uuid，并设置cookie
     let (uuid, cookie_jar, load_uuid, clear_page) = match prompt {
@@ -207,7 +202,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     content: ChatMessageContent::Text(prompt_name_str[1].clone()),
                     name: None,
                 };
-                insert_message(&tmp_uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, lpd, &model, chat_name.clone());
+                insert_message(&tmp_uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, chat_name.clone());
             }
             // 添加新的直接关系
             add_edge(&cookie_uuid, &tmp_uuid, true);
@@ -655,9 +650,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
             if let Some(m) = message {
                 // 当前问题插入到messages中
                 if web_search { // 使用网络搜索，需记录原始问题
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(body.clone()), lpd, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(body.clone()), qa_msg_p, &model, chat_name);
                 } else {
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, lpd, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, chat_name);
                 }
             } else {
                 // 插入原始问题
@@ -666,9 +661,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     name: None,
                 };
                 if web_search { // 使用网络搜索，需记录原始问题
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(body.clone()), lpd, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(body.clone()), qa_msg_p, &model, chat_name);
                 } else {
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, lpd, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, chat_name);
                 }
                 // 插入错误提示
                 let m = ChatMessage::Assistant{
@@ -679,7 +674,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     audio: None,
                     tool_calls: None,
                 };
-                insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, lpd, &model, None);
+                insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, None);
             }
             event!(Level::INFO, "{} GET {}, query: {}", uuid, uri.path(), get_query_num(&uuid));
             // 创建stream对象，接收管道传递的数据
