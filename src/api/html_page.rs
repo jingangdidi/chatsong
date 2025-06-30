@@ -19,6 +19,7 @@ const ICON_UPLOAD: &str = include_str!("../../assets/image/icon_upload.txt");
 const ICON_HELP: &str = include_str!("../../assets/image/icon_help.txt");
 const ICON_SEND: &str = include_str!("../../assets/image/icon_send.txt");
 const ICON_STOP: &str = include_str!("../../assets/image/stop-circle-svgrepo-com-3.txt");
+const ICON_SETTING: &str = include_str!("../../assets/image/setting.txt");
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -80,11 +81,17 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             <label>开启新会话</label>
             <select id="select-prompt" class="left_para for_focus" name="prompt">
                 <option disabled>--选择开启新会话的prompt--</option>
-                <option value="-1" selected>保持当前会话</option>
+                <option value="-1" selected>保持当前对话</option>
                 <option value="0">无prompt</option>
 "###;
     result += &PARAS.api.pulldown_prompt;
     result += r###"            </select>
+        </div>
+
+        <!-- 对话名称 -->
+        <div class="top_add_space" title="每次开启新对话时，可以指定对话名称，这样在“相关uuid”中方便选择">
+            <label>新对话名称（可选）</label>
+            <input id="input-chat-name" class="left_para" type="text" name="chat-name" placeholder="chat name (optional)">
         </div>
 
         <!-- select model -->
@@ -96,6 +103,107 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     result += r###"            </select>
         </div>
 
+        <!-- select recent log -->
+        <div class="top_add_space" title="选择每次提问包含的最多问答对或消息数量，可以节省token">
+            <label>上下文消息数</label>
+            <select id="select-log-num" class="left_para for_focus" name="num">
+                <option disabled>--选择数量--</option>
+                <option value="unlimit" selected>不限制</option>
+                <option value="1qa">1对Q&A</option>
+                <option value="2qa">2对Q&A</option>
+                <option value="3qa">3对Q&A</option>
+                <option value="4qa">4对Q&A</option>
+                <option value="5qa">5对Q&A</option>
+                <option value="p1qa">prompt + 1对Q&A</option>
+                <option value="p2qa">prompt + 2对Q&A</option>
+                <option value="p3qa">prompt + 3对Q&A</option>
+                <option value="p4qa">prompt + 4对Q&A</option>
+                <option value="p5qa">prompt + 5对Q&A</option>
+                <option value="1">1条信息</option>
+                <option value="2">2条信息</option>
+                <option value="3">3条信息</option>
+                <option value="4">4条信息</option>
+                <option value="5">5条信息</option>
+                <option value="p1">prompt + 1条信息</option>
+                <option value="p2">prompt + 2条信息</option>
+                <option value="p3">prompt + 3条信息</option>
+                <option value="p4">prompt + 4条信息</option>
+                <option value="p5">prompt + 5条信息</option>
+            </select>
+        </div>
+
+        <div class="top_add_space switch-toggle" title="使用提出的问题进行网络搜索，然后基于搜索结果进行回答；或解析指定url，然后基于解析结果进行回答">
+            <label>网络搜索</label>
+            <input id="select-web" class="left_para for_focus" type="checkbox" name="web">
+            <label for="select-web"></label>
+        </div>
+
+        <!-- other button -->
+        <!-- https://fontawesome.com/icons -->
+        <div id="left-down">
+            <ul>
+                <!-- save chat log -->
+                <li title="保存当前对话html页面">
+"###;
+    result += &format!("                    <a href='http://{}:{}{}/save-log'>
+                        <img class='para-btn' src='{}' />保存当前对话\n", PARAS.addr_str, PARAS.port, v, ICON_DOWNLOAD);
+    //result += r###"                        <i class="fa fa-download"></i>Save chat log
+    result += r###"                    </a>
+                </li>
+
+                <!-- upload file -->
+                <li title="上传文件，支持多个文件">
+                    <!-- 上传文件后保持当前页面 https://stackoverflow.com/questions/5733808/submit-form-and-stay-on-same-page -->
+                    <iframe name="hiddenFrame" class="hide"></iframe>
+"###;
+    result += &format!("                    <form id='form' target='hiddenFrame' action='http://{}:{}{}/upload' method='post' enctype='multipart/form-data'>
+                        <img class='para-btn' src='{}' />\n", PARAS.addr_str, PARAS.port, v, ICON_UPLOAD);
+    //result += r###"                        <i class="fa fa-upload"></i>
+    result += r###"                        <!-- 选好文件后直接提交，不需要submit按钮 https://stackoverflow.com/questions/7321855/how-do-i-auto-submit-an-upload-form-when-a-file-is-selected -->
+                        <!-- <input id="upload-file" onchange="form.submit();form.reset();" type="file" name="file" multiple> -->
+                        <input id="upload-file" type="file" name="file" multiple>
+                        <!-- <input type="submit" value="submit"> -->
+                    </form>
+                </li>
+
+                <!-- usage -->
+                <li title="查看使用说明">
+"###;
+    result += &format!("                    <a href='http://{}:{}{}/usage'>
+                        <img class='para-btn' src='{}' />使用说明\n", PARAS.addr_str, PARAS.port, v, ICON_HELP);
+    //result += r###"                        <i class="fas fa-question-circle"></i>Usage
+    result += r###"                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- show prompt -->
+        <div class="top_add_space" title="当前对话的prompt">
+            <label>当前prompt</label>
+            <input id="show-prompt" class="left_para">
+        </div>
+
+        <!-- show uuid -->
+        <div class="top_add_space" title="当前对话的uuid，记住该uuid，之后可再次查看并提问">
+            <label>当前uuid</label>
+            <input id="show-uuid" class="left_para">
+        </div>
+
+        <!-- show input token -->
+        <div class="top_add_space" title="当前对话提问的总token">
+            <label>输入的总token</label>
+            <input id="show-in-token" class="left_para">
+        </div>
+
+        <!-- show output token -->
+        <div class="top_add_space" title="当前对话回答的总token">
+            <label>输出的总token</label>
+            <input id="show-out-token" class="left_para">
+        </div>
+
+    </div>
+
+    <div id="left-part-other" class="side-nav">
         <!-- select chain of thought effort -->
         <div class="top_add_space" title="选择思考的深度和是否显示思考过程，仅对CoF模型有效">
             <label>思考的深度</label>
@@ -108,12 +216,6 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                 <option value="5" title="复杂逻辑推导，显示思考过程">High--显示思考过程</option>
                 <option value="6" title="复杂逻辑推导，不显示思考过程">High--不显示思考过程</option>
             </select>
-        </div>
-
-        <!-- 对话名称 -->
-        <div class="top_add_space" title="每次开启新对话时，可以指定对话名称，这样在“相关uuid”中方便选择">
-            <label>新对话名称（可选）</label>
-            <input id="input-chat-name" class="left_para" type="text" name="chat-name" placeholder="chat name (optional)">
         </div>
 
         <!-- uuid -->
@@ -156,41 +258,6 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             <label for="select-stm"></label>
         </div>
 
-        <div class="top_add_space switch-toggle" title="使用提出的问题进行网络搜索，然后基于搜索结果进行回答；或解析指定url，然后基于解析结果进行回答">
-            <label>网络搜索</label>
-            <input id="select-web" class="left_para for_focus" type="checkbox" name="web">
-            <label for="select-web"></label>
-        </div>
-
-        <!-- select recent log -->
-        <div class="top_add_space" title="选择每次提问包含的最多记录数量，可以节省token">
-            <label>保留最新对话数</label>
-            <select id="select-log-num" class="left_para for_focus" name="num">
-                <option disabled>--选择数量--</option>
-                <option value="unlimit" selected>unlimit</option>
-                <option value="unlimit-drop">unlimit+drop</option>
-                <option value="unlimit-prompt-drop">unlimit+prompt+drop</option>
-                <option value="1">1</option>
-                <option value="1-prompt">1+prompt</option>
-                <option value="1-prompt-drop">1+prompt+drop</option>
-                <option value="5">5</option>
-                <option value="5-prompt">5+prompt</option>
-                <option value="5-prompt-drop">5+prompt+drop</option>
-                <option value="10">10</option>
-                <option value="10-prompt">10+prompt</option>
-                <option value="10-prompt-drop">10+prompt+drop</option>
-                <option value="20">20</option>
-                <option value="20-prompt">20+prompt</option>
-                <option value="20-prompt-drop">20+prompt+drop</option>
-                <option value="50">50</option>
-                <option value="50-prompt">50+prompt</option>
-                <option value="50-prompt-drop">50+prompt+drop</option>
-                <option value="100">100</option>
-                <option value="100-prompt">100+prompt</option>
-                <option value="100-prompt-drop">100+prompt+drop</option>
-            </select>
-        </div>
-
         <!-- select voice -->
         <div class="top_add_space" title="选择生成speech的音色">
             <label>声音</label>
@@ -203,69 +270,6 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                 <option value="5">Nova</option>
                 <option value="6">Shimmer</option>
             </select>
-        </div>
-
-        <!-- other button -->
-        <!-- https://fontawesome.com/icons -->
-        <div id="left-down">
-            <ul>
-                <!-- save chat log -->
-                <li title="保存当前对话html页面">
-"###;
-    result += &format!("                    <a href='http://{}:{}{}/save-log'>
-                        <img class='para-btn' src='{}' />Save chat log\n", PARAS.addr_str, PARAS.port, v, ICON_DOWNLOAD);
-    //result += r###"                        <i class="fa fa-download"></i>Save chat log
-    result += r###"                    </a>
-                </li>
-
-                <!-- upload file -->
-                <li title="上传文件，支持多个文件">
-                    <!-- 上传文件后保持当前页面 https://stackoverflow.com/questions/5733808/submit-form-and-stay-on-same-page -->
-                    <iframe name="hiddenFrame" class="hide"></iframe>
-"###;
-    result += &format!("                    <form id='form' target='hiddenFrame' action='http://{}:{}{}/upload' method='post' enctype='multipart/form-data'>
-                        <img class='para-btn' src='{}' />\n", PARAS.addr_str, PARAS.port, v, ICON_UPLOAD);
-    //result += r###"                        <i class="fa fa-upload"></i>
-    result += r###"                        <!-- 选好文件后直接提交，不需要submit按钮 https://stackoverflow.com/questions/7321855/how-do-i-auto-submit-an-upload-form-when-a-file-is-selected -->
-                        <!-- <input id="upload-file" onchange="form.submit();form.reset();" type="file" name="file" multiple> -->
-                        <input id="upload-file" type="file" name="file" multiple>
-                        <!-- <input type="submit" value="submit"> -->
-                    </form>
-                </li>
-
-                <!-- usage -->
-                <li title="查看使用说明">
-"###;
-    result += &format!("                    <a href='http://{}:{}{}/usage'>
-                        <img class='para-btn' src='{}' />Usage\n", PARAS.addr_str, PARAS.port, v, ICON_HELP);
-    //result += r###"                        <i class="fas fa-question-circle"></i>Usage
-    result += r###"                    </a>
-                </li>
-            </ul>
-        </div>
-
-        <!-- show prompt -->
-        <div class="top_add_space" title="当前对话的prompt">
-            <label>current prompt</label>
-            <input id="show-prompt" class="left_para">
-        </div>
-
-        <!-- show uuid -->
-        <div class="top_add_space" title="当前对话的uuid，记住该uuid，之后可再次查看并提问">
-            <label>current uuid</label>
-            <input id="show-uuid" class="left_para">
-        </div>
-
-        <!-- show input token -->
-        <div class="top_add_space" title="当前对话提问的总token">
-            <label>input token</label>
-            <input id="show-in-token" class="left_para">
-        </div>
-
-        <!-- show output token -->
-        <div class="top_add_space" title="当前对话回答的总token">
-            <label>output token</label>
-            <input id="show-out-token" class="left_para">
         </div>
 
     </div>
@@ -329,6 +333,11 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
 
     <!-- footer -->
     <footer>
+        <button onclick='toggle()' id='left-toggle' title='切换参数栏设置'>
+"###;
+    result += &format!("            <img src='{}' aria-hidden='true' />", ICON_SETTING);
+    result += r###"
+        </button>
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
     </footer>
@@ -406,6 +415,28 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     // 停止接收回答
     let reader; // 接收答案
     let isStopped = true; // 是否停止接收答案
+    // 左下按钮，切换左侧参数栏
+    let toggleMain = true; // true显示主参数，false显示其余参数
+    function toggle () {
+        toggleMain = !toggleMain;
+        const left_main = document.getElementById('left-part');
+        const left_other = document.getElementById('left-part-other');
+        if (toggleMain) {
+            left_other.classList.add('animate');
+            left_main.style.display = 'block';
+            left_other.style.display = 'none';
+            sleep(300).then(() => { // 这里300ms要与css中animate的时间相同
+                left_main.classList.remove('animate');
+            });
+        } else {
+            left_main.classList.add('animate');
+            left_other.style.display = 'block';
+            left_main.style.display = 'none';
+            sleep(300).then(() => { // 这里300ms要与css中animate的时间相同
+                left_other.classList.remove('animate');
+            });
+        }
+    }
     // 上传文件，选好文件后直接提交，不需要submit按钮 https://stackoverflow.com/questions/7321855/how-do-i-auto-submit-an-upload-form-when-a-file-is-selected
     function sleep (time) {
         return new Promise((resolve) => setTimeout(resolve, time));
@@ -531,6 +562,10 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                     msg_lr.setAttribute("class", "chat-txt left");
                     // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
                     msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                    // 对每个代码块进行高亮
+                    msg_lr.querySelectorAll('pre code').forEach((block) => {
+                        Prism.highlightElement(block);
+                    });
                 } else { // 文本问题
                     msg_lr.setAttribute("class", "chat-txt right");
                     msg_lr.textContent = message_content.replaceAll('srxtzn', '\n').replaceAll('\\n', '\n'); // 不要使用innerHTML，innerHTML会识别标签将内容解析为html，textContent只是文本，innerText会受到css影响，https://stackoverflow.com/questions/31002593/type-new-line-character-in-element-textcontent
@@ -594,6 +629,10 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             for_markdown += message_content.replaceAll('srxtzn', '\n');
             // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
             msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+            // 对每个代码块进行高亮
+            msg_lr.querySelectorAll('pre code').forEach((block) => {
+                Prism.highlightElement(block);
+            });
         } else { // 不应该出现
             console.error("message id not match: current_id='${current_id}', received_id='${id}'");
         }
@@ -807,7 +846,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                                     insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
                                 }
                             }
-                            Prism.highlightAll();
+                            //Prism.highlightAll();
                             if (autoScroll) {
                                 if (jsonData.is_img) {
                                     sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
@@ -914,6 +953,12 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     result += r###"            </select>
         </div>
 
+        <!-- 对话名称 -->
+        <div class="top_add_space" title="Feel free to designate a specific title for each new conversation, facilitating easier selection within the "Related UUIDs" section">
+            <label>new chat title (optional)</label>
+            <input id="input-chat-name" class="left_para" type="text" name="chat-name" placeholder="chat name (optional)">
+        </div>
+
         <!-- select model -->
         <div class="top_add_space" title="Currently supported models, permit the use of varying models within the same conversation for inquiries">
             <label>models</label>
@@ -923,113 +968,39 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     result += r###"            </select>
         </div>
 
-        <!-- select chain of thought effort -->
-        <div class="top_add_space" title="effort on reasoning for reasoning models and the visibility of the reasoning process, applicable solely to the reasoning models">
-            <label>reasoning effort</label>
-            <select id="select-effort" class="left_para for_focus" name="effort">
-                <option disabled>--select effort--</option>
-                <option value="1" selected title="favors speed and economical token usage">Low & Display the reasoning process</option>
-                <option value="2" title="favors speed and economical token usage">Low & Hide the reasoning process</option>
-                <option value="3" title="a balance between speed and reasoning accuracy">Medium & Display the reasoning process</option>
-                <option value="4" title="a balance between speed and reasoning accuracy">Medium & Hide the reasoning process</option>
-                <option value="5" title="favors more complete reasoning">High & Display the reasoning process</option>
-                <option value="6" title="favors more complete reasoning">High & Hide the reasoning process</option>
+        <!-- select recent log -->
+        <div class="top_add_space" title="Opting to include the maximum number of Q&A pairs or messages in each inquiry can conserve tokens">
+            <label>contextual messages</label>
+            <select id="select-log-num" class="left_para for_focus" name="num">
+                <option disabled>--select number--</option>
+                <option value="unlimit" selected>unlimit</option>
+                <option value="1qa">1 Q&A pair</option>
+                <option value="2qa">2 Q&A pairs</option>
+                <option value="3qa">3 Q&A pairs</option>
+                <option value="4qa">4 Q&A pairs</option>
+                <option value="5qa">5 Q&A pairs</option>
+                <option value="p1qa">prompt + 1 Q&A pair</option>
+                <option value="p2qa">prompt + 2 Q&A pairs</option>
+                <option value="p3qa">prompt + 3 Q&A pairs</option>
+                <option value="p4qa">prompt + 4 Q&A pairs</option>
+                <option value="p5qa">prompt + 5 Q&A pairs</option>
+                <option value="1">1 message</option>
+                <option value="2">2 messages</option>
+                <option value="3">3 messages</option>
+                <option value="4">4 messages</option>
+                <option value="5">5 messages</option>
+                <option value="p1">prompt + 1 message</option>
+                <option value="p2">prompt + 2 messages</option>
+                <option value="p3">prompt + 3 messages</option>
+                <option value="p4">prompt + 4 messages</option>
+                <option value="p5">prompt + 5 messages</option>
             </select>
-        </div>
-
-        <!-- 对话名称 -->
-        <div class="top_add_space" title="Feel free to designate a specific title for each new conversation, facilitating easier selection within the "Related UUIDs" section">
-            <label>new chat title (optional)</label>
-            <input id="input-chat-name" class="left_para" type="text" name="chat-name" placeholder="chat name (optional)">
-        </div>
-
-        <!-- uuid -->
-        <div class="top_add_space" title="input the UUID of the previous conversation to review its content and to proceed with your inquiry">
-            <label>uuid</label>
-            <input id="input-uuid" class="left_para" type="text" name="uuid" placeholder="uuid for log">
-        </div>
-
-        <!-- select related uuid -->
-        <div class="top_add_space" title="implement seamless transitions and reuse across related conversations, enabling fluid navigation between distinct dialogues.">
-            <label>related UUIDs</label>
-            <select id="select-related-uuid" class="left_para for_focus" name="related-uuid">
-                <option value="-1" disabled selected>--select uuid--</option>
-"###;
-    for i in related_uuid_prompt {
-        result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
-    }
-    result += r###"            </select>
-        </div>
-
-        <!-- temperature -->
-        <div class="top_add_space" title="What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic">
-            <label>temperature</label>
-            <input id="input-temperature" class="left_para" type="number" min="0" max="2" name="temperature" placeholder="temperature">
-        </div>
-
-        <!-- select stream -->
-        <!--<div class="top_add_space" title="partial messages will be sent, like in ChatGPT">
-            <label>stream</label>
-            <select id="select-stm" class="left_para for_focus" name="stream">
-                <option disabled>--stream--</option>
-                <option value="yes" selected>Yes</option>
-                <option value="no">No</option>
-            </select>
-        </div>-->
-
-        <div class="top_add_space switch-toggle" title="partial messages will be sent, like in ChatGPT">
-            <label>stream</label>
-            <input id="select-stm" class="left_para for_focus" type="checkbox" checked name="stream">
-            <label for="select-stm"></label>
         </div>
 
         <div class="top_add_space switch-toggle" title="使用提出的问题进行网络搜索，然后基于搜索结果进行回答；或解析指定url，然后基于解析结果进行回答">
             <label>web search</label>
             <input id="select-web" class="left_para for_focus" type="checkbox" name="web">
             <label for="select-web"></label>
-        </div>
-
-        <!-- select recent log -->
-        <div class="top_add_space" title="Opting to include the maximum number of messages in each inquiry can conserve tokens">
-            <label>send messages</label>
-            <select id="select-log-num" class="left_para for_focus" name="num">
-                <option disabled>--select number--</option>
-                <option value="unlimit" selected>unlimit</option>
-                <option value="unlimit-drop">unlimit+drop</option>
-                <option value="unlimit-prompt-drop">unlimit+prompt+drop</option>
-                <option value="1">1</option>
-                <option value="1-prompt">1+prompt</option>
-                <option value="1-prompt-drop">1+prompt+drop</option>
-                <option value="5">5</option>
-                <option value="5-prompt">5+prompt</option>
-                <option value="5-prompt-drop">5+prompt+drop</option>
-                <option value="10">10</option>
-                <option value="10-prompt">10+prompt</option>
-                <option value="10-prompt-drop">10+prompt+drop</option>
-                <option value="20">20</option>
-                <option value="20-prompt">20+prompt</option>
-                <option value="20-prompt-drop">20+prompt+drop</option>
-                <option value="50">50</option>
-                <option value="50-prompt">50+prompt</option>
-                <option value="50-prompt-drop">50+prompt+drop</option>
-                <option value="100">100</option>
-                <option value="100-prompt">100+prompt</option>
-                <option value="100-prompt-drop">100+prompt+drop</option>
-            </select>
-        </div>
-
-        <!-- select voice -->
-        <div class="top_add_space" title="Select the timbre for the generated speech">
-            <label>voice</label>
-            <select id="select-voice" class="left_para for_focus" name="voice">
-                <option disabled>--select speech voice--</option>
-                <option value="1" selected>Alloy</option>
-                <option value="2">Echo</option>
-                <option value="3">Fable</option>
-                <option value="4">Onyx</option>
-                <option value="5">Nova</option>
-                <option value="6">Shimmer</option>
-            </select>
         </div>
 
         <!-- other button -->
@@ -1096,6 +1067,75 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         </div>
 
     </div>
+    <div id="left-part-other" class="side-nav">
+        <!-- select chain of thought effort -->
+        <div class="top_add_space" title="effort on reasoning for reasoning models and the visibility of the reasoning process, applicable solely to the reasoning models">
+            <label>reasoning effort</label>
+            <select id="select-effort" class="left_para for_focus" name="effort">
+                <option disabled>--select effort--</option>
+                <option value="1" selected title="favors speed and economical token usage">Low & Display the reasoning process</option>
+                <option value="2" title="favors speed and economical token usage">Low & Hide the reasoning process</option>
+                <option value="3" title="a balance between speed and reasoning accuracy">Medium & Display the reasoning process</option>
+                <option value="4" title="a balance between speed and reasoning accuracy">Medium & Hide the reasoning process</option>
+                <option value="5" title="favors more complete reasoning">High & Display the reasoning process</option>
+                <option value="6" title="favors more complete reasoning">High & Hide the reasoning process</option>
+            </select>
+        </div>
+
+        <!-- uuid -->
+        <div class="top_add_space" title="input the UUID of the previous conversation to review its content and to proceed with your inquiry">
+            <label>uuid</label>
+            <input id="input-uuid" class="left_para" type="text" name="uuid" placeholder="uuid for log">
+        </div>
+
+        <!-- select related uuid -->
+        <div class="top_add_space" title="implement seamless transitions and reuse across related conversations, enabling fluid navigation between distinct dialogues.">
+            <label>related UUIDs</label>
+            <select id="select-related-uuid" class="left_para for_focus" name="related-uuid">
+                <option value="-1" disabled selected>--select uuid--</option>
+"###;
+    for i in related_uuid_prompt {
+        result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
+    }
+    result += r###"            </select>
+        </div>
+
+        <!-- temperature -->
+        <div class="top_add_space" title="What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic">
+            <label>temperature</label>
+            <input id="input-temperature" class="left_para" type="number" min="0" max="2" name="temperature" placeholder="temperature">
+        </div>
+
+        <!-- select stream -->
+        <!--<div class="top_add_space" title="partial messages will be sent, like in ChatGPT">
+            <label>stream</label>
+            <select id="select-stm" class="left_para for_focus" name="stream">
+                <option disabled>--stream--</option>
+                <option value="yes" selected>Yes</option>
+                <option value="no">No</option>
+            </select>
+        </div>-->
+
+        <div class="top_add_space switch-toggle" title="partial messages will be sent, like in ChatGPT">
+            <label>stream</label>
+            <input id="select-stm" class="left_para for_focus" type="checkbox" checked name="stream">
+            <label for="select-stm"></label>
+        </div>
+
+        <!-- select voice -->
+        <div class="top_add_space" title="Select the timbre for the generated speech">
+            <label>voice</label>
+            <select id="select-voice" class="left_para for_focus" name="voice">
+                <option disabled>--select speech voice--</option>
+                <option value="1" selected>Alloy</option>
+                <option value="2">Echo</option>
+                <option value="3">Fable</option>
+                <option value="4">Onyx</option>
+                <option value="5">Nova</option>
+                <option value="6">Shimmer</option>
+            </select>
+        </div>
+    </div>
 
     <!-- chat part -->
     <div id="right-part" class="content">
@@ -1156,6 +1196,11 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
 
     <!-- footer -->
     <footer>
+        <button onclick='toggle()' id='left-toggle' title='Switch parameter bar settings'>
+"###;
+    result += &format!("            <img src='{}' aria-hidden='true' />", ICON_SETTING);
+    result += r###"
+        </button>
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
     </footer>
@@ -1233,6 +1278,28 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     // 停止接收回答
     let reader; // 接收答案
     let isStopped = true; // 是否停止接收答案
+    // 左下按钮，切换左侧参数栏
+    let toggleMain = true; // true显示主参数，false显示其余参数
+    function toggle () {
+        toggleMain = !toggleMain;
+        const left_main = document.getElementById('left-part');
+        const left_other = document.getElementById('left-part-other');
+        if (toggleMain) {
+            left_other.classList.add('animate');
+            left_main.style.display = 'block';
+            left_other.style.display = 'none';
+            sleep(300).then(() => { // 这里300ms要与css中animate的时间相同
+                left_main.classList.remove('animate');
+            });
+        } else {
+            left_main.classList.add('animate');
+            left_other.style.display = 'block';
+            left_main.style.display = 'none';
+            sleep(300).then(() => { // 这里300ms要与css中animate的时间相同
+                left_other.classList.remove('animate');
+            });
+        }
+    }
     // 上传文件，选好文件后直接提交，不需要submit按钮 https://stackoverflow.com/questions/7321855/how-do-i-auto-submit-an-upload-form-when-a-file-is-selected
     function sleep (time) {
         return new Promise((resolve) => setTimeout(resolve, time));
@@ -1358,6 +1425,10 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                     msg_lr.setAttribute("class", "chat-txt left");
                     // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
                     msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                    // 对每个代码块进行高亮
+                    msg_lr.querySelectorAll('pre code').forEach((block) => {
+                        Prism.highlightElement(block);
+                    });
                 } else { // 文本问题
                     msg_lr.setAttribute("class", "chat-txt right");
                     msg_lr.textContent = message_content.replaceAll('srxtzn', '\n').replaceAll('\\n', '\n'); // 不要使用innerHTML，innerHTML会识别标签将内容解析为html，textContent只是文本，innerText会受到css影响，https://stackoverflow.com/questions/31002593/type-new-line-character-in-element-textcontent
@@ -1421,6 +1492,10 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             for_markdown += message_content.replaceAll('srxtzn', '\n');
             // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
             msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+            // 对每个代码块进行高亮
+            msg_lr.querySelectorAll('pre code').forEach((block) => {
+                Prism.highlightElement(block);
+            });
         } else { // 不应该出现
             console.error("message id not match: current_id='${current_id}', received_id='${id}'");
         }
@@ -1634,7 +1709,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                                     insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
                                 }
                             }
-                            Prism.highlightAll();
+                            //Prism.highlightAll();
                             if (autoScroll) {
                                 if (jsonData.is_img) {
                                     sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
