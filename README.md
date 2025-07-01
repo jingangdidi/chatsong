@@ -59,6 +59,11 @@ press `Ctrl+C` to automatically save all chat records to the output directory wh
 
 This section remains pending completion and will be duly supplemented.
 
+## 🧬 message and Q&A pair
+- One message is a single question or answer.
+- One Q&A pair can contain multiple messages (multiple consecutive questions + multiple consecutive answers)
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/QA-pair.png">
+
 ## 🛠 Building from source
 ```
 git clone https://github.com/jingangdidi/chatsong.git
