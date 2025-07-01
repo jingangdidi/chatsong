@@ -59,6 +59,11 @@
 
 该部分会继续补充添加
 
+## 🧬 消息（message）和问答对（Q&A pair）
+- 一条消息是指：单独的一个问题或答案
+- 一对问答是指：一个或连续的多个问题，加上一个或连续的多个答案，一对问答包含至少2条消息
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/QA-pair.png">
+
 ## 🛠 从源码编译
 ```
 git clone https://github.com/jingangdidi/chatsong.git
