@@ -406,11 +406,11 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             document.getElementById('input_query').focus();
         });
     });
-    // 点击提交按钮和头像后，自动focus到问题输入框
-    document.querySelectorAll('.for_focus_button').forEach(button => {
-        button.addEventListener('click', function() {
+    // 点击提交按钮和头像后，自动focus到问题输入框。由于头像消息是动态增加的，因此不能像上面那样，而应该使用事件委托
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('for_focus_button')) {
             document.getElementById('input_query').focus();
-        });
+        }
     });
     // 停止接收回答
     let reader; // 接收答案
@@ -1269,11 +1269,11 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             document.getElementById('input_query').focus();
         });
     });
-    // 点击提交按钮和头像后，自动focus到问题输入框
-    document.querySelectorAll('.for_focus_button').forEach(button => {
-        button.addEventListener('click', function() {
+    // 点击提交按钮和头像后，自动focus到问题输入框。由于头像消息是动态增加的，因此不能像上面那样，而应该使用事件委托
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('for_focus_button')) {
             document.getElementById('input_query').focus();
-        });
+        }
     });
     // 停止接收回答
     let reader; // 接收答案
