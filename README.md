@@ -209,11 +209,17 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2025.06.20] release v0.1.0
-- [2025.06.30] release v0.1.1
+- [2025.07.05] release v0.2.1
+  -  🛠Fix: When copying a newly posed question or freshly received answer (excluding prior conversation history) by clicking the avatar, the input field not automatically gains focus.
+  -  🛠Fix: Token consumption not updating upon query submission.
+  -  🛠Fix: Lack of response in non-streaming output scenarios.
+  -  🪄Add: When using web search, prefix the timestamp of the query with an 🌐 to indicate an web search was performed.
+  -  🪄Add: Upon hovering over the message box, display the message number, Q&A pair number and token count for this message.
 - [2025.07.01] release v0.2.0
   - Fix the issue of excessive memory usage by optimizing code highlighting.
   - Optimize contextual messages, support Q&A pair.
   - When there is no input question and the last message is an answer, the question will be asked again based on the last question.
   - There are too many parameters on the left side of the page, so the infrequently used ones will be placed separately on the "back". The left parameter area can be flipped by clicking the bottom left button, and the main commonly used parameters will be displayed on the "front" by default.
   - Add a schematic diagram of Q&A pairs by [Excalibraw](https://excalidraw.com)
+- [2025.06.30] release v0.1.1
+- [2025.06.20] release v0.1.0
