@@ -41,11 +41,14 @@ pub struct ChatData {
     message: ChatMessage, // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
     time:    String,      // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
     data:    DataType,    // 该问答记录的数据类型，比如网络搜索的内容、zip压缩包提取的代码、图片base64
+    idx_qa:  usize,       // 该message属于第几个Q&A对
+    token:   usize,       // 该message的token数
 }
 
 impl ChatData {
-    fn new(message: ChatMessage, time: String, data: DataType) -> Self {
-        ChatData{message, time, data}
+    fn new(message: ChatMessage, time: String, data: DataType, is_web: bool, idx_qa: usize) -> Self {
+        let token = token_count_message(&message).0; // 计算token数
+        ChatData{message, time: if is_web {format!("🌐 {time}")} else {time}, data, idx_qa, token}
     }
 }
 
@@ -274,13 +277,80 @@ impl Info {
             (self.messages.len() - keep_msg_num - skip_last_answer_num, keep_msg_num, skip_last_answer_num)
         }
     }
+
+    /*
+    /// 获取下一条信息是第几对Q&A，指定的参数表示下一个message是否是问题
+    /// 这种方法是从头统计一遍
+    /// 如果最后一个message是回答，is_q为true则返回当前Q&A对数量+1，is_q为false则返回当前Q&A对数量
+    /// 如果最后一个message是问题，is_q无效，返回当前Q&A对数量
+    fn get_qa_num(&self, is_q: bool) -> usize {
+        if self.messages.len() == 0 {
+            1
+        } else {
+            let mut qa_num = 0; // 问答对数量
+            let mut is_answer = false; // 是否是回答
+            for m in self.messages.iter().rev() {
+                if let &ChatMessage::Assistant{..} = &m.message {
+                    if is_answer { // 上一条是回答，这一条还是回答，连续的回答属于同一QA对，不增加计数
+                        continue
+                    } else { // 上一条不是回答，这一条是回答，是新的QA对，计数加1
+                        qa_num += 1;
+                        is_answer = true;
+                    }
+                } else if is_answer {
+                    is_answer = false;
+                }
+            }
+            if let &ChatMessage::Assistant{..} = self.messages.last().unwrap().message { // 最后一条信息是回答
+                if is_q { // 下一条插入的是问题，则QA对加1；下一条插入的是回答，则QA不变
+                    qa_num += 1;
+                }
+            }
+            qa_num
+        }
+    }
+    */
+
+    /// 获取下一条信息是第几对Q&A，指定的参数表示下一个message是否是问题
+    /// 这种方法只需要根据当前最后一条信息中存储的是第几个QA对，接着往上加1就可以
+    /// 如果最后一个message是回答，is_q为true则返回当前Q&A对数量+1，is_q为false则返回当前Q&A对数量
+    /// 如果最后一个message是问题，is_q无效，返回当前Q&A对数量
+    fn get_qa_num(&self, is_q: bool) -> usize {
+        if self.messages.len() == 0 {
+            1
+        } else {
+            let m = self.messages.last().unwrap(); // 获取最后一条信息
+            if let ChatMessage::Assistant{..} = m.message { // 最后一条信息是回答
+                if is_q { // 下一条插入的是问题，则下一条新的QA计数加1
+                    m.idx_qa + 1
+                } else { // 下一条插入的是回答，则下一条信息父QA计数不变
+                    m.idx_qa
+                }
+            } else { // 最后一条信息是问题，则下一条信息的QA计数不变
+                m.idx_qa
+            }
+        }
+    }
+
+    /// 获取最后连续的问题数
+    fn get_latest_query_num(&self) -> usize {
+        let mut num = 0;
+        for m in self.messages.iter().rev() {
+            if let &ChatMessage::User{..} = &m.message {
+                num += 1;
+            } else {
+                break
+            }
+        }
+        num
+    }
 }
 
 /// 全局变量，可以修改，存储每个用户uuid的对话记录
 pub static DATA: Lazy<Mutex<HashMap<String, Info>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// 向DATA中指定uuid中插入新ChatMessage，uuid不存在则创建
-pub fn insert_message(uuid: &str, message: ChatMessage, time: String, query: DataType, qa_msg_p: Option<(usize, usize, bool)>, model: &str, chat_name: Option<String>) {
+pub fn insert_message(uuid: &str, message: ChatMessage, time: String, is_web: bool, query: DataType, qa_msg_p: Option<(usize, usize, bool)>, model: &str, chat_name: Option<String>) {
     let mut data = DATA.lock().unwrap();
     // 如果指定uuid不在服务端，则从本地log文件加载或创建新Info对象
     if !data.contains_key(uuid) {
@@ -316,11 +386,16 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, query: Dat
             info.pop = 0; // 新插入的是答案，pop重置为0
         },
     }
-    // 插入本次的message、时间、原始问题
+    // 更新总输入或输出的token数
+    match token_count_message(&message) {
+        (n, true)  => info.token[0] += n, // 更新问题
+        (n, false) => info.token[1] += n, // 更新答案
+    }
+    // 插入本次的message、时间、原始问题、是否网络搜索、message属于第几个Q&A对
     if qa_msg_p.is_some() { // 目前用户提出的问题都是Some，不需要加模型名称
-        info.messages.push(ChatData::new(message, time, query));
+        info.messages.push(ChatData::new(message, time, query, is_web, info.get_qa_num(true)));
     } else { // 目前模型回答的内容都是None
-        info.messages.push(ChatData::new(message, format!("{} {}", time, model), query)); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+        info.messages.push(ChatData::new(message, format!("{} {}", time, model), query, is_web, info.get_qa_num(false))); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
     }
 }
 
@@ -404,6 +479,14 @@ pub fn get_messages(uuid: &str, update_token: bool) -> Vec<ChatMessage> {
             if update_token { // 计算获取到的上下文所有问题和答案的总token，加到输入总token上，因为这些上下文都要发给api
                 let tokens = token_count_messages(&final_messages);
                 info.token[0] += tokens[0]+tokens[1];
+                // 再把最后几个连续问题的token数减去，因为插入问题时已经加过了，其他历史记录需要再加一遍，因为本次提问又用到了
+                let mut last_q_num = info.get_latest_query_num();
+                if last_q_num > final_messages.len() { // 可能最后连续输入了多个问题，但上下文只获取部分问题，就不能把没获取的前几个问题也减一遍。例如最后输入了连续10个问题，上下文时5，则只需减去最后5个问题的token
+                    last_q_num = final_messages.len();
+                }
+                for m in &info.messages[(info.messages.len()-last_q_num)..info.messages.len()] {
+                    info.token[0] -= m.token;
+                }
             }
             final_messages
         },
@@ -474,14 +557,45 @@ pub fn update_cookie_max_age(cjar: CookieJar) -> CookieJar {
         cookie.set_max_age(PARAS.maxage);
         cjar.add(cookie)
     } else {
-        cjar        
+        cjar
+    }
+}
+
+/// 获取当前uuid最后一个message的token数
+/*
+pub fn get_last_msg_token(uuid: &str) -> usize {
+    let data = DATA.lock().unwrap();
+    match data.get(uuid) {
+        Some(info) => match info.messages.last() {
+            Some(m) => m.token,
+            None => 0,
+        },
+        None => 0,
+    }
+}
+*/
+
+/// 获取当前uuid指定位置message的token数
+/// pos>=0表示索引位置，pos<0表示倒数第几个，比如0表示第1个，1表示第2个，-1表示最后一个，-2表示倒数第个
+pub fn get_msg_token(uuid: &str, pos: isize) -> usize {
+    let data = DATA.lock().unwrap();
+    match data.get(uuid) {
+        Some(info) => {
+            let idx = if pos >= 0 {
+                pos as usize
+            } else {
+                info.messages.len() - (-pos) as usize
+            };
+            info.messages[idx].token
+        },
+        None => 0,
     }
 }
 
 /// 获取当前uuid的问题和答案的总token数
 pub fn get_token(uuid: &str) -> [usize; 2] {
-    let mut data = DATA.lock().unwrap();
-    match data.get_mut(uuid) {
+    let data = DATA.lock().unwrap();
+    match data.get(uuid) {
         Some(info) => info.token,
         None => [0, 0],
     }
@@ -500,9 +614,11 @@ pub fn update_token_num(uuid: &str, n: usize, is_user: bool) {
 }
 
 /// 计算指定字符串的token数，更新当前uuid的token数
+/*
 pub fn update_token(uuid: &str, s: &str, is_user: bool) {
     update_token_num(uuid, token_count_str(s), is_user);
 }
+*/
 
 /// 计算指定字符串的token数
 fn token_count_str(s: &str) -> usize {
@@ -715,6 +831,8 @@ pub struct DisplayInfo {
     pub time:     String, // 时间
     pub is_img:   bool,   // 是否是图片base64
     pub is_voice: bool,   // 是否是语音base64
+    pub idx_qa:   usize,  // 该message属于第几个Q&A对
+    pub token:    usize,  // 该message的token数
 }
 
 /// 读取指定uuid最新问答记录，提取字符串，用于在chat页面显示
@@ -723,7 +841,8 @@ pub struct DisplayInfo {
 /// for_template: 是否是给模板使用，即访问chat页面使用于模板渲染
 /// 如果是true则需要将“`”替换为“\\”，“</scrip”替换为“/scrip”
 /// 如果是false则需要将“\n”替换为“srxtzn”
-pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<DisplayInfo>) {
+/// 返回(信息数量, 问答对数量, 每条信息的内容)
+pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec<DisplayInfo>) {
     //let mut logs: Vec<(bool, String, String, String)> = vec![]; // (是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)
     let mut logs: Vec<DisplayInfo> = vec![]; // 是否是提问、问题或答案字符串、作为html中tag的id的序号、时间、是否是图片base64、是否是语音base64
     // 获取指定uuid的chat记录
@@ -747,6 +866,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, t.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -757,6 +878,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     }
                 },
@@ -781,6 +904,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, all_res.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -791,10 +916,12 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
             },
             ChatMessage::User{content, ..} => match content {
                 ChatMessageContent::Text(t) => {
@@ -812,6 +939,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((true, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -822,6 +951,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     }
                 },
@@ -853,6 +984,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((true, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -863,10 +996,12 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: true, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: true, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
             },
             ChatMessage::Assistant{content, ..} => match content {
                 Some(c) => match c {
@@ -886,6 +1021,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                                 time:     tmp_time,
                                 is_img,
                                 is_voice,
+                                idx_qa:   m.idx_qa,
+                                token:    m.token,
                             });
                         } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                             //logs.push((false, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -896,6 +1033,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                                 time:     tmp_time,
                                 is_img,
                                 is_voice,
+                                idx_qa:   m.idx_qa,
+                                token:    m.token,
                             });
                         }
                     },
@@ -927,6 +1066,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                                 time:     tmp_time,
                                 is_img,
                                 is_voice: false,
+                                idx_qa:   m.idx_qa,
+                                token:    m.token,
                             });
                         } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                             //logs.push((false, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -937,10 +1078,12 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                                 time:     tmp_time,
                                 is_img,
                                 is_voice: false,
+                                idx_qa:   m.idx_qa,
+                                token:    m.token,
                             });
                         }
                     },
-                    ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false}),
+                    ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
                 },
                 None => (),
             },
@@ -955,6 +1098,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, t.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -965,6 +1110,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     }
                 },
@@ -989,6 +1136,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, all_res.replace("\n", "srxtzn"), tmp_id, tmp_time));
@@ -999,12 +1148,14 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            idx_qa:   m.idx_qa,
+                            token:    m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
             },
-            ChatMessage::Tool{content, ..} => logs.push(DisplayInfo{is_query: false, content: content.clone(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false}),
+            ChatMessage::Tool{content, ..} => logs.push(DisplayInfo{is_query: false, content: content.clone(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
         }
     }
     // 如果该uuid是新建的，且指定了prompt，只是还没有保存对话，则写入prompt
@@ -1020,6 +1171,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                         time:     info.messages[0].time.clone(),
                         is_img:   false,
                         is_voice: false,
+                        idx_qa:   1,
+                        token:    token_count_str(&p[1]),
                     });
                 } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                     //logs.push((true, p[1].replace("\n", "srxtzn"), "m0".to_string(), info.messages[0].time.clone()));
@@ -1030,6 +1183,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
                         time:     info.messages[0].time.clone(),
                         is_img:   false,
                         is_voice: false,
+                        idx_qa:   1,
+                        token:    token_count_str(&p[1]),
                     });
                 }
             }
@@ -1046,6 +1201,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            idx_qa:   0,
+            token:    0,
         });
         // 回答1
         logs.push(DisplayInfo{
@@ -1055,6 +1212,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            idx_qa:   0,
+            token:    0,
         });
         // 问题2
         logs.push(DisplayInfo{
@@ -1064,6 +1223,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            idx_qa:   0,
+            token:    0,
         });
         // 回答2
         logs.push(DisplayInfo{
@@ -1073,9 +1234,11 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, Vec<Displa
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            idx_qa:   0,
+            token:    0,
         });
     }
-    (logs_num, logs)
+    (logs_num, info.get_qa_num(true)-1, logs)
 }
 
 /// 计算指定字符串中含有的非英文字符的比例，不考虑数字和ASCII内的特殊字符（-=？&*等）
