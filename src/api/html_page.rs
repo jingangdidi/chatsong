@@ -279,15 +279,15 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         <!-- chat content region -->
         <div id="scrolldown" class="chat-content-area">
 "###;
-    let (logs_len, logs) = get_log_for_display(uuid, true); // cookie对应的chat记录，(不包括示例消息的总message数, Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>)
-    for log in logs.iter() {
+    let (logs_len, qa_num, logs) = get_log_for_display(uuid, true); // cookie对应的chat记录
+    for (i, log) in logs.iter().enumerate() {
         if log.is_query { // 用户输入的问题
             result += &format!("            <!-- user -->
             <div class='right-time'>{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
-                    <div class='chat-txt right' id='{}'></div>
-                    <div class='chat-icon'>\n", log.time, log.id);
+                    <div class='chat-txt right' id='{}' title='第{}条信息，第{}对问答，{}个token'></div>
+                    <div class='chat-icon'>\n", log.time, log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -310,8 +310,8 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             }
             result += &format!("
                 </div>
-                <div class='chat-txt left' id='{}'></div>
-            </div>\n", log.id);
+                <div class='chat-txt left' id='{}' title='第{}条信息，第{}对问答，{}个token'></div>
+            </div>\n", log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
         }
     }
     result += r###"        </div>
@@ -395,7 +395,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
 <!-- js -->
 <script type='text/javascript'>
 ";
-    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n", PARAS.addr_str, PARAS.port, v, logs_len);
+    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n    var qa_num = {}; // 问答对数量\n    var last_is_answer = true; // 最后一条信息是否是回答\n", PARAS.addr_str, PARAS.port, v, logs_len, qa_num);
     result += r###"    var emptyInput = true; // 全局变量，存储输入问题是否为空
     var no_message = true; // 是否没有获取到效回复，没有获取到，则将添加的msg_res删掉
     var already_clear_log = false; // 是否已清除了当前的记录
@@ -499,6 +499,11 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         msg_req_right.setAttribute("class", "chat-txt right");
         let new_id = 'm'+current_id;
         current_id += 1; // id序号加1
+        if (last_is_answer) {
+            qa_num += 1;
+            last_is_answer = false;
+        }
+        msg_req_right.setAttribute("title", "第"+current_id+"条信息，第"+qa_num+"对问答");
         msg_req_right.setAttribute("id", new_id);
         /* 头像 */
         let icon_div = document.createElement("div");
@@ -529,7 +534,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         message.appendChild(Con1);
     }
     // 插入左侧答案和右侧问题
-    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice) {
+    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, current_token) {
         if (id === current_id) { // 当前消息还没插入
             let new_id = 'm'+current_id; // 当前要插入消息的id
             current_id += 1; // id序号加1
@@ -603,6 +608,12 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             message.appendChild(timeInfo);
 
             if (is_left) {
+                last_is_answer = true;
+                if (current_token > 0) {
+                    msg_lr.setAttribute("title", "第"+current_id+"条信息，第"+qa_num+"对问答，"+current_token+"个token");
+                } else {
+                    msg_lr.setAttribute("title", "第"+current_id+"条信息，第"+qa_num+"对问答"); // 这里先不显示token数，等回答完成后再加上
+                }
                 /* 答案外的div */
                 let Con2 = document.createElement("div");
                 Con2.setAttribute("class", "gpt-chat-box");
@@ -612,6 +623,15 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                 /* 提问的当前时间 */
                 message.appendChild(Con2);
             } else {
+                if (last_is_answer) {
+                    qa_num += 1;
+                    last_is_answer = false;
+                }
+                if (current_token > 0) {
+                    msg_lr.setAttribute("title", "第"+current_id+"条信息，第"+qa_num+"对问答，"+current_token+"个token");
+                } else {
+                    msg_lr.setAttribute("title", "第"+current_id+"条信息，第"+qa_num+"对问答"); // 这里先不显示token数，等回答完成后再加上
+                }
                 /* 提问的头像和内容放到一个div右侧对齐 */
                 let q_icon_query_div = document.createElement("div");
                 q_icon_query_div.setAttribute("class", "q_icon_query");
@@ -663,7 +683,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     function copy(id) {
         // https://code-boxx.com/strip-remove-html-tags-javascript/
         var textToCopy = document.getElementById(id).textContent;
-        console.log(textToCopy);
+        //console.log(textToCopy);
         navigator.clipboard.writeText(textToCopy);
     }
     /* chat region scroll bottom */
@@ -677,7 +697,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         if (req !== '') { // 输入不为空才不在界面显示输入内容
             emptyInput = false;
             // 插入用户输入内容
-            insert_left_right(req, formatDate(true), current_id, false, false, false);
+            //insert_left_right(req, formatDate(true), current_id, false, false, false); // 不在这里插入问题，后面问题会作为MainData插入，附带token数等信息
         } else {
             emptyInput = true;
         }
@@ -805,6 +825,12 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                     const jsonData = JSON.parse(eventData);
                     switch (currentEvent) {
                         case 'metadata':
+                            if (jsonData.current_token > 0) { // 回答结束，更新token数
+                                let answer_id = 'm'+(current_id - 1); // 当前回答的id
+                                let msg_lr = document.getElementById(answer_id);
+                                const currentTitle = msg_lr.getAttribute("title");
+                                msg_lr.setAttribute("title", currentTitle + "，"+jsonData.current_token+"个token");
+                            }
                             //console.log('Received metadata:', jsonData);
                             // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
                             document.getElementById("show-prompt").value = jsonData.prompt;
@@ -812,6 +838,9 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                             document.getElementById("show-in-token").value = jsonData.in_token;
                             document.getElementById("show-out-token").value = jsonData.out_token;
                             related_uuid(jsonData.related_uuid);
+                            if (autoScroll) {
+                                scroll();
+                            }
                             break; // 否则会继续执行下面的case
                         case 'maindata':
                             //console.log('Received maindata:', jsonData);
@@ -820,6 +849,8 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                                 clear_all_child('scrolldown');
                                 already_clear_log = true;
                                 current_id = 0;
+                                qa_num = 0;
+                                last_is_answer = true;
                             }
                             // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
                             // https://www.answeroverflow.com/m/1302587682957824081
@@ -838,12 +869,12 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                             no_message = false;
                             // 插入信息
                             if (jsonData.time_model) {
-                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
+                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
                             } else { // 没有传递时间则使用当前时间
                                 if (jsonData.is_left) {
-                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
+                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
                                 } else {
-                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
+                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
                                 }
                             }
                             //Prism.highlightAll();
@@ -1142,15 +1173,15 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         <!-- chat content region -->
         <div id="scrolldown" class="chat-content-area">
 "###;
-    let (logs_len, logs) = get_log_for_display(uuid, true); // cookie对应的chat记录，(不包括示例消息的总message数, Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>)
-    for log in logs.iter() {
+    let (logs_len, qa_num, logs) = get_log_for_display(uuid, true); // cookie对应的chat记录
+    for (i, log) in logs.iter().enumerate() {
         if log.is_query { // 用户输入的问题
             result += &format!("            <!-- user -->
             <div class='right-time'>{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
-                    <div class='chat-txt right' id='{}'></div>
-                    <div class='chat-icon'>\n", log.time, log.id);
+                    <div class='chat-txt right' id='{}' title='message {}, Q&A pair {}, {} tokens'></div>
+                    <div class='chat-icon'>\n", log.time, log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -1173,8 +1204,8 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             }
             result += &format!("
                 </div>
-                <div class='chat-txt left' id='{}'></div>
-            </div>\n", log.id);
+                <div class='chat-txt left' id='{}' title='message {}, Q&A pair {}, {} tokens></div>
+            </div>\n", log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
         }
     }
     result += r###"        </div>
@@ -1258,7 +1289,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
 <!-- js -->
 <script type='text/javascript'>
 ";
-    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n", PARAS.addr_str, PARAS.port, v, logs_len);
+    result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n    var qa_num = {}; // 问答对数量\n    var last_is_answer = true; // 最后一条信息是否是回答\n", PARAS.addr_str, PARAS.port, v, logs_len, qa_num);
     result += r###"    var emptyInput = true; // 全局变量，存储输入问题是否为空
     var no_message = true; // 是否没有获取到效回复，没有获取到，则将添加的msg_res删掉
     var already_clear_log = false; // 是否已清除了当前的记录
@@ -1362,6 +1393,11 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         msg_req_right.setAttribute("class", "chat-txt right");
         let new_id = 'm'+current_id;
         current_id += 1; // id序号加1
+        if (last_is_answer) {
+            qa_num += 1;
+            last_is_answer = false;
+        }
+        msg_req_right.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num);
         msg_req_right.setAttribute("id", new_id);
         /* 头像 */
         let icon_div = document.createElement("div");
@@ -1392,7 +1428,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         message.appendChild(Con1);
     }
     // 插入左侧答案和右侧问题
-    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice) {
+    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, current_token) {
         if (id === current_id) { // 当前消息还没插入
             let new_id = 'm'+current_id; // 当前要插入消息的id
             current_id += 1; // id序号加1
@@ -1466,6 +1502,12 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             message.appendChild(timeInfo);
 
             if (is_left) {
+                last_is_answer = true;
+                if (current_token > 0) {
+                    msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num+", "+current_token+" tokens");
+                } else {
+                    msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num); // 这里先不显示token数，等回答完成后再加上
+                }
                 /* 答案外的div */
                 let Con2 = document.createElement("div");
                 Con2.setAttribute("class", "gpt-chat-box");
@@ -1475,6 +1517,15 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                 /* 提问的当前时间 */
                 message.appendChild(Con2);
             } else {
+                if (last_is_answer) {
+                    qa_num += 1;
+                    last_is_answer = false;
+                }
+                if (current_token > 0) {
+                    msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num+", "+current_token+" tokens");
+                } else {
+                    msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num+); // 这里先不显示token数，等最后由MetaData加上
+                }
                 /* 提问的头像和内容放到一个div右侧对齐 */
                 let q_icon_query_div = document.createElement("div");
                 q_icon_query_div.setAttribute("class", "q_icon_query");
@@ -1526,7 +1577,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     function copy(id) {
         // https://code-boxx.com/strip-remove-html-tags-javascript/
         var textToCopy = document.getElementById(id).textContent;
-        console.log(textToCopy);
+        //console.log(textToCopy);
         navigator.clipboard.writeText(textToCopy);
     }
     /* chat region scroll bottom */
@@ -1540,7 +1591,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         if (req !== '') { // 输入不为空才不在界面显示输入内容
             emptyInput = false;
             // 插入用户输入内容
-            insert_left_right(req, formatDate(true), current_id, false, false, false);
+            //insert_left_right(req, formatDate(true), current_id, false, false, false); // 不在这里插入问题，后面问题会作为MainData插入，附带token数等信息
         } else {
             emptyInput = true;
         }
@@ -1668,6 +1719,12 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                     const jsonData = JSON.parse(eventData);
                     switch (currentEvent) {
                         case 'metadata':
+                            if (jsonData.current_token > 0) { // 回答结束，更新token数
+                                let answer_id = 'm'+(current_id - 1); // 当前回答的id
+                                let msg_lr = document.getElementById(answer_id);
+                                const currentTitle = msg_lr.getAttribute("title");
+                                msg_lr.setAttribute("title", currentTitle + ", "+jsonData.current_token+" tokens");
+                            }
                             //console.log('Received metadata:', jsonData);
                             // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
                             document.getElementById("show-prompt").value = jsonData.prompt;
@@ -1675,6 +1732,9 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                             document.getElementById("show-in-token").value = jsonData.in_token;
                             document.getElementById("show-out-token").value = jsonData.out_token;
                             related_uuid(jsonData.related_uuid);
+                            if (autoScroll) {
+                                scroll();
+                            }
                             break; // 否则会继续执行下面的case
                         case 'maindata':
                             //console.log('Received maindata:', jsonData);
@@ -1683,6 +1743,8 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                                 clear_all_child('scrolldown');
                                 already_clear_log = true;
                                 current_id = 0;
+                                qa_num = 0;
+                                last_is_answer = true;
                             }
                             // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
                             // https://www.answeroverflow.com/m/1302587682957824081
@@ -1701,12 +1763,12 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                             no_message = false;
                             // 插入信息
                             if (jsonData.time_model) {
-                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
+                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
                             } else { // 没有传递时间则使用当前时间
                                 if (jsonData.is_left) {
-                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
+                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
                                 } else {
-                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice);
+                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
                                 }
                             }
                             //Prism.highlightAll();
@@ -1794,21 +1856,21 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
 "###;
     // 获取该uuid的chat记录，如果传递的err_str不是None，则表示无法获取chat记录
     let logs = match err_str {
-        Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: "m0".to_string(), time: "".to_string(), is_img: false, is_voice: false}],
+        Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: "m0".to_string(), time: "".to_string(), is_img: false, is_voice: false, idx_qa: 1, token: 0}],
         None => {
             // 在保存当前chat记录之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
             pop_message_before_end(uuid);
-            get_log_for_display(uuid, true).1 // cookie对应的chat记录，Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
+            get_log_for_display(uuid, true).2 // cookie对应的chat记录
         },
     };
-    for log in logs.iter() {
+    for (i, log) in logs.iter().enumerate() {
         if log.is_query { // 用户输入的问题
             result += &format!("            <!-- user -->
             <div class='right-time'>{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
-                    <div class='chat-txt right' id='{}'></div>
-                    <div class='chat-icon'>\n", log.time, log.id);
+                    <div class='chat-txt right' id='{}' title='message {}, Q&A pair {}, {} tokens></div>
+                    <div class='chat-icon'>\n", log.time, log.id, i+1, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -1831,8 +1893,8 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
             }
             result += &format!("
                 </div>
-                <div class='chat-txt left' id='{}'></div>
-            </div>\n", log.id);
+                <div class='chat-txt left' id='{}' title='message {}, Q&A pair {}></div>
+            </div>\n", log.id, i+1, log.idx_qa);
         }
     }
     result += r###"        </div>
