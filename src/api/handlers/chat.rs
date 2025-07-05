@@ -52,6 +52,7 @@ use crate::{
         get_latest_voice, // 获取最后一个上传的音频文件
         VOICE, // 生成音频时传输给用户端的图标base64
         get_messages_num, // 获取指定uuid的messages总数
+        get_msg_token, // 获取当前uuid指定位置message的token数
     },
     graph::{
         add_edge, // 将旧uuid与新uuid建立直接或间接关系
@@ -78,16 +79,18 @@ use crate::{
 /// 页面左侧显示的信息
 #[derive(Serialize)]
 struct MetaData {
-    current_uuid: String,                // 当前uuid
-    related_uuid: Vec<(String, String)>, // 相关uuid，Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
-    prompt:       String,                // 当前prompt
-    in_token:     usize,                 // 输入token总数
-    out_token:    usize,                 // 输出token总数
+    current_uuid:  String,                // 当前uuid
+    related_uuid:  Vec<(String, String)>, // 相关uuid，Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
+    prompt:        String,                // 当前prompt
+    in_token:      usize,                 // 输入token总数
+    out_token:     usize,                 // 输出token总数
+    current_token: usize,                 // 当前问题或答案的token数，流式输出时该值>0，传递最终token数，问题或非流式输出的答案这里为0
 }
 
 impl MetaData {
     /// 将Metadata转为SSE格式Vec<u8>
-    fn prepare_sse(uuid: String) -> Result<Vec<u8>, MyError> {
+    /// current_token为None表示获取最后一个message的token，为Some则直接使用Some内的数值
+    fn prepare_sse(uuid: String, current_token: Option<usize>) -> Result<Vec<u8>, MyError> {
         // 获取与当前uuid相关的所有uuid
         let related_uuid_prompt = get_all_related_uuid(&uuid); // Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
         // 获取当前uuid的prompt名称
@@ -96,11 +99,15 @@ impl MetaData {
         let token = get_token(&uuid);
         // MetaData
         let data = MetaData{
-            current_uuid: uuid.clone(),        // 当前uuid
-            related_uuid: related_uuid_prompt, // 相关uuid
-            prompt:       prompt_name,         // 当前prompt
-            in_token:     token[0],            // 输入token总数
-            out_token:    token[1],            // 输出token总数
+            current_uuid:  uuid.clone(),              // 当前uuid
+            related_uuid:  related_uuid_prompt,       // 相关uuid
+            prompt:        prompt_name,               // 当前prompt
+            in_token:      token[0],                  // 输入token总数
+            out_token:     token[1],                  // 输出token总数
+            current_token: match current_token { // 当前问题或答案的token数
+                Some(t) => t, // 指定了token
+                None => get_msg_token(&uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
+            },
         };
         format_sse_message(&uuid, "metadata", &data)
     }
@@ -109,19 +116,33 @@ impl MetaData {
 /// 传输的消息内容
 #[derive(Serialize)]
 pub struct MainData {
-    id:         usize,          // 该消息在当前对话中的索引，第1条消息是0
-    content:    String,         // 消息内容
-    is_left:    bool,           // true是回答，false是问题
-    is_img:     bool,           // true是图片base64，false是常规文本内容
-    is_voice:   bool,           // true是语音图片base64，false是常规文本内容
-    is_history: bool,           // true是之前的问答记录，页面需要清空后再加载
-    time_model: Option<String>, // 时间（如果是回答还包含调用的模型名称），Some在json中直接是字符串内容，None在json中是null
+    id:            usize,          // 该消息在当前对话中的索引，第1条消息是0，如果是问题或非流式输出的答案，调用MetaData前已经插入了，获取总message后要减1，如果是流式输出的答案，调用MetaData前还未插入，获取总message后不需要减1
+    content:       String,         // 消息内容
+    is_left:       bool,           // true是回答，false是问题
+    is_img:        bool,           // true是图片base64，false是常规文本内容
+    is_voice:      bool,           // true是语音图片base64，false是常规文本内容
+    is_history:    bool,           // true是之前的问答记录，页面需要清空后再加载
+    time_model:    Option<String>, // 时间（如果是回答还包含调用的模型名称），Some在json中直接是字符串内容，None在json中是null
+    current_token: usize,          // 当前问题或答案的token数，如果使用stream则直接设为0，最终的token数通过MetaData传递
 }
 
 impl MainData {
     /// 将MainData转为SSE格式Vec<u8>
-    pub fn prepare_sse(uuid: &str, id: usize, content: String, is_left: bool, is_img: bool, is_voice: bool, is_history: bool, time_model: Option<String>) -> Result<Vec<u8>, MyError> {
-        let data = MainData{id, content, is_left, is_img, is_voice, is_history, time_model};
+    /// current_token为None表示获取最后一个message的token，为Some则直接使用Some内的数值
+    pub fn prepare_sse(uuid: &str, id: usize, content: String, is_left: bool, is_img: bool, is_voice: bool, is_history: bool, time_model: Option<String>, current_token: Option<usize>) -> Result<Vec<u8>, MyError> {
+        let data = MainData{
+            id,
+            content,
+            is_left,
+            is_img,
+            is_voice,
+            is_history,
+            time_model,
+            current_token: match current_token { // 当前问题或答案的token数
+                Some(t) => t, // 指定了token
+                None => get_msg_token(uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
+            },
+        };
         format_sse_message(uuid, "maindata", &data)
     }
 }
@@ -188,7 +209,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
         None => None, // 这里None表示不修改问答对或消息数、以及是否包含prompt
     };
     // 解析传递的uuid，并设置cookie
-    let (uuid, cookie_jar, load_uuid, clear_page) = match prompt {
+    let (uuid, cookie_jar, load_uuid/*, clear_page*/) = match prompt {
         Some(p) => {
             let prompt_name_str = get_prompt(p); // 获取内置的prompt名称和内容
             let tmp_uuid = Uuid::new_v4().to_string();
@@ -202,7 +223,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     content: ChatMessageContent::Text(prompt_name_str[1].clone()),
                     name: None,
                 };
-                insert_message(&tmp_uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, chat_name.clone());
+                insert_message(&tmp_uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, chat_name.clone());
             }
             // 添加新的直接关系
             add_edge(&cookie_uuid, &tmp_uuid, true);
@@ -212,7 +233,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 tmp_uuid.clone(),
                 jar.add(create_cookie(tmp_uuid)),
                 true,
-                false,
+                //false,
             )
         },
         None => match params.get("uuid") { // 不开启新会话，则解析uuid参数
@@ -224,14 +245,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             tmp_uuid.clone(),
                             jar.add(create_cookie(tmp_uuid)),
                             false,
-                            true,
+                            //true,
                         )
                     } else { // 有cookie则cookie作为uuid，不重新生成uuid
                         (
                             cookie_uuid,
                             update_cookie_max_age(jar), // 仅修改内部cookie的max-age
                             false,
-                            false,
+                            //false,
                         )
                     }
                 } else {
@@ -241,7 +262,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 cookie_uuid,
                                 update_cookie_max_age(jar), // 仅修改内部cookie的max-age
                                 false,
-                                false,
+                                //false,
                             )
                         } else { // 如果指定的uuid与cookie值不相同，则用指定的uuid设置为cookie
                             // 添加新的间接关系
@@ -252,7 +273,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 u.to_string(),
                                 jar.add(create_cookie(u.clone())), // 已有cookie则更新，不存在则添加
                                 true,
-                                false,
+                                //false,
                             )
                         }
                     } else { // 发送的请求中指定了uuid，但不存在于服务端，则舍弃指定的uuid，重新生成uuid，并用该uuid设置cookie
@@ -265,7 +286,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             tmp_uuid.clone(),
                             jar.add(create_cookie(tmp_uuid)),
                             false,
-                            true,
+                            //true,
                         )
                     }
                 }
@@ -277,14 +298,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         tmp_uuid.clone(),
                         jar.add(create_cookie(tmp_uuid)),
                         false,
-                        true,
+                        //true,
                     )
                 } else { // 有cookie则cookie作为uuid，不重新生成uuid
                     ( // 有cookie则cookie作为uuid，不重新生成uuid
                         cookie_uuid,
                         update_cookie_max_age(jar), // 仅修改内部cookie的max-age
                         false,
-                        false,
+                        //false,
                     )
                 }
             },
@@ -445,16 +466,16 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     audio: None,
                     tool_calls: None,
                 };
-                insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), data_type, None, &model, None);
+                insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, data_type, None, &model, None);
                 // 创建stream对象，接收管道传递的数据
                 let tmp_uuid = uuid.clone();
                 let tmp_stream = async_stream::stream! {
-                    // 传输图片base64字符串、从音频文件提取的文本内容、从音频文件翻译的文本内容
-                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid), to_client, true, is_img, is_voice, false, None)?);
+                    // 传输图片base64字符串、从音频文件提取的文本内容、从音频文件翻译的文本内容。此时消息已经插入了，因此总消息数减1作为id
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, to_client, true, is_img, is_voice, false, None, None)?);
                     yield tmp;
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid)?);
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid, Some(0))?);
                     yield tmp;
                     let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
                     yield tmp;
@@ -513,14 +534,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         // 传输指定uuid的chat记录
                         if load_uuid {
                             // Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
-                            for (i, log) in get_log_for_display(&tmp_uuid, false).1.into_iter().enumerate() {
+                            for (i, log) in get_log_for_display(&tmp_uuid, false).2.into_iter().enumerate() {
                                 if log.is_query { // 显示在问答页面右侧的用户输入内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, Some(log.time))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 } else { // 显示在问答页面左侧的回答内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, Some(log.time))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 }
                             }
@@ -532,7 +553,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         }
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid)?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid, None)?);
                         yield tmp;
                         // 结束stream
                         let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
@@ -559,25 +580,25 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         // 传输指定uuid的chat记录
                         if load_uuid {
                             // Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
-                            for (i, log) in get_log_for_display(&tmp_uuid, false).1.into_iter().enumerate() {
+                            for (i, log) in get_log_for_display(&tmp_uuid, false).2.into_iter().enumerate() {
                                 if log.is_query { // 显示在问答页面右侧的用户输入内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, Some(log.time))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 } else { // 显示在问答页面左侧的回答内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, Some(log.time))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 }
                             }
                         }
-                        // 传输答案
+                        // 传输答案。非流式输出传输答案时，答案已经插入到服务端记录中，因此这里获取总消息数还需要减1
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", whole_answer.replace("\n", "<br>")).into_bytes()); // 这里要声明类型，否则报错，传递数据以`data: `起始，以`\n\n`终止
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid), whole_answer.replace("\n", "<br>"), true, false, false, false, None)?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, None, None)?);
                         yield tmp;
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid)?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid, Some(0))?);
                         yield tmp;
                         // 结束stream
                         let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
@@ -598,7 +619,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 }
             }
         } else {
-            let (message, query): (Option<ChatMessage>, String) = if body.starts_with("img http") {
+            let (message, query, err_msg): (Option<ChatMessage>, String, String) = if body.starts_with("img http") {
                 (
                     Some(ChatMessage::User{ // 相较0.6.5版本，1.0.0版本将图片和音频从ChatMessage移出去了，因此暂不支持对图片提问
                         content: ChatMessageContent::Text(body.clone()),
@@ -625,18 +646,20 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         name: None,
                         */
                     }),
+                    body.clone(),
                     "".to_string(),
                 )
             } else if web_search { // 使用网络搜索
                 match get_search_parse_result(&uuid, body.clone()) {
                     (Some(res), err_str) => (
                         Some(ChatMessage::User{
-                            content: ChatMessageContent::Text(res),
+                            content: ChatMessageContent::Text(res.clone()),
                             name: None,
                         }),
+                        res,
                         err_str
                     ),
-                    (None, err_str) => (None, err_str),
+                    (None, err_str) => (None, body.clone(), err_str),
                 }
             } else { // 常规问题
                 (
@@ -644,15 +667,16 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         content: ChatMessageContent::Text(body.clone()),
                         name: None,
                     }),
+                    body.clone(),
                     "".to_string(),
                 )
             };
             if let Some(m) = message {
                 // 当前问题插入到messages中
                 if web_search { // 使用网络搜索，需记录原始问题
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(body.clone()), qa_msg_p, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), qa_msg_p, &model, chat_name);
                 } else {
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, chat_name);
                 }
             } else {
                 // 插入原始问题
@@ -661,55 +685,67 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     name: None,
                 };
                 if web_search { // 使用网络搜索，需记录原始问题
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(body.clone()), qa_msg_p, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), qa_msg_p, &model, chat_name);
                 } else {
-                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, chat_name);
+                    insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, chat_name);
                 }
                 // 插入错误提示
                 let m = ChatMessage::Assistant{
-                    content: Some(ChatMessageContent::Text(query.clone())),
+                    content: Some(ChatMessageContent::Text(err_msg.clone())),
                     reasoning_content: None,
                     refusal: None,
                     name: None,
                     audio: None,
                     tool_calls: None,
                 };
-                insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Normal, qa_msg_p, &model, None);
+                insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, None);
             }
             event!(Level::INFO, "{} GET {}, query: {}", uuid, uri.path(), get_query_num(&uuid));
             // 创建stream对象，接收管道传递的数据
-            let tmp_query = body.clone();
+            //let tmp_query = body.clone();
             let tmp_uuid = uuid.clone();
             let tmp_stream = async_stream::stream! {
                 // 传输指定uuid的chat记录
                 if load_uuid {
                     // Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
-                    for (i, log) in get_log_for_display(&tmp_uuid, false).1.into_iter().enumerate() {
+                    for (i, log) in get_log_for_display(&tmp_uuid, false).2.into_iter().enumerate() {
                         if log.is_query {
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, Some(log.time))?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, Some(log.time), Some(log.token))?);
                             yield tmp;
                         } else {
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, Some(log.time))?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, Some(log.time), Some(log.token))?);
                             yield tmp;
                         }
                     }
-                } else if clear_page { // 清空页面之前的chat记录，显示当前问题
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid, Some(0))?);
+                    yield tmp;
+                /*} else if clear_page { // 清空页面之前的chat记录，显示当前问题
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), tmp_query.replace("\n", "srxtzn")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid), tmp_query.replace("\n", "srxtzn"), false, false, false, true, Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()))?);
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, tmp_query.replace("\n", "srxtzn"), false, false, false, true, Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()))?);
+                    yield tmp;
+                }*/
+                } else {
+                    // 如果网络搜索或解析url和html有报错，则将错误信息恢复给客户端显示。由于前面`insert_message`插入了错误信息，因此这里返回给用户的id要减1
+                    if !err_msg.is_empty() {
+                        // 传输原始问题
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 2, query.replace("\n", "srxtzn"), false, false, false, false, None, Some(get_msg_token(&tmp_uuid, -2)))?);
+                        yield tmp;
+                        // 传输错误信息
+                        //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", err_msg.replace("\n", "srxtzn")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, err_msg.replace("\n", "srxtzn"), true, false, false, false, None, Some(get_msg_token(&tmp_uuid, -1)))?);
+                        yield tmp;
+                    } else {
+                        // 传输原始问题
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, query.replace("\n", "srxtzn"), false, false, false, false, None, Some(get_msg_token(&tmp_uuid, -1)))?);
+                        yield tmp;
+                    }
+                    // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
+                    //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid, Some(0))?);
                     yield tmp;
                 }
-                // 如果网络搜索或解析url和html有报错，则将错误信息恢复给客户端显示。由于前面`insert_message`插入了错误信息，因此这里返回给用户的id要减1
-                if !query.is_empty() {
-                    //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", query.replace("\n", "srxtzn")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid)-1, query.replace("\n", "srxtzn"), true, false, false, false, None)?);
-                    yield tmp;
-                }
-                // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
-                //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                let tmp: Result<Vec<u8>, MyError> = Ok(MetaData::prepare_sse(tmp_uuid)?);
-                yield tmp;
                 let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
                 yield tmp;
             };
