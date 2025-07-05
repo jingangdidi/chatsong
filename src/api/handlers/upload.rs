@@ -86,13 +86,13 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(name.clone()),
                 name: None,
             };
-            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
+            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
         } else if [".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"].iter().any(|x| lowercase_name.ends_with(x)) {
             let message = ChatMessage::User{
                 content: ChatMessageContent::Text(name),
                 name: None,
             };
-            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Voice, None, "", None); // 以音频文件名称作为用户提问内容
+            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Voice, None, "", None); // 以音频文件名称作为用户提问内容
         } else {
             let content = if lowercase_name.ends_with(".pdf") {
                 match extract_pdf_content(&uuid, &PARAS.outpath, &name) {
@@ -133,7 +133,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(content),
                 name: None,
             };
-            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), DataType::Raw(name), None, "", None); // 以文件名称作为用户提问内容，并记录提取的内容字符串
+            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Raw(name), None, "", None); // 以文件名称作为用户提问内容，并记录提取的内容字符串
         }
     }
     //Ok((cookie_jar, Redirect::to(uri.path().to_string().strip_suffix("/upload").unwrap()))) // 这里上传完成后重定向到chat页面，`/嵌套的前缀/upload` --> `/嵌套的前缀`
