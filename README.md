@@ -55,7 +55,7 @@ press `Ctrl+C` to automatically save all chat records to the output directory wh
 ```
 
 ## 📺 Detailed Instructions
-[YouTube demo vedio](https://youtu.be/KzbMdpSvfyc)
+[YouTube demo vedio](https://youtu.be/e-ONlqtLmMk)
 
 This section remains pending completion and will be duly supplemented.
 
