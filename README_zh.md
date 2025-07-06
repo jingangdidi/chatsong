@@ -57,6 +57,8 @@
 ## 📺 详细示例
 [YouTube示例视频](https://youtu.be/e-ONlqtLmMk)
 
+[bilibili示例视频](https://www.bilibili.com/video/BV17m3ezBEz6)
+
 该部分会继续补充添加
 
 ## 🧬 消息（message）和问答对（Q&A pair）
