@@ -57,6 +57,8 @@ press `Ctrl+C` to automatically save all chat records to the output directory wh
 ## 📺 Detailed Instructions
 [YouTube demo vedio](https://youtu.be/e-ONlqtLmMk)
 
+[bilibili demo vedio](https://www.bilibili.com/video/BV17m3ezBEz6)
+
 This section remains pending completion and will be duly supplemented.
 
 ## 🧬 message and Q&A pair
