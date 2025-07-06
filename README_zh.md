@@ -55,7 +55,7 @@
 ```
 
 ## 📺 详细示例
-[YouTube示例视频](https://youtu.be/KzbMdpSvfyc)
+[YouTube示例视频](https://youtu.be/e-ONlqtLmMk)
 
 该部分会继续补充添加
 
