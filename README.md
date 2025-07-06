@@ -209,7 +209,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2025.07.05] release v0.2.1
+- [2025.07.06] release v0.2.1
   -  🛠Fix: When copying a newly posed question or freshly received answer (excluding prior conversation history) by clicking the avatar, the input field not automatically gains focus.
   -  🛠Fix: Token consumption not updating upon query submission.
   -  🛠Fix: Lack of response in non-streaming output scenarios.
