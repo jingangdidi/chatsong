@@ -283,11 +283,11 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     for (i, log) in logs.iter().enumerate() {
         if log.is_query { // 用户输入的问题
             result += &format!("            <!-- user -->
-            <div class='right-time'>{}</div>
+            <div class='right-time'>{}{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
                     <div class='chat-txt right' id='{}' title='第{}条信息，第{}对问答，{}个token'></div>
-                    <div class='chat-icon'>\n", log.time, log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
+                    <div class='chat-icon'>\n", if log.is_web {"🌐 "} else {""}, log.time, log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -534,7 +534,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         message.appendChild(Con1);
     }
     // 插入左侧答案和右侧问题
-    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, current_token) {
+    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, is_web, current_token) {
         if (id === current_id) { // 当前消息还没插入
             let new_id = 'm'+current_id; // 当前要插入消息的id
             current_id += 1; // id序号加1
@@ -601,7 +601,11 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
             } else {
                 timeInfo.setAttribute("class", "right-time");
             }
-            timeInfo.innerHTML = message_time;
+            if (is_web) {
+                timeInfo.innerHTML = "🌐 "+message_time;
+            } else {
+                timeInfo.innerHTML = message_time;
+            }
 
             /* chat区域插入问题/答案的时间 */
             let message = document.getElementById("scrolldown");
@@ -869,12 +873,12 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                             no_message = false;
                             // 插入信息
                             if (jsonData.time_model) {
-                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
+                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
                             } else { // 没有传递时间则使用当前时间
                                 if (jsonData.is_left) {
-                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
+                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
                                 } else {
-                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
+                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
                                 }
                             }
                             //Prism.highlightAll();
@@ -1177,11 +1181,11 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     for (i, log) in logs.iter().enumerate() {
         if log.is_query { // 用户输入的问题
             result += &format!("            <!-- user -->
-            <div class='right-time'>{}</div>
+            <div class='right-time'>{}{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
                     <div class='chat-txt right' id='{}' title='message {}, Q&A pair {}, {} tokens'></div>
-                    <div class='chat-icon'>\n", log.time, log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
+                    <div class='chat-icon'>\n", if log.is_web {"🌐 "} else {""}, log.time, log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -1204,7 +1208,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             }
             result += &format!("
                 </div>
-                <div class='chat-txt left' id='{}' title='message {}, Q&A pair {}, {} tokens></div>
+                <div class='chat-txt left' id='{}' title='message {}, Q&A pair {}, {} tokens'></div>
             </div>\n", log.id, if logs_len > 0 {i+1} else {0}, log.idx_qa, log.token);
         }
     }
@@ -1428,7 +1432,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         message.appendChild(Con1);
     }
     // 插入左侧答案和右侧问题
-    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, current_token) {
+    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, is_web, current_token) {
         if (id === current_id) { // 当前消息还没插入
             let new_id = 'm'+current_id; // 当前要插入消息的id
             current_id += 1; // id序号加1
@@ -1495,7 +1499,11 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             } else {
                 timeInfo.setAttribute("class", "right-time");
             }
-            timeInfo.innerHTML = message_time;
+            if (is_web) {
+                timeInfo.innerHTML = "🌐 "+message_time;
+            } else {
+                timeInfo.innerHTML = message_time;
+            }
 
             /* chat区域插入问题/答案的时间 */
             let message = document.getElementById("scrolldown");
@@ -1524,7 +1532,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                 if (current_token > 0) {
                     msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num+", "+current_token+" tokens");
                 } else {
-                    msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num+); // 这里先不显示token数，等最后由MetaData加上
+                    msg_lr.setAttribute("title", "message "+current_id+", Q&A pair "+qa_num); // 这里先不显示token数，等最后由MetaData加上
                 }
                 /* 提问的头像和内容放到一个div右侧对齐 */
                 let q_icon_query_div = document.createElement("div");
@@ -1763,12 +1771,12 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                             no_message = false;
                             // 插入信息
                             if (jsonData.time_model) {
-                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
+                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
                             } else { // 没有传递时间则使用当前时间
                                 if (jsonData.is_left) {
-                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
+                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
                                 } else {
-                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.current_token);
+                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
                                 }
                             }
                             //Prism.highlightAll();
@@ -1856,7 +1864,7 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
 "###;
     // 获取该uuid的chat记录，如果传递的err_str不是None，则表示无法获取chat记录
     let logs = match err_str {
-        Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: "m0".to_string(), time: "".to_string(), is_img: false, is_voice: false, idx_qa: 1, token: 0}],
+        Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: "m0".to_string(), time: "".to_string(), is_img: false, is_voice: false, is_web: false, idx_qa: 1, token: 0}],
         None => {
             // 在保存当前chat记录之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
             pop_message_before_end(uuid);
@@ -1866,11 +1874,11 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
     for (i, log) in logs.iter().enumerate() {
         if log.is_query { // 用户输入的问题
             result += &format!("            <!-- user -->
-            <div class='right-time'>{}</div>
+            <div class='right-time'>{}{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
                     <div class='chat-txt right' id='{}' title='message {}, Q&A pair {}, {} tokens></div>
-                    <div class='chat-icon'>\n", log.time, log.id, i+1, log.idx_qa, log.token);
+                    <div class='chat-icon'>\n", if log.is_web {"🌐 "} else {""}, log.time, log.id, i+1, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
