@@ -41,6 +41,7 @@ pub struct ChatData {
     message: ChatMessage, // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
     time:    String,      // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
     data:    DataType,    // 该问答记录的数据类型，比如网络搜索的内容、zip压缩包提取的代码、图片base64
+    is_web:  bool,        // 是否网络搜索
     idx_qa:  usize,       // 该message属于第几个Q&A对
     token:   usize,       // 该message的token数
 }
@@ -48,7 +49,8 @@ pub struct ChatData {
 impl ChatData {
     fn new(message: ChatMessage, time: String, data: DataType, is_web: bool, idx_qa: usize) -> Self {
         let token = token_count_message(&message).0; // 计算token数
-        ChatData{message, time: if is_web {format!("🌐 {time}")} else {time}, data, idx_qa, token}
+        //ChatData{message, time: if is_web {format!("🌐 {time}")} else {time}, data, idx_qa, token} // 不管用，页面不显示emoji
+        ChatData{message, time, data, is_web, idx_qa, token}
     }
 }
 
@@ -369,9 +371,16 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, is_web: bo
     let info = data.get_mut(uuid).unwrap();
     // 在插入新message之前先更新限制的问答对数量、限制的消息数量、提问是否包含prompt
     if let Some((qa, msg, with_prompt)) = qa_msg_p {
-        if qa != info.qa_msg_p.0 || msg != info.qa_msg_p.1 || with_prompt != info.qa_msg_p.2 { // 客户端下拉选项`上下文消息数`改变时才更新限制的问答对数量、限制的消息数量、提问是否包含prompt
+        // 更新限制的问答对数量
+        if qa != info.qa_msg_p.0 {
             info.qa_msg_p.0 = qa;
+        }
+        // 更新限制的限制的消息数量
+        if msg != info.qa_msg_p.1 {
             info.qa_msg_p.1 = msg;
+        }
+        // 更新提问是否包含prompt
+        if with_prompt != info.qa_msg_p.2 {
             info.qa_msg_p.2 = with_prompt;
         }
     }
@@ -396,6 +405,27 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, is_web: bo
         info.messages.push(ChatData::new(message, time, query, is_web, info.get_qa_num(true)));
     } else { // 目前模型回答的内容都是None
         info.messages.push(ChatData::new(message, format!("{} {}", time, model), query, is_web, info.get_qa_num(false))); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+    }
+}
+
+/// 客户端下拉选项`上下文消息数`改变时更新限制的问答对数量、限制的消息数量、提问是否包含prompt
+pub fn update_qa_msg_num(uuid: &str, qa_msg_p: Option<(usize, usize, bool)>) {
+    let mut data = DATA.lock().unwrap();
+    if let Some(info) = data.get_mut(uuid) {
+        if let Some((qa, msg, with_prompt)) = qa_msg_p {
+            // 更新限制的问答对数量
+            if qa != info.qa_msg_p.0 {
+                info.qa_msg_p.0 = qa;
+            }
+            // 更新限制的限制的消息数量
+            if msg != info.qa_msg_p.1 {
+                info.qa_msg_p.1 = msg;
+            }
+            // 更新提问是否包含prompt
+            if with_prompt != info.qa_msg_p.2 {
+                info.qa_msg_p.2 = with_prompt;
+            }
+        }
     }
 }
 
@@ -831,6 +861,7 @@ pub struct DisplayInfo {
     pub time:     String, // 时间
     pub is_img:   bool,   // 是否是图片base64
     pub is_voice: bool,   // 是否是语音base64
+    pub is_web:   bool,   // 是否网络搜索
     pub idx_qa:   usize,  // 该message属于第几个Q&A对
     pub token:    usize,  // 该message的token数
 }
@@ -866,6 +897,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -878,6 +910,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -904,6 +937,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -916,12 +950,13 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, token: m.token}),
             },
             ChatMessage::User{content, ..} => match content {
                 ChatMessageContent::Text(t) => {
@@ -939,6 +974,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -951,6 +987,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -984,6 +1021,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -996,12 +1034,13 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: true, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: true, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, token: m.token}),
             },
             ChatMessage::Assistant{content, ..} => match content {
                 Some(c) => match c {
@@ -1021,6 +1060,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                                 time:     tmp_time,
                                 is_img,
                                 is_voice,
+                                is_web:   m.is_web,
                                 idx_qa:   m.idx_qa,
                                 token:    m.token,
                             });
@@ -1033,6 +1073,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                                 time:     tmp_time,
                                 is_img,
                                 is_voice,
+                                is_web:   m.is_web,
                                 idx_qa:   m.idx_qa,
                                 token:    m.token,
                             });
@@ -1066,6 +1107,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                                 time:     tmp_time,
                                 is_img,
                                 is_voice: false,
+                                is_web:   m.is_web,
                                 idx_qa:   m.idx_qa,
                                 token:    m.token,
                             });
@@ -1078,12 +1120,13 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                                 time:     tmp_time,
                                 is_img,
                                 is_voice: false,
+                                is_web:   m.is_web,
                                 idx_qa:   m.idx_qa,
                                 token:    m.token,
                             });
                         }
                     },
-                    ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
+                    ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, token: m.token}),
                 },
                 None => (),
             },
@@ -1098,6 +1141,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -1110,6 +1154,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -1136,6 +1181,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
@@ -1148,14 +1194,15 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                             time:     tmp_time,
                             is_img:   false,
                             is_voice: false,
+                            is_web:   m.is_web,
                             idx_qa:   m.idx_qa,
                             token:    m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, token: m.token}),
             },
-            ChatMessage::Tool{content, ..} => logs.push(DisplayInfo{is_query: false, content: content.clone(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, idx_qa: m.idx_qa, token: m.token}),
+            ChatMessage::Tool{content, ..} => logs.push(DisplayInfo{is_query: false, content: content.clone(), id: tmp_id, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, token: m.token}),
         }
     }
     // 如果该uuid是新建的，且指定了prompt，只是还没有保存对话，则写入prompt
@@ -1171,6 +1218,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                         time:     info.messages[0].time.clone(),
                         is_img:   false,
                         is_voice: false,
+                        is_web:   false,
                         idx_qa:   1,
                         token:    token_count_str(&p[1]),
                     });
@@ -1183,6 +1231,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
                         time:     info.messages[0].time.clone(),
                         is_img:   false,
                         is_voice: false,
+                        is_web:   false,
                         idx_qa:   1,
                         token:    token_count_str(&p[1]),
                     });
@@ -1201,6 +1250,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            is_web:   false,
             idx_qa:   0,
             token:    0,
         });
@@ -1212,6 +1262,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            is_web:   false,
             idx_qa:   0,
             token:    0,
         });
@@ -1223,6 +1274,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            is_web:   false,
             idx_qa:   0,
             token:    0,
         });
@@ -1234,6 +1286,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, Vec
             time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             is_img:   false,
             is_voice: false,
+            is_web:   false,
             idx_qa:   0,
             token:    0,
         });
