@@ -1877,7 +1877,7 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
             <div class='right-time'>{}{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
-                    <div class='chat-txt right' id='{}' title='message {}, Q&A pair {}, {} tokens></div>
+                    <div class='chat-txt right' id='{}' title='message {}, Q&A pair {}, {} tokens'></div>
                     <div class='chat-icon'>\n", if log.is_web {"🌐 "} else {""}, log.time, log.id, i+1, log.idx_qa, log.token);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
@@ -1901,8 +1901,8 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
             }
             result += &format!("
                 </div>
-                <div class='chat-txt left' id='{}' title='message {}, Q&A pair {}></div>
-            </div>\n", log.id, i+1, log.idx_qa);
+                <div class='chat-txt left' id='{}' title='message {}, Q&A pair {}, {} tokens'></div>
+            </div>\n", log.id, i+1, log.idx_qa, log.token);
         }
     }
     result += r###"        </div>
