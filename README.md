@@ -215,8 +215,8 @@ Options:
   -  🛠Fix: When copying a newly posed question or freshly received answer (excluding prior conversation history) by clicking the avatar, the input field not automatically gains focus.
   -  🛠Fix: Token consumption not updating upon query submission.
   -  🛠Fix: Lack of response in non-streaming output scenarios.
-  -  ✨Add: When using web search, prefix the timestamp of the query with 🌐 to indicate an web search was performed.
-  -  ✨Add: Upon hovering over the message box, display the message number, Q&A pair number and token count for this message.
+  -  ⭐️Add: When using web search, prefix the timestamp of the query with 🌐 to indicate an web search was performed.
+  -  ⭐️Add: Upon hovering over the message box, display the message number, Q&A pair number and token count for this message.
 - [2025.07.01] release v0.2.0
   - Fix the issue of excessive memory usage by optimizing code highlighting.
   - Optimize contextual messages, support Q&A pair.
