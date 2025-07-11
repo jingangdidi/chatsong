@@ -211,6 +211,14 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2025.07.11] release v0.2.2
+  - 🛠Fix: When saving chat history by clicking the left-side button, consecutive unanswered questions at the end should no longer be removed. Previously, this caused ID mismatches between the server and the page when continuing the conversation, resulting in errors.
+  - 🛠Fix: When syncing chat history across different computers, if continuing a conversation on Computer A based on a chat from Computer B, the chat history would fail to save due to path discrepancies upon closing the service.
+  - ⭐️Add: Auto-scroll pauses when scrolling upward and resumes when scrolling downward.
+  - ⭐️Add: Support for line breaks in input questions using Shift + Enter.
+  - ⭐️Add: Display token count for uploaded files. If the file is an image or audio, the token count will not be shown.
+  - 💪🏻Optimize: Command logs now use LocalTime (e.g., 2025-07-07T13:33:48.032687+08:00) instead of the default UTC time.
+  - 💪🏻Optimize: The command line now displays both the current question number and its corresponding QA pair index. Previously, it only showed the question number. 
 - [2025.07.07] release v0.2.1
   -  🛠Fix: When copying a newly posed question or freshly received answer (excluding prior conversation history) by clicking the avatar, the input field not automatically gains focus.
   -  🛠Fix: Token consumption not updating upon query submission.
