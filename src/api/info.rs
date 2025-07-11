@@ -63,11 +63,11 @@ pub struct Info {
     //pub messages:   Vec<ChatMessage>,     // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
     //pub time:       Vec<String>,          // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
     //pub query:      Vec<String>,          // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
-    pub file:       String,               // 存储chat记录的文件，格式：`指定输出路径/uuid/时间戳.log`，这里的时间戳是本次访问的时间
+    pub file:       String,               // 存储chat记录的文件，格式：`uuid/时间戳.log`，这里的时间戳是本次访问的时间
     pub token:      [usize;2],            // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
     pub prompt:     Option<ChatMessage>,  // 该uuid所用的prompt
     pub prompt_str: Option<[String; 2]>,  // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
-    pub num_q:      usize,                // 记录当前uuid客户端提交的问题数量，用于服务端命令行显示
+    pub num_q:      (usize, usize),       // 记录当前uuid用户发送的是第几个message（不是总消息数）以及属于第几对Q&A
     pub qa_msg_p:   (usize, usize, bool), // 第1项表示限制问答对的数量，第2项表示限制消息的数量，第3项表示每次提问是否包含prompt。注意前2项只有一个生效，0表示不使用
     pub save:       bool,                 // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
     pub pop:        usize,                // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
@@ -87,7 +87,7 @@ impl Info {
             None => "".to_string(),
         };
         // 创建chat记录输出文件，每次开启服务，uuid都会生成新的时间戳作为chat记录输出文件名，因此同一uuid路径下可能会有多个不同时间戳的chat记录文件
-        let tmp_chat_file = format!("{}/{}/{}.log", PARAS.outpath, uuid, Local::now().format("%Y-%m-%d_%H-%M-%S").to_string()); // 存储chat记录的文件，格式：指定输出路径/uuid/时间戳.log，例如：`2024-04-04_12-49-50.log`
+        let tmp_chat_file = format!("{}/{}.log", uuid, Local::now().format("%Y-%m-%d_%H-%M-%S").to_string()); // 存储chat记录的文件，格式：uuid/时间戳.log，例如：`2024-04-04_12-49-50.log`
         // 初始化Info对象
         Info {
             uuid:       uuid.to_string(),               // 每个用户一个uuid，如果指定了之前的uuid，则不重新生成，实现对话隔离，https://github.com/uuid-rs/uuid
@@ -96,11 +96,11 @@ impl Info {
             //messages:   vec![],                         // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
             //time:       vec![],                         // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
             //query:      vec![],                         // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
-            file:       tmp_chat_file,                  // 存储chat记录的文件，格式：`指定输出路径/uuid/时间戳.log`，这里的时间戳是本次访问的时间
+            file:       tmp_chat_file,                  // 存储chat记录的文件，格式：`uuid/时间戳.log`，这里的时间戳是本次访问的时间
             token:      [0, 0],                         // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
             prompt:     None,                           // 该uuid所用的prompt
             prompt_str: None,                           // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
-            num_q:      0,                              // 记录当前uuid客户端提交的问题数量，用于服务端命令行显示
+            num_q:      (0, 0),                         // 记录当前uuid用户发送的是第几个message（不是总消息数）以及属于第几对Q&A
             qa_msg_p:   (usize::MAX, usize::MAX, true), // 第1项表示限制问答对的数量，第2项表示限制消息的数量，第3项表示每次提问是否包含prompt。注意前2项只有一个生效，0表示不使用
             save:       false,                          // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
             pop:        0,                              // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
@@ -155,8 +155,10 @@ impl Info {
         self.save = false;
         // Info对象转json字符串
         let chat_log_json_str = serde_json::to_string(&self).map_err(|e| MyError::ToJsonStirngError{uuid: self.uuid.clone(), error: e})?;
+        // 加上指定的输出路径
+        let file_with_path = format!("{}/{}", PARAS.outpath, self.file);
         // 保存chat记录
-        write(&self.file, chat_log_json_str).map_err(|e| MyError::WriteFileError{file: self.file.clone(), error: e})
+        write(&file_with_path, chat_log_json_str).map_err(|e| MyError::WriteFileError{file: file_with_path, error: e})
     }
 
     /// 从messages中提取所有的message，返回Vec<ChatMessage>
@@ -384,10 +386,17 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, is_web: bo
             info.qa_msg_p.2 = with_prompt;
         }
     }
+    // 获取下一条信息（即插入当前信息后）是第几对Q&A
+    let qa_num = if qa_msg_p.is_some() { // 目前用户提出的问题都是Some
+        info.get_qa_num(true)
+    } else { // 目前模型回答的内容都是None
+        info.get_qa_num(false)
+    };
     // 更新问题数和最后是否保存该uuid的chat记录
+    info.num_q.1 = qa_num;
     match message {
         ChatMessage::User{..} => {
-            info.num_q += 1;
+            info.num_q.0 += 1;
             info.pop += 1; // 累加最后的连续问题数
         },
         _ => {
@@ -402,9 +411,9 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, is_web: bo
     }
     // 插入本次的message、时间、原始问题、是否网络搜索、message属于第几个Q&A对
     if qa_msg_p.is_some() { // 目前用户提出的问题都是Some，不需要加模型名称
-        info.messages.push(ChatData::new(message, time, query, is_web, info.get_qa_num(true)));
+        info.messages.push(ChatData::new(message, time, query, is_web, qa_num));
     } else { // 目前模型回答的内容都是None
-        info.messages.push(ChatData::new(message, format!("{} {}", time, model), query, is_web, info.get_qa_num(false))); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+        info.messages.push(ChatData::new(message, format!("{} {}", time, model), query, is_web, qa_num)); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
     }
 }
 
@@ -437,15 +446,15 @@ pub fn pop_message_before_end(uuid: &str) {
     }
 }
 
-/// 获取指定uuid客户端提交的问题数量，用于服务端命令行显示
-pub fn get_query_num(uuid: &str) -> usize {
+/// 获取指定uuid客户端提交的问题数量，以及属于第几对Q&A，用于服务端命令行显示
+pub fn get_query_num(uuid: &str) -> (usize, usize) {
     let data = DATA.lock().unwrap();
     match data.get(uuid) {
         Some(info) => { // uuid已存在
             info.num_q
         },
         None => { // uuid不存在
-            0
+            (0, 0)
         },
     }
 }
@@ -562,7 +571,9 @@ pub fn save_all_chat() {
     // 保存html文件
     for (uuid, log_file) in uuid_vec {
         let html_str = create_download_page(&uuid, None);
-        if let Err(e) = write(log_file.replace(".log", ".html"), html_str) {
+        // 由于在不同电脑间同步，保存路径可能不一致，因此在这里才加上路径前缀
+        let file_with_path = format!("{}/{}", PARAS.outpath, log_file);
+        if let Err(e) = write(file_with_path.replace(".log", ".html"), html_str) {
             event!(Level::ERROR, "{} save chat log to html error: {}", uuid, e);
         }
     }
@@ -651,7 +662,7 @@ pub fn update_token(uuid: &str, s: &str, is_user: bool) {
 */
 
 /// 计算指定字符串的token数
-fn token_count_str(s: &str) -> usize {
+pub fn token_count_str(s: &str) -> usize {
     PARAS.bpe.encode_with_special_tokens(s).len()
 }
 
