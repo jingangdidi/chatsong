@@ -1807,12 +1807,19 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                             // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
                             // https://www.answeroverflow.com/m/1302587682957824081
                             window.addEventListener('wheel', function() { // “scroll”无效
+                                // event.deltaY 的值：负值表示向上滚动，正值表示向下滚动
                                 if (autoScroll) {
                                     //console.log('Scrolling via mouse');
-                                    autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
+                                    if (event.deltaY < 0) { // 向上滚动
+                                        autoScroll = false; // 用户手动向上滚动，停止自动向下滚动
+                                    }
+                                } else {
+                                    if (event.deltaY > 0) { // 向下滚动
+                                        autoScroll = true; // 用户手动向下滚动，恢复自动向下滚动
+                                    }
                                 }
                             });
-                            window.addEventListener('touchmove', function() { // 触屏这个有效
+                            window.addEventListener('touchmove', function() { // 触屏这个有效，没有deltaY，先不考虑触屏滚动方向
                                 if (autoScroll) {
                                     //console.log('Scrolling via touch');
                                     autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
