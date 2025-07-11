@@ -3,7 +3,7 @@ use crate::{
         get_log_for_display, // 获取指定uuid最新问答记录，提取字符串，用于在chat页面显示
         get_token, // 获取指定uuid问题和答案的总token数
         get_prompt_name, // 获取当前uuid的prompt名称
-        pop_message_before_end, // 在保存指定uuid的chat记录之前，先去指定uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
+        //pop_message_before_end, // 在保存指定uuid的chat记录之前，先去指定uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
         DisplayInfo, // 将之前问答记录显示到页面
     },
     graph::get_all_related_uuid, // 获取与指定uuid相关的所有uuid
@@ -154,7 +154,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                 <!-- upload file -->
                 <li title="上传文件，支持多个文件">
                     <!-- 上传文件后保持当前页面 https://stackoverflow.com/questions/5733808/submit-form-and-stay-on-same-page -->
-                    <iframe name="hiddenFrame" class="hide"></iframe>
+                    <iframe name="hiddenFrame" id="hiddenFrame" class="hide"></iframe>
 "###;
     result += &format!("                    <form id='form' target='hiddenFrame' action='http://{}:{}{}/upload' method='post' enctype='multipart/form-data'>
                         <img class='para-btn' src='{}' />\n", PARAS.addr_str, PARAS.port, v, ICON_UPLOAD);
@@ -319,7 +319,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         <!-- user input region -->
         <div class="chat-inputs-container">
             <div class="chat-inputs-inner">
-                <textarea autofocus name="Input your query" id="input_query" placeholder="Input your query"></textarea>
+                <textarea autofocus name="Input your query" id="input_query" placeholder="输入你的问题 (Shift+Enter换行)"></textarea>
                 <span id="submit_span" class="for_focus_button">
 "###;
 //                    <i class="search_btn fa fa-paper-plane" aria-hidden="true"></i>
@@ -441,11 +441,29 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     function sleep (time) {
         return new Promise((resolve) => setTimeout(resolve, time));
     }
+    // 存储上传的文件
+    let uploadedFiles = {};
+    // 在主窗口(window对象)上定义一个回调函数，用于接收iframe传回的数据。这里会等服务端上传完成后返回数据才执行，会稍微等一会儿
+    window.handleUploadResponse = function(response) {
+        //console.log(response);
+        Object.entries(uploadedFiles).forEach(([key, value]) => {
+            if (response[key] > 0) {
+                let msg_lr = document.getElementById(value);
+                const currentTitle = msg_lr.getAttribute("title");
+                msg_lr.setAttribute("title", currentTitle + "，"+response[key]+"个token");
+                // 更新页面左侧总输入token
+                let tmp = document.getElementById("show-in-token");
+                tmp.value = parseInt(tmp.value) + response[key];
+            }
+            //console.log(`Key: ${key}, Value: ${value}`);
+        });
+    };
     document.getElementById("upload-file").onchange = function(event) {
-        document.getElementById("form").submit();
+        uploadedFiles = {};
         for (let i = 0; i < event.target.files.length; i++) {
             const file = event.target.files[i];
             if (file) {
+                uploadedFiles[file.name] = 'm'+current_id;
                 insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
                 let new_id = 'm'+(current_id-1);
                 const msg_req_right = document.getElementById(new_id);
@@ -463,10 +481,12 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                 });
             }
         }
+        document.getElementById("form").submit();
         document.getElementById('input_query').focus();
-        sleep(2000).then(() => {
+        document.getElementById("form").reset();
+        /*sleep(2000).then(() => {
             document.getElementById("form").reset();
-        });
+        });*/
     };
     // 清空指定元素的所有子元素，https://stackoverflow.com/questions/3955229/remove-all-child-elements-of-a-dom-node-in-javascript
     function clear_all_child(id_name) {
@@ -738,13 +758,13 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         // 输入框无效，并显示信息
         if (emptyInput) { // 输入为空表示提问
             var q = 0;
-            document.getElementsByName('Input your query')[0].placeholder = 'Waiting for answer ...';
+            document.getElementsByName('Input your query')[0].placeholder = '等待回答 ...';
         } else if (para_web) { // 使用网络搜索需要等待搜索结束
             var q = 1;
-            document.getElementsByName('Input your query')[0].placeholder = 'Waiting for search ...';
+            document.getElementsByName('Input your query')[0].placeholder = '等待搜索 ...';
         } else { // 输入不为空表示用户继续提问
             var q = 1;
-            document.getElementsByName('Input your query')[0].placeholder = 'Sending query ...';
+            document.getElementsByName('Input your query')[0].placeholder = '发送问题 ...';
         }
         document.getElementById('input_query').disabled = true; // 完成回复之前禁止继续提问
         // 将参数加到问题后面
@@ -795,7 +815,7 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
         document.getElementById("input-uuid").value = ''; // 清空填写的uuid，此时左下“current uuid”中显示的即是填写的uuid
         document.getElementById("input_query").value = "";
         document.getElementById('input_query').disabled = false; // 已完成回复，可以继续提问
-        document.getElementsByName('Input your query')[0].placeholder = 'Input your query';
+        document.getElementsByName('Input your query')[0].placeholder = '输入你的问题 (Shift+Enter换行)';
         document.getElementById("input_query").focus();
 
         // 解析完整数据
@@ -858,13 +878,20 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
                             }
                             // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
                             // https://www.answeroverflow.com/m/1302587682957824081
-                            window.addEventListener('wheel', function() { // “scroll”无效
+                            window.addEventListener('wheel', function(event) { // “scroll”无效
+                                // event.deltaY 的值：负值表示向上滚动，正值表示向下滚动
                                 if (autoScroll) {
                                     //console.log('Scrolling via mouse');
-                                    autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
+                                    if (event.deltaY < 0) { // 向上滚动
+                                        autoScroll = false; // 用户手动向上滚动，停止自动向下滚动
+                                    }
+                                } else {
+                                    if (event.deltaY > 0) { // 向下滚动
+                                        autoScroll = true; // 用户手动向下滚动，恢复自动向下滚动
+                                    }
                                 }
                             });
-                            window.addEventListener('touchmove', function() { // 触屏这个有效
+                            window.addEventListener('touchmove', function() { // 触屏这个有效，没有deltaY，先不考虑触屏滚动方向
                                 if (autoScroll) {
                                     //console.log('Scrolling via touch');
                                     autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
@@ -907,14 +934,18 @@ pub fn create_main_page_ch(uuid: &str, v: String) -> String {
     }
     scroll();
     // 按下回车键发送
-    document.getElementById("input_query").addEventListener("keypress", async(e) => {
+    document.getElementById("input_query").addEventListener("keydown", async(e) => {
         if (e.key === 'Enter') {
-            e.preventDefault();
-            if (isStopped) { // 发送问题
-                await send_query_receive_answer();
-            } else { // 停止接收回答
-                if (reader) reader.cancel();
-                isStopped = true;
+            if (e.shiftKey) { // 换行
+                return;
+            } else { // 提交问题
+                e.preventDefault(); // 阻止默认的换行行为
+                if (isStopped) { // 发送问题
+                    await send_query_receive_answer();
+                } else { // 停止接收回答
+                    if (reader) reader.cancel();
+                    isStopped = true;
+                }
             }
         }
     });
@@ -1217,7 +1248,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         <!-- user input region -->
         <div class="chat-inputs-container">
             <div class="chat-inputs-inner">
-                <textarea autofocus name="Input your query" id="input_query" placeholder="Input your query"></textarea>
+                <textarea autofocus name="Input your query" id="input_query" placeholder="Input your query (Press Shift+Enter for line breaks)"></textarea>
                 <span id="submit_span" class="for_focus_button">
 "###;
 //                    <i class="search_btn fa fa-paper-plane" aria-hidden="true"></i>
@@ -1335,15 +1366,33 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
             });
         }
     }
-    // 上传文件，选好文件后直接提交，不需要submit按钮 https://stackoverflow.com/questions/7321855/how-do-i-auto-submit-an-upload-form-when-a-file-is-selected
     function sleep (time) {
         return new Promise((resolve) => setTimeout(resolve, time));
     }
+    // 存储上传的文件
+    let uploadedFiles = {};
+    // 在主窗口(window对象)上定义一个回调函数，用于接收iframe传回的数据。这里会等服务端上传完成后返回数据才执行，会稍微等一会儿
+    window.handleUploadResponse = function(response) {
+        //console.log(response);
+        Object.entries(uploadedFiles).forEach(([key, value]) => {
+            if (response[key] > 0) {
+                let msg_lr = document.getElementById(value);
+                const currentTitle = msg_lr.getAttribute("title");
+                msg_lr.setAttribute("title", currentTitle + ", "+response[key]+" tokens");
+                // 更新页面左侧总输入token
+                let tmp = document.getElementById("show-in-token");
+                tmp.value = parseInt(tmp.value) + response[key];
+            }
+            //console.log(`Key: ${key}, Value: ${value}`);
+        });
+    };
+    // 上传文件，选好文件后直接提交，不需要submit按钮 https://stackoverflow.com/questions/7321855/how-do-i-auto-submit-an-upload-form-when-a-file-is-selected
     document.getElementById("upload-file").onchange = function(event) {
-        document.getElementById("form").submit();
+        uploadedFiles = {};
         for (let i = 0; i < event.target.files.length; i++) {
             const file = event.target.files[i];
             if (file) {
+                uploadedFiles[file.name] = 'm'+current_id;
                 insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
                 let new_id = 'm'+(current_id-1);
                 const msg_req_right = document.getElementById(new_id);
@@ -1361,6 +1410,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
                 });
             }
         }
+        document.getElementById("form").submit();
         document.getElementById('input_query').focus();
         sleep(2000).then(() => {
             document.getElementById("form").reset();
@@ -1693,7 +1743,7 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
         document.getElementById("input-uuid").value = ''; // 清空填写的uuid，此时左下“current uuid”中显示的即是填写的uuid
         document.getElementById("input_query").value = "";
         document.getElementById('input_query').disabled = false; // 已完成回复，可以继续提问
-        document.getElementsByName('Input your query')[0].placeholder = 'Input your query';
+        document.getElementsByName('Input your query')[0].placeholder = 'Input your query (Press Shift+Enter for line breaks)';
         document.getElementById("input_query").focus();
 
         // 解析完整数据
@@ -1805,14 +1855,18 @@ pub fn create_main_page_en(uuid: &str, v: String) -> String {
     }
     scroll();
     // 按下回车键发送
-    document.getElementById("input_query").addEventListener("keypress", async(e) => {
+    document.getElementById("input_query").addEventListener("keydown", async(e) => {
         if (e.key === 'Enter') {
-            e.preventDefault();
-            if (isStopped) { // 发送问题
-                await send_query_receive_answer();
-            } else { // 停止接收回答
-                if (reader) reader.cancel();
-                isStopped = true;
+            if (e.shiftKey) { // 换行
+                return;
+            } else { // 提交问题
+                e.preventDefault(); // 阻止默认的换行行为
+                if (isStopped) { // 发送问题
+                    await send_query_receive_answer();
+                } else { // 停止接收回答
+                    if (reader) reader.cancel();
+                    isStopped = true;
+                }
             }
         }
     });
@@ -1867,7 +1921,7 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
         Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: "m0".to_string(), time: "".to_string(), is_img: false, is_voice: false, is_web: false, idx_qa: 1, token: 0}],
         None => {
             // 在保存当前chat记录之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
-            pop_message_before_end(uuid);
+            // pop_message_before_end(uuid); // 这里不要执行这一函数，只在关闭服务时执行，这里执行完，如果再继续输入问题，会因为id与服务端不对应而报错
             get_log_for_display(uuid, true).2 // cookie对应的chat记录
         },
     };
