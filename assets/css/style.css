@@ -22,6 +22,7 @@
     }
 
     #left-part {
+        display: block;
         position: absolute;
         left: 0px;
         width: 15%;
@@ -57,22 +58,62 @@
         100% { transform: rotateY(0deg); }
     }
 
-    /* 左下切换参数栏（模型参数/软件参数）按钮 */
-    #left-toggle {
+    /* 左下按钮 */
+    .left-bottom {
         position: absolute;
-        left: 5px;
-        width: 15px;
-        height: 15px;
+        width: 25px;
+        height: 25px;
         padding: 0;
         border:1px solid transparent;
         background-color: transparent;
         cursor: pointer;
         border-radius: 50%; /* 确保是圆形 */
+    }
+
+    /* 左下切换参数栏（模型参数/软件参数）按钮 */
+    #left-toggle {
+        left: 5px;
         transition: transform 0.3s ease-in-out; /* 平滑过渡 */
     }
 
     #left-toggle:hover {
         transform: scale(1.2) rotate(360deg); /* 先放大，再旋转360度 */
+    }
+
+    /* 左下保存按钮 */
+    #left-save {
+        left: 55px;
+        transition: transform 0.3s ease-in-out; /* 平滑过渡 */
+    }
+
+    #left-save:hover {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s;
+    }
+
+    /* 左下使用说明按钮 */
+    #left-usage {
+        left: 105px;
+        transition: transform 0.3s ease-in-out; /* 平滑过渡 */
+    }
+
+    #left-usage:hover {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s;
+    }
+
+    /* 左下无痕模式按钮 */
+    #left-incognito {
+        left: 155px;
+        transition: transform 0.3s ease-in-out; /* 平滑过渡 */
+    }
+
+    #left-incognito:hover {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s;
     }
 
     #right-part {
@@ -104,6 +145,22 @@
         margin-left: auto; /* 右对齐 */
         margin-right: 0; /* 右对齐 */
         margin-bottom: -20px;
+    }
+
+    /* 删除message图标，位于消息框上方时间旁边 */
+    .del_btn svg {
+        margin-left: 5px;
+        margin-right: 5px;
+        margin-bottom: -2px;
+        cursor: pointer;
+        width: 15px; /*针对图片 */
+    }
+
+    .del_btn:hover svg * {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s, stroke 0.3s;
+        stroke: red;
     }
 
     /* 上传文件后保持当前页面 https://stackoverflow.com/questions/5733808/submit-form-and-stay-on-same-page */
@@ -345,6 +402,27 @@
         align-items: center;
         height: 8vh;
         /*border: 1px solid blue;*/
+    }
+
+    /* 上传文件图标 */
+    #upload-file {
+        display: none;
+    }
+
+    #upload-file-icon {
+        padding-right: 5px;
+        color: var(--font-color);
+        cursor: pointer;
+        width: 35px; /*针对图片 */
+    }
+
+    #upload-file-icon:hover {
+        fill: var(--textarea-border-color);
+    }
+
+    #upload-file-icon:active {
+        transform: scale(0.6);
+        transition-duration: 0.06s;
     }
 
     .chat-inputs-inner textarea {
