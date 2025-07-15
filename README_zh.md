@@ -7,8 +7,6 @@
 
 **轻量级大语言模型api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
-<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot.png">
-
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
 
 ## 👑 特点
@@ -24,6 +22,8 @@
 - ✨ 支持markdown显示和代码高亮
 - 📊 支持统计每个对话的token用量（页面左下），以及每条信息的token数（鼠标停在消息框内）
 - 💰 支持设置每次提问包含多少条上下文信息，极大的节省token用量
+- ✂️ 支持删除问题或回答
+- 😎 支持无痕模式
 
 ## 🚀 使用示例
 **目录结构**
@@ -58,6 +58,8 @@
 [YouTube示例视频](https://youtu.be/e-ONlqtLmMk)
 
 [bilibili示例视频](https://www.bilibili.com/video/BV17m3ezBEz6)
+
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-zh-label.png">
 
 该部分会继续补充添加
 
@@ -211,6 +213,11 @@ Options:
 ```
 
 ## ⏰ 更新记录
+- [2025.07.15] release v0.3.0
+  - ⭐️增加：支持删除指定问题或回答。
+  - ⭐️增加：增加无痕模式（页面左下角按钮），在当前对话随时开启或关闭，决定关闭服务时chat记录保存至本地还是直接舍弃。开启无痕模式时，刷新页面或关闭后重新打开该页面，都将丢弃对话记录。
+  - 💪🏻优化：上传文件按钮放到输入框左侧。
+  - 💪🏻优化：下载按钮和使用说明按钮放到页面左下角。
 - [2025.07.11] release v0.2.2
   - 🛠修复：点击页面左侧按钮保存chat记录时，不需要去除最后连续的未回答的问题，否则继续提问时服务端与页面的id不对应报错。
   - 🛠修复：不同电脑间同步chat记录，在A电脑基于B电脑的某个对话继续提问时，最后关闭服务因为路径不同导致对话记录保存失败。
