@@ -88,6 +88,12 @@ pub fn copy_file_from_related_uuid(uuid: &str, name: &str) {
     }
 }
 
+/// 删除指定uuid
+pub fn graph_remove_uuid(uuid: &str) {
+    let mut data = GRAPH.write().unwrap(); // 使用RwLock，保证一写多读，只要不在写，就可以同时多个读取
+    data.graph_remove_uuid(uuid)
+}
+
 //----------------------------------------------------------------------------------------------------------------
 /// 每个uuid直接和间接相关的uuid向量
 #[derive(Serialize, Deserialize)]
@@ -256,6 +262,29 @@ impl Graph {
         // 最后再删除related的无效节点
         for k in &invalid {
             self.related.remove(k);
+        }
+    }
+
+    /// 删除指定uuid
+    pub fn graph_remove_uuid(&mut self, uuid: &str) {
+        // 删除指定的uuid节点
+        self.related.remove(uuid);
+        // 遍历每个节点，获取内部direct和indirect含有指定uuid节点
+        let mut remove_direct: HashSet<String> = HashSet::new();
+        let mut remove_indirect: HashSet<String> = HashSet::new();
+        for (k, v) in &self.related {
+            if v.0.direct.contains_key(uuid) {
+                remove_direct.insert(k.clone());
+            } else if v.0.indirect.contains_key(uuid) {
+                remove_indirect.insert(k.clone());
+            }
+        }
+        // 最后删除direct和indirect中指定uuid节点
+        for k in &remove_direct {
+            self.related.get_mut(k).unwrap().0.direct.remove(uuid);
+        }
+        for k in &remove_indirect {
+            self.related.get_mut(k).unwrap().0.indirect.remove(uuid);
         }
     }
 }
