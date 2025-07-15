@@ -44,7 +44,7 @@ use crate::{
         create_uuid_dir, // uuid文件夹不存在则创建
         get_log_for_display, // 获取指定uuid最新问答记录，提取字符串，用于在chat页面显示
         get_prompt_name, // 获取当前uuid的prompt名称
-        get_query_num, // 获取指定uuid客户端提交的问题数量，用于服务端命令行显示
+        get_query_num, // 获取指定uuid客户端提交的问题数量，以及属于第几对Q&A，用于服务端命令行显示
         pop_message_before_end, // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
         DataType, // 存储问答信息的数据
         get_latest_query, // 获取最后一个message，且必须是用户发送的query字符串
@@ -54,6 +54,8 @@ use crate::{
         get_messages_num, // 获取指定uuid的messages总数
         get_msg_token, // 获取当前uuid指定位置message的token数
         update_qa_msg_num, // 客户端下拉选项`上下文消息数`改变时更新限制的问答对数量、限制的消息数量、提问是否包含prompt
+        check_incognito, // 检查指定uuid是否设置了无痕，如果是无痕，则清空该uuid的Info，返回是否已从服务的删除该uuid
+        is_incognito, // 是否无痕模式
     },
     graph::{
         add_edge, // 将旧uuid与新uuid建立直接或间接关系
@@ -86,6 +88,7 @@ struct MetaData {
     in_token:      usize,                 // 输入token总数
     out_token:     usize,                 // 输出token总数
     current_token: usize,                 // 当前问题或答案的token数，流式输出时该值>0，传递最终token数，问题或非流式输出的答案这里为0
+    is_incognito:  bool,                  // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
 }
 
 impl MetaData {
@@ -109,6 +112,7 @@ impl MetaData {
                 Some(t) => t, // 指定了token
                 None => get_msg_token(&uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
             },
+            is_incognito:  is_incognito(&uuid),        // 是否无痕模型
         };
         format_sse_message(&uuid, "metadata", &data)
     }
@@ -228,10 +232,13 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 };
                 insert_message(&tmp_uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, chat_name.clone());
             }
-            // 添加新的直接关系
-            add_edge(&cookie_uuid, &tmp_uuid, true);
-            // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
-            pop_message_before_end(&cookie_uuid);
+            // 如果设置了无痕，则把当前uuid的问答信息都清空，返回true
+            if !check_incognito(&cookie_uuid) {
+                // 添加新的直接关系
+                add_edge(&cookie_uuid, &tmp_uuid, true);
+                // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
+                pop_message_before_end(&cookie_uuid);
+            }
             (
                 tmp_uuid.clone(),
                 jar.add(create_cookie(tmp_uuid)),
@@ -259,6 +266,8 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         )
                     }
                 } else {
+                    // 如果设置了无痕，则把当前uuid的问答信息都清空，返回true
+                    let incognito_removed = check_incognito(&cookie_uuid);
                     if contain_uuid(u) { // 发送的请求中指定了uuid，且存在于服务端，则不重新生成uuid，并用该uuid设置cookie
                         if &cookie_uuid == u { // 如果指定的uuid与cookie值相同，则不需要修改
                             (
@@ -268,10 +277,12 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 //false,
                             )
                         } else { // 如果指定的uuid与cookie值不相同，则用指定的uuid设置为cookie
-                            // 添加新的间接关系
-                            add_edge(&cookie_uuid, &u, false);
-                            // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
-                            pop_message_before_end(&cookie_uuid);
+                            if !incognito_removed {
+                                // 添加新的间接关系
+                                add_edge(&cookie_uuid, &u, false);
+                                // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
+                                pop_message_before_end(&cookie_uuid);
+                            }
                             (
                                 u.to_string(),
                                 jar.add(create_cookie(u.clone())), // 已有cookie则更新，不存在则添加
@@ -281,10 +292,12 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         }
                     } else { // 发送的请求中指定了uuid，但不存在于服务端，则舍弃指定的uuid，重新生成uuid，并用该uuid设置cookie
                         let tmp_uuid = Uuid::new_v4().to_string();
-                        // 添加新的直接关系
-                        add_edge(&cookie_uuid, &tmp_uuid, true);
-                        // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
-                        pop_message_before_end(&cookie_uuid);
+                        if !incognito_removed {
+                            // 添加新的直接关系
+                            add_edge(&cookie_uuid, &tmp_uuid, true);
+                            // 在跳转到其他uuid之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
+                            pop_message_before_end(&cookie_uuid);
+                        }
                         (
                             tmp_uuid.clone(),
                             jar.add(create_cookie(tmp_uuid)),
@@ -378,7 +391,8 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
     // 记录提问内容或提交请求
     if let Some(q) = params.get("q") {
         if q == "0" { // 0表示body是空，1表示body是问题，空内容时发送提问，参考：openai-client-0.6.4/examples/chat/create_chat_completion_stream
-            event!(Level::INFO, "{} POST {}, query: {}, waiting for anwser ...", uuid, uri.path(), get_query_num(&uuid));
+            let num_q = get_query_num(&uuid);
+            event!(Level::INFO, "{} POST {}, query {}, Q&A pair {}, waiting for anwser ...", uuid, uri.path(), num_q.0, num_q.1);
             // 由于回答前没有调用insert_message，因此上下文参数不会更新，这里先更新上下文，避免提问之后回答之前又修改了参数
             update_qa_msg_num(&uuid, qa_msg_p);
             // 开始回答
@@ -540,14 +554,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         // 传输指定uuid的chat记录
                         if load_uuid {
                             // Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
-                            for (i, log) in get_log_for_display(&tmp_uuid, false).2.into_iter().enumerate() {
+                            for log in get_log_for_display(&tmp_uuid, false).3 {
                                 if log.is_query { // 显示在问答页面右侧的用户输入内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 } else { // 显示在问答页面左侧的回答内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 }
                             }
@@ -586,14 +600,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         // 传输指定uuid的chat记录
                         if load_uuid {
                             // Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
-                            for (i, log) in get_log_for_display(&tmp_uuid, false).2.into_iter().enumerate() {
+                            for log in get_log_for_display(&tmp_uuid, false).3 {
                                 if log.is_query { // 显示在问答页面右侧的用户输入内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 } else { // 显示在问答页面左侧的回答内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
                                     yield tmp;
                                 }
                             }
@@ -703,7 +717,8 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 };
                 insert_message(&uuid, m, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, None);
             }
-            event!(Level::INFO, "{} GET {}, query: {}", uuid, uri.path(), get_query_num(&uuid));
+            let num_q = get_query_num(&uuid);
+            event!(Level::INFO, "{} GET {}, query {}, Q&A pair {}", uuid, uri.path(), num_q.0, num_q.1);
             // 创建stream对象，接收管道传递的数据
             //let tmp_query = body.clone();
             let tmp_uuid = uuid.clone();
@@ -711,14 +726,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 // 传输指定uuid的chat记录
                 if load_uuid {
                     // Vec<(是否是提问, 问题或答案字符串, 作为html中tag的id的序号, 时间)>
-                    for (i, log) in get_log_for_display(&tmp_uuid, false).2.into_iter().enumerate() {
+                    for log in get_log_for_display(&tmp_uuid, false).3 {
                         if log.is_query {
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
                             yield tmp;
                         } else {
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, i, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
                             yield tmp;
                         }
                     }
