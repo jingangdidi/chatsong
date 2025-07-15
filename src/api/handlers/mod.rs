@@ -10,6 +10,8 @@ pub mod demo_csv; // `GET /嵌套的前缀/demo-csv`
 pub mod index; // `GET /嵌套的前缀`
 pub mod chat; // `GET /嵌套的前缀/chat`
 pub mod save; // `GET /嵌套的前缀/save`
+pub mod delete_message; // `GET /嵌套的前缀/delmsg/:id`
+pub mod incognito; // `GET /嵌套的前缀/incognito`
 pub mod upload; // `POST /嵌套的前缀/upload`
 pub mod usage; // `GET /嵌套的前缀/usage`
 pub mod fallback; // `NOT_FOUND`
