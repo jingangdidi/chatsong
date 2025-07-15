@@ -79,19 +79,13 @@ Sidebar Settings
         5. web search
             Yes: Queries leverage online resources or specified URLs.
             No: Responding based on the model's intrinsic knowledge repository.
-        6. Save chat log
-            Download dialogue history as an HTML file (UUID and optional name in filename).
-        7. file Upload
-            Upload your files, multiple documents are supported.
-        8. Usage
-            Access documentation.
-        9. current prompt
+        6. current prompt
             Displays the active prompt name.
-        10. current uuid
+        7. current uuid
             Identifier for the ongoing dialogue.
-        11. input token
+        8. input token
             The total input tokens used in the current dialogue.
-        12. output token
+        9. output token
             The total output tokens used in the current dialogue.
     Back parameters:
         1. reasoning effort
@@ -107,7 +101,6 @@ Sidebar Settings
             No: Wait for complete response before display.
         6. voice
             Choose audio synthesis voice (for TTS models).
-        
 ", PARAS.addr_str, PARAS.port, uri.path())
     } else {
         format!("main page: http://{}:{}{}
@@ -184,19 +177,13 @@ Sidebar Settings
             prompt + 5条信息：包含prompt（如果创建该对话时有指定）和最新的3条信息，以及当前输入的一条问题信息；如果没有输入问题，则是prompt（如果创建该对话时有指定）和除去最新一条或连续的多条答案信息，从最近一次的问题信息往前数5条信息
         5. 网络搜索
             Yes表示对输入的问题进行网络搜索，或解析输入的url内容，基于搜索或解析的内容进行回答，No表示基于模型自身的知识库进行回答
-        6. 保存当前对话
-            点击可下载当前对话的问答记录，仅1个html文件，文件名含有该对话的uuid，如果创建该对话时输入了对话名称，也会包含在文件名中
-        7. 上传文件
-            点击选择要上传的文件，支持多选
-        8. 使用说明
-            查看使用说明
-        9. 当前prompt
+        6. 当前prompt
             显示当前对话的prompt名称
-        10. 当前uuid
+        7. 当前uuid
             当前对话的uuid，使用该uuid可切换不同对话
-        11. 输入的总token
+        8. 输入的总token
             当前对话输入问题的token总数
-        12. 输出的总token
+        9. 输出的总token
             当前对话输出内容的token总数
     反面参数：
         1. 思考的深度
