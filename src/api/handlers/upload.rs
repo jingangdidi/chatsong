@@ -1,9 +1,7 @@
+use std::collections::HashMap;
 use std::fs::read;
 
-use axum::{
-    extract::{Multipart, OriginalUri},
-    //response::Redirect,
-};
+use axum::extract::{Multipart, OriginalUri};
 use axum_extra::extract::cookie::CookieJar;
 use tokio::{
     fs::File,
@@ -30,6 +28,7 @@ use crate::{
         insert_message, // 将指定message插入到指定uuid的messages中
         DataType, // 存储问答信息的数据
         try_read_file, // 判断指定字符串是否是指定uuid中的文件，如果是则读取内容
+        token_count_str, // 计算指定字符串的token数
     },
     openai::for_image::image_to_base64, // 图片转base64，返回base64编码的字符串
     parse_paras::PARAS,
@@ -39,9 +38,7 @@ use crate::{
 
 /// Handler for `/嵌套的前缀/upload` POST
 /// 将客户的上传的文件保存至服务端指定路径的uuid文件夹中
-/// html页面实现了upload后保持当前页面不变，因此这里不需要最后再重定向到cht页面，因此返回值不需要是Redirect
-//pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) -> Result<(CookieJar, Redirect), MyError> {
-pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) -> Result<CookieJar, MyError> {
+pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) -> Result<(CookieJar, String), MyError> {
     event!(Level::INFO, "POST {}", uri.path()); // 注意：`axum::http::Uri`只能捕获到`/hello`，不包含嵌套的`/嵌套的前缀`前缀，使用`OriginalUri`可以
     // 先判断是否有cookie，cookie值作为服务端uuid文件夹，不存在则生成uuid作为cookie
     let (uuid, cookie_jar) = match jar.get("srx-tzn") {
@@ -54,6 +51,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
     // uuid文件夹不存在则创建
     create_uuid_dir(&uuid)?;
     // 获取上传的每个文件，保存到服务端
+    let mut file_token: HashMap<String, usize> = HashMap::new(); // 存储上传的文件的token数
     while let Some(mut field) = multipart.next_field().await.map_err(|e| MyError::ParseMultipartError{error: e})? {
         // 获取文件名
         let name = match field.file_name() {
@@ -82,12 +80,14 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
         // 插入message
         let lowercase_name = name.to_lowercase();
         if lowercase_name.ends_with(".png") || lowercase_name.ends_with(".jpg") {
+            file_token.insert(name.clone(), 0);
             let message = ChatMessage::User{
                 content: ChatMessageContent::Text(name.clone()),
                 name: None,
             };
             insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
         } else if [".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"].iter().any(|x| lowercase_name.ends_with(x)) {
+            file_token.insert(name.clone(), 0);
             let message = ChatMessage::User{
                 content: ChatMessageContent::Text(name),
                 name: None,
@@ -129,6 +129,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                     file_content
                 }
             };
+            file_token.insert(name.clone(), token_count_str(&content));
             let message = ChatMessage::User{
                 content: ChatMessageContent::Text(content),
                 name: None,
@@ -136,6 +137,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
             insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Raw(name), None, "", None); // 以文件名称作为用户提问内容，并记录提取的内容字符串
         }
     }
-    //Ok((cookie_jar, Redirect::to(uri.path().to_string().strip_suffix("/upload").unwrap()))) // 这里上传完成后重定向到chat页面，`/嵌套的前缀/upload` --> `/嵌套的前缀`
-    Ok(cookie_jar)
+    let response = serde_json::to_string(&file_token).map_err(|e| MyError::ToJsonStirngError{uuid: uuid, error: e})?;
+
+    Ok((cookie_jar, response))
 }
