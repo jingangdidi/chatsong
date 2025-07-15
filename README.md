@@ -7,8 +7,6 @@
 
 **轻量级大语言模型api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
-<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot.png">
-
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
 
 ## 👑 Features
@@ -24,6 +22,8 @@
 - ✨ Support markdown and code highlight
 - 📊 Support counting the token usage for each conversation and message
 - 💰 Support setting how many contextual messages to include in each query, greatly saving token usage
+- ✂️ Support delete message
+- 😎 Support incognito mode
 
 ## 🚀 Quick-Start
 **structure**
@@ -55,9 +55,11 @@ press `Ctrl+C` to automatically save all chat records to the output directory wh
 ```
 
 ## 📺 Detailed Instructions
-[YouTube demo vedio](https://youtu.be/e-ONlqtLmMk)
+[YouTube demo vedio](https://youtu.be/c1DeuIodiSk)
 
-[bilibili demo vedio](https://www.bilibili.com/video/BV17m3ezBEz6)
+[bilibili demo vedio](https://www.bilibili.com/video/BV1bBuzzAEXs)
+
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-en-label.png">
 
 This section remains pending completion and will be duly supplemented.
 
@@ -211,6 +213,11 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2025.07.15] release v0.3.0
+  - ⭐️Add: Support delete message.
+  - ⭐️Add: Support incognito mode.
+  - 💪🏻Optimize: Place the upload file button on the left side of the input box.
+  - 💪🏻Optimize: Place the download button and usage button in the bottom left corner of the page.
 - [2025.07.11] release v0.2.2
   - 🛠Fix: When saving chat history by clicking the left-side button, consecutive unanswered questions at the end should no longer be removed. Previously, this caused ID mismatches between the server and the page when continuing the conversation, resulting in errors.
   - 🛠Fix: When syncing chat history across different computers, if continuing a conversation on Computer A based on a chat from Computer B, the chat history would fail to save due to path discrepancies upon closing the service.
