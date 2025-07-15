@@ -55,9 +55,9 @@
 ```
 
 ## 📺 详细示例
-[YouTube示例视频](https://youtu.be/e-ONlqtLmMk)
+[YouTube示例视频](https://youtu.be/c1DeuIodiSk)
 
-[bilibili示例视频](https://www.bilibili.com/video/BV17m3ezBEz6)
+[bilibili示例视频](https://www.bilibili.com/video/BV1bBuzzAEXs)
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-zh-label.png">
 
