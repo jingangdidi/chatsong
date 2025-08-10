@@ -213,6 +213,8 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2025.08.10] release v0.3.1
+  - 🛠Fix: If the "stop" button is clicked while a response is in progress, the next input will be appended to the end of the incomplete answer. Switch "cancel" to "abort" ensures the server promptly detects the termination signal and ceases responding.
 - [2025.07.15] release v0.3.0
   - ⭐️Add: Support delete message.
   - ⭐️Add: Support incognito mode.
