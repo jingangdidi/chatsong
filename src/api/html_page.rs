@@ -1193,7 +1193,23 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature;
         return [req, req2];
     }
+    // 回答完成后恢复提问输入框
+    function restore_input() {
+"###;
+    result += &format!("        submit_send_stop.innerHTML = \"<img src='{}' class='search_btn' aria-hidden='true' />\";\n", ICON_SEND);
+    result += r###"        isStopped = true;
+        document.getElementById("select-prompt").value = '-1'; // prompt恢复为不开启新会话
+        document.getElementById("input-chat-name").value = ''; // 清空填写的对话名称
+        document.getElementById("input-uuid").value = ''; // 清空填写的uuid，此时左下“current uuid”中显示的即是填写的uuid
+        document.getElementById("input_query").value = "";
+        document.getElementById('input_query').disabled = false; // 已完成回复，可以继续提问
+"###;
+    result += &format!("        document.getElementsByName('Input your query')[0].placeholder = '{}';", page_data.textarea);
+    result += r###"
+        document.getElementById("input_query").focus();
+    }
     // 提交问题并获取答案
+    let controller = null;
     async function send_query_receive_answer() {
         // 从服务器获取stream内容
         no_message = true;
@@ -1207,8 +1223,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         // 由于EventSource不支持post，因此无法将问题通过body传递，只能放到url中通过url参数传递，但url有长度限制（好像大部分浏览器是2k），因此输入内容长度不能太长
         // 这里用fetch发送post，将问题字符串通过body传递，其他简单参数通过url传递
         let [req, req2] = get_url();
+        controller = new AbortController();
         const response = await fetch(address+req2, {
             method: 'POST',
+            signal: controller.signal,
             headers: {
                 'Content-Type': 'text/plain;charset=UTF-8',
                 'Accept': 'text/event-stream'
@@ -1229,19 +1247,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             buffer += decoder.decode(value, { stream: true }); // stream: true is important
             processSseBuffer();
         }
-"###;
-    result += &format!("        submit_send_stop.innerHTML = \"<img src='{}' class='search_btn' aria-hidden='true' />\";\n", ICON_SEND);
-    result += r###"        isStopped = true;
-        document.getElementById("select-prompt").value = '-1'; // prompt恢复为不开启新会话
-        document.getElementById("input-chat-name").value = ''; // 清空填写的对话名称
-        document.getElementById("input-uuid").value = ''; // 清空填写的uuid，此时左下“current uuid”中显示的即是填写的uuid
-        document.getElementById("input_query").value = "";
-        document.getElementById('input_query').disabled = false; // 已完成回复，可以继续提问
-"###;
-    result += &format!("        document.getElementsByName('Input your query')[0].placeholder = '{}';", page_data.textarea);
-    result += r###"
-        document.getElementById("input_query").focus();
-
+        restore_input();
         // 解析完整数据
         function processSseBuffer() {
             let eolIndex;
@@ -1372,8 +1378,11 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     del_id = '';
                     await send_query_receive_answer();
                 } else { // 停止接收回答
-                    if (reader) reader.cancel();
+                    //if (reader) reader.cancel();
+                    controller.abort();
+                    restore_input();
                     isStopped = true;
+                    controller = null;
                 }
             }
         }
@@ -1384,8 +1393,11 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             del_id = '';
             await send_query_receive_answer();
         } else { // 停止接收回答
-            if (reader) reader.cancel();
+            //if (reader) reader.cancel();
+            controller.abort();
+            restore_input();
             isStopped = true;
+            controller = null;
         }
     });
 </script>
