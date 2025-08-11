@@ -213,8 +213,9 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2025.08.10] release v0.3.1
+- [2025.08.11] release v0.3.1
   - 🛠Fix: If the "stop" button is clicked while a response is in progress, the next input will be appended to the end of the incomplete answer. Switch "cancel" to "abort" ensures the server promptly detects the termination signal and ceases responding.
+  - 🛠Fix: When navigating back to the previous chat history page, if any messages have been deleted from the prior records, all subsequent messages following the deleted content will not be displayed due to the discontinuity between server-side IDs and their frontend counterparts.
 - [2025.07.15] release v0.3.0
   - ⭐️Add: Support delete message.
   - ⭐️Add: Support incognito mode.
