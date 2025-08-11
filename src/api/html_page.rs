@@ -1332,6 +1332,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                                 }
                             });
                             no_message = false;
+                            // 如果是之前的记录，则用传递的id更新当前id，因为传递的id可能不连续（有部分被用户点击删除）
+                            if (jsonData.is_history && jsonData.id !== current_id && jsonData.id !== current_id - 1) {
+                                current_id = jsonData.id
+                            }
                             // 插入信息
                             if (jsonData.time_model) {
                                 insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
