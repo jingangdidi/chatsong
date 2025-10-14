@@ -33,7 +33,8 @@ pub static PARAS: Lazy<ParsedParas> = Lazy::new(|| {
 });
 
 #[derive(FromArgs)]
-/// http server for LLM api
+#[argh(help_triggers("-h", "--help"))] // https://github.com/google/argh/pull/106
+/// server for LLM api
 struct Paras {
     /// config file, contain api_key, endpoint, model name
     #[argh(option, short = 'c')]
@@ -366,7 +367,7 @@ pub struct Model {
     pub discription: String, // 模型描述信息，例如："全面升级为 DeepSeek-V3"
     pub group:       String, // 模型分组，例如："DeepSeek"，将相同组的模型相邻放置，下拉时会按照组分开
     pub is_default:  bool,   // 是否将该模型作为默认模型
-    pub is_cof:      bool,   // 是否是思维链模型
+    pub is_cot:      bool,   // 是否是思维链模型
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -471,7 +472,7 @@ impl Api {
             config.insert(c.provider.clone(), c.clone());
             for m in c.models {
                 idx += 1;
-                models.insert(idx, (c.provider.clone(), m.name.clone(), m.is_cof));
+                models.insert(idx, (c.provider.clone(), m.name.clone(), m.is_cot));
                 if m.group != pulldown_model_group {
                     pulldown_model += &format!("                <option disabled>---{} {}---</option>\n", c.provider, m.group); // 显示`---模型提供者 分组---`
                     pulldown_model_group = m.group.clone();
