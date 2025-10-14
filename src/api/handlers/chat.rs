@@ -178,7 +178,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
         None => (None, None), // 不开启新会话
     };
     // 解析要调用的模型
-    let (api_key, endpoint, model, cof) = match params.get("model") {
+    let (api_key, endpoint, model, cot) = match params.get("model") {
         Some(m) => PARAS.api.get_model_by_str(&m)?,
         None => PARAS.api.get_default_model()?,
     };
@@ -531,7 +531,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 para_builder.messages(get_messages(&uuid, true));
                 para_builder.response_format(ChatCompletionResponseFormat::Text);
                 //para_builder.stream(stream); // 这里不需要设置，调用`create_stream`时会设置
-                if cof { // 对思维链模型设置effort
+                if cot { // 对思维链模型设置effort
                     para_builder.reasoning_effort(effort.clone()); // 设置使用思维链，Low（思考的少，简单问答）, Medium（思考适中，多步骤推理）, High（思考更多，复杂逻辑推导）
                 }
                 if let Some(temp) = tmp_temperature {
