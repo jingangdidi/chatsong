@@ -5,7 +5,7 @@
 
 **A lightweight(~10M), portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
 
-**轻量级大语言模型api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
+**轻量级大语言模型OpenAI格式api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
 
@@ -24,6 +24,7 @@
 - 💰 支持设置每次提问包含多少条上下文信息，极大的节省token用量
 - ✂️ 支持删除问题或回答
 - 😎 支持无痕模式
+- 支持调用Deepseek、Qwen、智谱GLM、月之暗面Kimi等兼容OpenAI格式的api
 
 ## 🚀 使用示例
 **目录结构**
@@ -42,12 +43,25 @@
 填写自己要用的模型，以及api key、api地址等，详见[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)
 
 **3. 开启服务**
+
+本机调用
 ```
 ./chatsong
 ```
+如果要在内网电脑A开启服务，电脑B访问，电脑A开启服务时需指定自身的ip地址，不能是默认的127.0.0.1。
+可通过命令行参数`-a <ip>`指定，例如电脑A的IP是`192.168.1.5`：
+```
+./chatsong -a 192.168.1.5
+```
+也可以直接写在参数文件`config.txt`中：
+```
+ip_address: "192.168.1.5",
+```
+
 **3. 浏览器访问页面**
 
 [http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)
+[http://192.168.1.5:8080/v1](http://192.168.1.5:8080/v1)
 
 **4. 关闭服务**
 ```
@@ -92,13 +106,13 @@ Options:
   -r, --share       allow sharing of all chat logs
   -l, --english     chat page show english
   -o, --outpath     output path, default: ./chat-log
-  --help, help      display usage information
+  -h, --help        display usage information
 ```
 
 ## 📝 config.txt
 ```
 (
-    ip_address: "127.0.0.1", // 必填
+    ip_address: "127.0.0.1", // 必填，如果要在内网的其他电脑访问，需改为本机的ip地址，比如192.168.1.5
     port: 8080,              // 必填
     google_engine_key: "",   // 可以空着，网络搜索时要用
     google_search_key: "",   // 可以空着，网络搜索时要用
@@ -116,8 +130,8 @@ Options:
                     pricing: "(in: 0.0028/k, out: 0.0112/k)", // 可以空着
                     discription: "OpenAI gpt-4.1 model",      // 可以空着
                     group: "gpt-4.1",                         // 必填
-                    is_default: false,                        // 必填
-                    is_cof: false,                            // 必填
+                    is_default: false,                        // 必填，是否作为默认模型
+                    is_cot: false,                            // 必填，是否支持CoT（Chain of thought）深度推理
                 ),
                 Model(
                     name: "gpt-4.1-nano-2025-04-14",
@@ -125,7 +139,7 @@ Options:
                     discription: "OpenAI gpt-4.1 model",
                     group: "gpt-4.1",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
             ],
         ),
@@ -140,7 +154,7 @@ Options:
                     discription: "claude model",
                     group: "Claude",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "claude-3-7-sonnet-20250219",
@@ -148,7 +162,7 @@ Options:
                     discription: "claude model",
                     group: "Claude",
                     is_default: false,
-                    is_cof: true,
+                    is_cot: true,
                 ),
             ],
         ),
@@ -163,7 +177,7 @@ Options:
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "gemini-2.0-flash",
@@ -171,7 +185,7 @@ Options:
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
             ],
         ),
@@ -186,7 +200,7 @@ Options:
                     discription: "deepseek new model DeepSeek-V3",
                     group: "DeepSeek",
                     is_default: true,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "deepseek-reasoner",
@@ -194,7 +208,7 @@ Options:
                     discription: "deepseek new cof model DeepSeek-R1",
                     group: "DeepSeek",
                     is_default: false,
-                    is_cof: true,
+                    is_cot: true,
                 ),
             ],
         ),
@@ -213,6 +227,12 @@ Options:
 ```
 
 ## ⏰ 更新记录
+- [2025.10.14] release v0.3.2
+  - 🛠修复：内网其他电脑不可访问的问题
+  - 🛠修复：config.txt中思维链模型简写拼写错误，`cof`改为`cot`，即`chain of thought`
+  - ⭐️增加：命令行支持`-h`，之前只能使用`--help`
+  - ⭐️增加：支持质谱GLM模型官方api的调用，目前deepseek、qwen、智谱glm、月之暗面kimi的官方api均可调用
+  - 💪🏻优化：页面左侧“上下文消息数”默认值由之前的“不限制”改为“prompt + 1对Q&A”
 - [2025.08.11] release v0.3.1
   - 🛠修复：正在回答时如果点击stop按钮，输入的下一个问题会显示在最后一条未完成的答案后面。因为js使用cancel停止接收不会立即停止，服务端未监测到停止信号，仍继续发送，改为使用abort，服务端会立即接收到停止信号，停止回答。
   - 🛠修复：跳转到之前chat记录页面时，如果之前记录有删除信息，则删除信息之后的信息都不显示，因为服务端id不连续，与前端id不对应。
