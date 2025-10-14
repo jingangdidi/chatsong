@@ -61,6 +61,7 @@ ip_address: "192.168.1.5",
 **4. visit directly in your browser**
 
 [http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)
+
 [http://192.168.1.5:8080/v1](http://192.168.1.5:8080/v1)
 
 **5. terminate the service**
@@ -229,10 +230,10 @@ Options:
 ## ⏰ changelog
 - [2025.10.14] release v0.3.2
   - 🛠Fix: Fix the issue where other computers on the intranet are not accessible.
-  - 🛠Fix: The abbreviation for the chain of thought model in config.txt is spelled incorrectly, changing 'cof' to 'cot'
-  - ⭐️Add: The command line supports `-h`, previously only `--help` could be used
+  - 🛠Fix: The abbreviation for the chain of thought model in config.txt is spelled incorrectly, changing "cof" to "cot".
+  - ⭐️Add: The command line supports "-h", previously only "--help" could be used.
   - ⭐️Add: Support calling the official API of the Z.AI GLM model. Currently, the official APIs of Deepseek, QWEN, Z.AI GLM, and Moonshot Kimi can all be called.
-  - 💪🏻Optimize: The default value for "contextual messages" on the left side of the page has been changed from "unlimit" to "prompt + 1 Q&A pair"
+  - 💪🏻Optimize: The default value for "contextual messages" on the left side of the page has been changed from "unlimit" to "prompt + 1 Q&A pair".
 - [2025.08.11] release v0.3.1
   - 🛠Fix: If the "stop" button is clicked while a response is in progress, the next input will be appended to the end of the incomplete answer. Switch "cancel" to "abort" ensures the server promptly detects the termination signal and ceases responding.
   - 🛠Fix: When navigating back to the previous chat history page, if any messages have been deleted from the prior records, all subsequent messages following the deleted content will not be displayed due to the discontinuity between server-side IDs and their frontend counterparts.
