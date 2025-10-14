@@ -67,7 +67,7 @@ struct PageInfo {
     uuid_current: LeftInfo,    // 当前uuid
     input:        LeftInfo,    // 输入的总token数
     output:       LeftInfo,    // 输出的总token数
-    cof:          LeftInfo,    // 思考的深度
+    cot:          LeftInfo,    // 思考的深度
     uuid_input:   LeftInfo,    // 要跳转的uuid
     uuid_drop:    LeftInfo,    // 下拉相关uuid
     temp:         LeftInfo,    // 温度
@@ -150,7 +150,7 @@ impl PageInfo {
                     option:      None,
                     placeholder: None,
                 },
-                cof: LeftInfo{ // 思考的深度
+                cot: LeftInfo{ // 思考的深度
                     label:       "reasoning effort".to_string(),
                     title:       "effort on reasoning for reasoning models and the visibility of the reasoning process, applicable solely to the reasoning models".to_string(),
                     disabled:    Some("select effort".to_string()),
@@ -266,9 +266,9 @@ impl PageInfo {
                     option:      None,
                     placeholder: None,
                 },
-                cof: LeftInfo{ // 思考的深度
+                cot: LeftInfo{ // 思考的深度
                     label:       "思考的深度".to_string(),
-                    title:       "选择思考的深度和是否显示思考过程，仅对CoF模型有效".to_string(),
+                    title:       "选择思考的深度和是否显示思考过程，仅对CoT（chain of thought）模型有效".to_string(),
                     disabled:    Some("选择思考的深度".to_string()),
                     option:      Some(vec![("Low--显示思考过程".to_string(), Some("简单问答，显示思考过程".to_string())), ("Low--不显示思考过程".to_string(), Some("简单问答，不显示思考过程".to_string())), ("Medium--显示思考过程".to_string(), Some("多步骤推理，显示思考过程".to_string())), ("Medium--不显示思考过程".to_string(), Some("多步骤推理，不显示思考过程".to_string())), ("High--显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())), ("High--不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string()))]),
                     placeholder: None,
@@ -399,19 +399,19 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <!-- select recent log -->
 "###;
     let tmp_option = page_data.message.option.as_ref().unwrap();
-    let tmp_option_cof = page_data.cof.option.as_ref().unwrap();
+    let tmp_option_cot = page_data.cot.option.as_ref().unwrap();
     result += &format!("
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <select id='select-log-num' class='left_para for_focus' name='num'>
                 <option disabled>--{}--</option>
-                <option value='unlimit' selected>{}</option>
+                <option value='unlimit'>{}</option>
                 <option value='1qa'>{}</option>
                 <option value='2qa'>{}</option>
                 <option value='3qa'>{}</option>
                 <option value='4qa'>{}</option>
                 <option value='5qa'>{}</option>
-                <option value='p1qa'>{}</option>
+                <option value='p1qa' selected>{}</option>
                 <option value='p2qa'>{}</option>
                 <option value='p3qa'>{}</option>
                 <option value='p4qa'>{}</option>
@@ -485,7 +485,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <select id='select-related-uuid' class='left_para for_focus' name='related-uuid'>
-                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.cof.title, page_data.cof.label, page_data.cof.disabled.as_ref().unwrap(), tmp_option_cof[0].1.as_ref().unwrap(), tmp_option_cof[0].0, tmp_option_cof[1].1.as_ref().unwrap(), tmp_option_cof[1].0, tmp_option_cof[2].1.as_ref().unwrap(), tmp_option_cof[2].0, tmp_option_cof[3].1.as_ref().unwrap(), tmp_option_cof[3].0, tmp_option_cof[4].1.as_ref().unwrap(), tmp_option_cof[4].0, tmp_option_cof[5].1.as_ref().unwrap(), tmp_option_cof[5].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
+                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
     for i in related_uuid_prompt {
         result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
     }
