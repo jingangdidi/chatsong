@@ -1,6 +1,6 @@
 [package]
 name = "chatsong"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,7 +18,8 @@ argh = { version = "0.1.10" }
 thiserror = { version = "1.0" }
 reqwest = { version = "0.12", features = ["blocking"] }
 chrono = { version = "0.4" }
-openai_dive = { version = "=1.1.0", features = ["stream", "download"] }
+#openai_dive = { version = "=1.1.0", features = ["stream", "download"] }
+openai_dive = { git = "https://github.com/jingangdidi/openai-client.git", features = ["stream", "download"], branch = "1.1.0-glm" }
 futures = { version = "0.3" }
 uuid = { version = "1.10.0", features = ["v4"] }
 axum = { version = "0.7.6", features = ["multipart"] }
