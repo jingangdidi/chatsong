@@ -841,7 +841,7 @@ pub fn save_all_chat() {
 pub fn create_cookie<'a>(v: String) -> Cookie<'a> {
     Cookie::build(("srx-tzn", v))
         //.secure(true)
-        .same_site(SameSite::None) // Strict, Lax, None, 不设置则客户端浏览器会警告：由于 Cookie “srx-tzn”缺少正确的“sameSite”属性值，缺少“SameSite”或含有无效值的 Cookie 即将被视作指定为“Lax”，该 Cookie 将无法发送至第三方上下文中。若您的应用程序依赖这组 Cookie 以在不同上下文中工作，请添加“SameSite=None”属性。若要了解“SameSite”属性的更多信息，请参阅：https://developer.mozilla.org/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+        .same_site(SameSite::Strict) // Strict, Lax, None, 不设置则客户端浏览器会警告：由于 Cookie “srx-tzn”缺少正确的“sameSite”属性值，缺少“SameSite”或含有无效值的 Cookie 即将被视作指定为“Lax”，该 Cookie 将无法发送至第三方上下文中。若您的应用程序依赖这组 Cookie 以在不同上下文中工作，请添加“SameSite=None”属性。若要了解“SameSite”属性的更多信息，请参阅：https://developer.mozilla.org/docs/Web/HTTP/Headers/Set-Cookie/SameSite
         .http_only(true) // 设置为true会导致客户端浏览器无法通过js获取到cookie值，无法在页面显示，但是Chrome可以获取
         .path("/")
         .max_age(PARAS.maxage) // 默认cookie在客户端保留1天，1天之后需要指定uuid访问才能继续之前的chat记录，SECOND, MINUTE, HOUR, DAY, WEEK
