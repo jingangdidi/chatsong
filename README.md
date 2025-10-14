@@ -5,7 +5,7 @@
 
 **A lightweight(~10M), portable executable for invoking LLM with multi-API support - eliminating installation requirements while maintaining operational efficiency.**
 
-**轻量级大语言模型api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
+**轻量级大语言模型OpenAI格式api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
 
@@ -24,6 +24,7 @@
 - 💰 Support setting how many contextual messages to include in each query, greatly saving token usage
 - ✂️ Support delete message
 - 😎 Support incognito mode
+- 📡 Support calling APIs compatible with the OpenAI format, such as Deepseek, Qwen, Z.AI GLM, and Moonshot Kimi
 
 ## 🚀 Quick-Start
 **structure**
@@ -42,12 +43,25 @@ some dir
 add your models, api key, endpoint, etc, see [config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt) for details.
 
 **3. start server**
+
+local usage:
 ```
 ./chatsong
 ```
+If you want to start the service on computer A in the intranet and computer B accesses it, computer A needs to specify its own IP address when starting the service, which cannot be the default `127.0.0.1`.
+It can be specified through the command-line parameter `-a <ip>`, for example, the IP of computer A is `192.168.1.5`:
+```
+./chatsong -a 192.168.1.5
+```
+You can also write it directly in the `config.txt`:
+```
+ip_address: "192.168.1.5",
+```
+
 **4. visit directly in your browser**
 
 [http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)
+[http://192.168.1.5:8080/v1](http://192.168.1.5:8080/v1)
 
 **5. terminate the service**
 ```
@@ -92,13 +106,13 @@ Options:
   -r, --share       allow sharing of all chat logs
   -l, --english     chat page show english
   -o, --outpath     output path, default: ./chat-log
-  --help, help      display usage information
+  -h, --help        display usage information
 ```
 
 ## 📝 config.txt
 ```
 (
-    ip_address: "127.0.0.1", // required
+    ip_address: "127.0.0.1", // required, if you want to access from other computers within the intranet, you need to change it to the local IP address, such as 192.168.1.5
     port: 8080,              // required
     google_engine_key: "",   // optional, used for web search
     google_search_key: "",   // optional, used for web search
@@ -117,7 +131,7 @@ Options:
                     discription: "OpenAI gpt-4.1 model",      // optional
                     group: "gpt-4.1",                         // required
                     is_default: false,                        // required
-                    is_cof: false,                            // required
+                    is_cot: false,                            // required, does it support Chain of thought (CoT) deep reasoning
                 ),
                 Model(
                     name: "gpt-4.1-nano-2025-04-14",
@@ -125,7 +139,7 @@ Options:
                     discription: "OpenAI gpt-4.1 model",
                     group: "gpt-4.1",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
             ],
         ),
@@ -140,7 +154,7 @@ Options:
                     discription: "claude model",
                     group: "Claude",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "claude-3-7-sonnet-20250219",
@@ -148,7 +162,7 @@ Options:
                     discription: "claude model",
                     group: "Claude",
                     is_default: false,
-                    is_cof: true,
+                    is_cot: true,
                 ),
             ],
         ),
@@ -163,7 +177,7 @@ Options:
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "gemini-2.0-flash",
@@ -171,7 +185,7 @@ Options:
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
             ],
         ),
@@ -186,7 +200,7 @@ Options:
                     discription: "deepseek new model DeepSeek-V3",
                     group: "DeepSeek",
                     is_default: true,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "deepseek-reasoner",
@@ -194,7 +208,7 @@ Options:
                     discription: "deepseek new cof model DeepSeek-R1",
                     group: "DeepSeek",
                     is_default: false,
-                    is_cof: true,
+                    is_cot: true,
                 ),
             ],
         ),
@@ -213,6 +227,12 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2025.10.14] release v0.3.2
+  - 🛠Fix: Fix the issue where other computers on the intranet are not accessible.
+  - 🛠Fix: The abbreviation for the chain of thought model in config.txt is spelled incorrectly, changing 'cof' to 'cot'
+  - ⭐️Add: The command line supports `-h`, previously only `--help` could be used
+  - ⭐️Add: Support calling the official API of the Z.AI GLM model. Currently, the official APIs of Deepseek, QWEN, Z.AI GLM, and Moonshot Kimi can all be called.
+  - 💪🏻Optimize: The default value for "contextual messages" on the left side of the page has been changed from "unlimit" to "prompt + 1 Q&A pair"
 - [2025.08.11] release v0.3.1
   - 🛠Fix: If the "stop" button is clicked while a response is in progress, the next input will be appended to the end of the incomplete answer. Switch "cancel" to "abort" ensures the server promptly detects the termination signal and ceases responding.
   - 🛠Fix: When navigating back to the previous chat history page, if any messages have been deleted from the prior records, all subsequent messages following the deleted content will not be displayed due to the discontinuity between server-side IDs and their frontend counterparts.
