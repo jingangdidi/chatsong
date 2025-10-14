@@ -18,7 +18,7 @@
                     discription: "OpenAI gpt-3.5 model",      // optional, information displayed when mouse hover this model
                     group: "GPT3",                            // required, models that are adjacent and belong to the same group will be placed together in the dropdown menu
                     is_default: false,                        // required, should it be used as the default model
-                    is_cof: false,                            // required, does it support deep reasoning
+                    is_cot: false,                            // required, does it support Chain of thought (CoT) deep reasoning
                 ),
                 Model(
                     name: "gpt-4.1-mini-2025-04-14",
@@ -26,7 +26,7 @@
                     discription: "OpenAI gpt-4.1 model",
                     group: "gpt-4.1",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "gpt-4.1-nano-2025-04-14",
@@ -34,7 +34,7 @@
                     discription: "OpenAI gpt-4.1 model",
                     group: "gpt-4.1",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
             ],
         ),
@@ -49,7 +49,7 @@
                     discription: "claude model",
                     group: "Claude",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "claude-3-7-sonnet-20250219",
@@ -57,7 +57,7 @@
                     discription: "claude model",
                     group: "Claude",
                     is_default: false,
-                    is_cof: true,
+                    is_cot: true,
                 ),
             ],
         ),
@@ -72,7 +72,7 @@
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "gemini-2.0-flash",
@@ -80,7 +80,7 @@
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "gemini-2.5-flash-preview-04-17",
@@ -88,7 +88,7 @@
                     discription: "google gemini model",
                     group: "Gemini",
                     is_default: false,
-                    is_cof: false,
+                    is_cot: false,
                 ),
             ],
         ),
@@ -103,7 +103,7 @@
                     discription: "deepseek new model DeepSeek-V3",
                     group: "DeepSeek",
                     is_default: true,
-                    is_cof: false,
+                    is_cot: false,
                 ),
                 Model(
                     name: "deepseek-reasoner",
@@ -111,7 +111,7 @@
                     discription: "deepseek new cof model DeepSeek-R1",
                     group: "DeepSeek",
                     is_default: false,
-                    is_cof: true,
+                    is_cot: true,
                 ),
             ],
         ),
