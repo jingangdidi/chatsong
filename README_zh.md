@@ -24,7 +24,7 @@
 - 💰 支持设置每次提问包含多少条上下文信息，极大的节省token用量
 - ✂️ 支持删除问题或回答
 - 😎 支持无痕模式
-- 支持调用Deepseek、Qwen、智谱GLM、月之暗面Kimi等兼容OpenAI格式的api
+- 📡 支持调用Deepseek、Qwen、智谱GLM、月之暗面Kimi等兼容OpenAI格式的api
 
 ## 🚀 使用示例
 **目录结构**
