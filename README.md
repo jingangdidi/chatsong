@@ -228,7 +228,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2025.10.14] release v0.3.2
+- [2025.10.15] release v0.3.2
   - 🛠Fix: Fix the issue where other computers on the intranet are not accessible.
   - 🛠Fix: The abbreviation for the chain of thought model in config.txt is spelled incorrectly, changing "cof" to "cot".
   - ⭐️Add: The command line supports "-h", previously only "--help" could be used.
