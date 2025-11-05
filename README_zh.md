@@ -232,21 +232,21 @@ Options:
   - 🛠修复：流式输出时，如果获取response无报错，但choices为空，则不会向前端页面发送答案，页面左侧不会创建回答的消息框，客户端消息数会比服务端少1，导致下次提问报错。在结束流式回答前，判断下回答的总字符串是否为空，如果为空，则发送“no response result”作为答案。
   - ⭐️增加：支持调用Qwen3-vl的api，发送图片（png、jpg、jpeg）或PDF文件（会自动将每页转为图片，注意格式后缀必须是小写`.pdf`，否则仅提取文本内容）进行提问。如果发送一篇pdf论文，每页大约占用1000个token，可以把最后引用文献那几页删掉以节省token。可以使用千问官方提供的Qwen3-VL的api，也可以使用[llama.cpp](https://github.com/ggml-org/llama.cpp)通过`llama-server`本地部署。
   - 💪🏻优化：命令行显示的第一条信息`Running on http://127.0.0.1:8080`改为`Running on http://127.0.0.1:8080/v1`
-- [2025.10.15] release v0.3.2
+- [2025.10.15] release [v0.3.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.2)
   - 🛠修复：内网其他电脑不可访问的问题
   - 🛠修复：config.txt中思维链模型简写拼写错误，“cof”改为“cot”，即“chain of thought”。
   - ⭐️增加：命令行支持“-h”，之前只能使用“--help”。
   - ⭐️增加：支持质谱GLM模型官方api的调用，目前deepseek、qwen、智谱glm、月之暗面kimi的官方api均可调用。
   - 💪🏻优化：页面左侧“上下文消息数”默认值由之前的“不限制”改为“prompt + 1对Q&A”。
-- [2025.08.11] release v0.3.1
+- [2025.08.11] release [v0.3.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.1)
   - 🛠修复：正在回答时如果点击stop按钮，输入的下一个问题会显示在最后一条未完成的答案后面。因为js使用cancel停止接收不会立即停止，服务端未监测到停止信号，仍继续发送，改为使用abort，服务端会立即接收到停止信号，停止回答。
   - 🛠修复：跳转到之前chat记录页面时，如果之前记录有删除信息，则删除信息之后的信息都不显示，因为服务端id不连续，与前端id不对应。
-- [2025.07.15] release v0.3.0
+- [2025.07.15] release [v0.3.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.0)
   - ⭐️增加：支持删除指定问题或回答。
   - ⭐️增加：增加无痕模式（页面左下角按钮），在当前对话随时开启或关闭，决定关闭服务时chat记录保存至本地还是直接舍弃。开启无痕模式时，刷新页面或关闭后重新打开该页面，都将丢弃对话记录。
   - 💪🏻优化：上传文件按钮放到输入框左侧。
   - 💪🏻优化：下载按钮和使用说明按钮放到页面左下角。
-- [2025.07.11] release v0.2.2
+- [2025.07.11] release [v0.2.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.2.2)
   - 🛠修复：点击页面左侧按钮保存chat记录时，不需要去除最后连续的未回答的问题，否则继续提问时服务端与页面的id不对应报错。
   - 🛠修复：不同电脑间同步chat记录，在A电脑基于B电脑的某个对话继续提问时，最后关闭服务因为路径不同导致对话记录保存失败。
   - ⭐️增加：鼠标向上滚动则停止自动向下滚动，鼠标向下滚动则恢复自动向下滚动。
@@ -254,17 +254,17 @@ Options:
   - ⭐️增加：显示上传文件的token数，如果上传的是图片或音频，则不显示token数。
   - 💪🏻优化：命令打印的时间使用LocalTime，例如：`2025-07-07T13:33:48.032687+08:00`，之前默认使用的是UTC时间。
   - 💪🏻优化：命令行显示当前用户输入的第几条问题，以及属于第几对QA，之前只显示用户输入的第几条问题。
-- [2025.07.07] release v0.2.1
+- [2025.07.07] release [v0.2.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.2.1)
   - 🛠修复：新发送的问题或新得到的答案（非之前的问答记录）点击头像复制后，不会自动focus到输入框。
   - 🛠修复：发送问题后左侧“输入的总token”没有实时更新，而是回答完成后才更新。
   - 🛠修复：非流式输出时无响应。
   - ⭐️增加：如果使用网络搜索，则在该问题消息框上面的时间前加上🌐，表示该问题进行了网络搜索。
   - ⭐️增加：鼠标停在消息框上时，显示当前问题或答案是第几条message，第几对Q&A，以及该问题或答案的token数。
-- [2025.07.01] release v0.2.0
+- [2025.07.01] release [v0.2.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.2.0)
   - 修复问答信息太多时，频繁调用代码高亮导致内存占用增加的问题。
   - 优化左侧上下文参数选项，支持根据Q&A问答对进行限制。
   - 当没有输入问题，最后一条消息是回答时，此时直接发起提问，会基于最后一个问题再问一次。
   - 页面左侧参数太多，将不常用的单独放到“背面”，通过左下按钮可切换左侧参数区的翻转，默认将主要常用的参数展示在“正面”。
   - 添加Q&A问答对示意图，使用[Excalibraw](https://excalidraw.com)绘制。
-- [2025.06.30] release v0.1.1
-- [2025.06.20] release v0.1.0
+- [2025.06.30] release [v0.1.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.1.1)
+- [2025.06.20] release [v0.1.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.1.0)
