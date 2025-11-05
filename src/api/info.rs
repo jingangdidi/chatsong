@@ -5,11 +5,14 @@ use std::sync::Mutex;
 
 use axum_extra::extract::cookie::{Cookie, SameSite, CookieJar};
 use chrono::{Local, NaiveDateTime};
+use image::ImageReader;
 use once_cell::sync::Lazy;
 use openai_dive::v1::resources::chat::{
     ChatMessage,
     ChatMessageContent,
     ChatMessageContentPart,
+    ChatMessageImageContentPart,
+    ImageUrlType,
 };
 use serde::{Serialize, Deserialize};
 use tracing::{event, Level};
@@ -100,10 +103,57 @@ pub struct ChatData {
 }
 
 impl ChatData {
-    fn new(id: usize, message: ChatMessage, time: String, data: DataType, is_web: bool, idx_qa: usize, idx_m: usize) -> Self {
-        let token = token_count_message(&message).0; // 计算token数
+    fn new(uuid: &str, id: usize, message: ChatMessage, time: String, data: DataType, is_web: bool, idx_qa: usize, idx_m: usize) -> Self {
+        // 计算token数
+        let token = if let (DataType::Image(_), Some(name)) = (&data, get_image_name(&message)) {
+            // Qwen3-vl图片token: `width / 32 * height / 32`
+            // Qwen2.5-vl图片token: `width / 28 * height / 28`
+            // https://github.com/QwenLM/Qwen3-VL/issues/1238
+            // https://github.com/QwenLM/Qwen3-VL
+            let image_file = format!("{}/{}/{}", PARAS.outpath, uuid, name);
+            let image_file_path = Path::new(&image_file);
+            if image_file_path.exists() && image_file_path.is_file() {
+                match ImageReader::open(&image_file) {
+                    Ok(img) => match img.decode() {
+                        Ok(dec) => (dec.width() * dec.height() / 1024) as usize, // Qwen3-vl tokens
+                        Err(e) => {
+                            event!(Level::ERROR, "{} decode image error: {:?}", uuid, e);
+                            token_count_message(&message).0
+                        },
+                    },
+                    Err(e) => {
+                        event!(Level::ERROR, "{} read image error: {:?}", uuid, e);
+                        token_count_message(&message).0
+                    },
+                }
+            } else {
+                token_count_message(&message).0
+            }
+        } else {
+            token_count_message(&message).0
+        };
         //ChatData{message, time: if is_web {format!("🌐 {time}")} else {time}, data, idx_qa, token} // 不管用，页面不显示emoji
         ChatData{id, message, time, data, is_web, idx_qa, idx_m, token}
+    }
+
+    /// convert uploaded image to User
+    fn get_real_message(&self) -> ChatMessage {
+        if let DataType::Image(b64) = &self.data {
+            ChatMessage::User {
+                content: ChatMessageContent::ContentPart(vec![ChatMessageContentPart::Image(
+                    ChatMessageImageContentPart {
+                        r#type: "image_url".to_string(),
+                        image_url: ImageUrlType {
+                            url: b64.clone(), // Either a URL of the image or the base64 encoded image data
+                            detail: None,
+                        },
+                    },
+                )]),
+                name: None,
+            }
+        } else {
+            self.message.clone()
+        }
     }
 }
 
@@ -239,14 +289,14 @@ impl Info {
 
     /// 从messages中提取所有的message，返回Vec<ChatMessage>
     /// 这里skip_pre和skip_suf不会考虑信息是否是hide，直接对总messages进行截取，截取后的信息再过滤掉hide信息
-    fn get_inner_messages(&self, skip_pre: usize, skip_suf: usize) -> Vec<ChatMessage> {
+    fn get_inner_messages(&self, skip_pre: usize, skip_suf: usize) -> Vec<(ChatMessage, usize)> {
         if skip_pre == 0 && skip_suf == 0 {
             //self.messages.iter().map(|m| m.message.clone()).collect()
-            self.messages.iter().filter(|m| !m.data.is_hide()).map(|m| m.message.clone()).collect() // 过滤掉hide的信息
+            self.messages.iter().filter(|m| !m.data.is_hide()).map(|m| (m.get_real_message(), m.token)).collect() // 过滤掉hide的信息
         } else {
             //self.messages.iter().skip(skip_pre).map(|m| m.message.clone()).collect()
             //self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().map(|m| m.message.clone()).collect()
-            self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().filter(|m| !m.data.is_hide()).map(|m| m.message.clone()).collect() // 先截取信息，然后再过滤掉截取后的信息中hide的信息
+            self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().filter(|m| !m.data.is_hide()).map(|m| (m.get_real_message(), m.token)).collect() // 先截取信息，然后再过滤掉截取后的信息中hide的信息
         }
     }
 
@@ -595,19 +645,24 @@ pub fn insert_message(uuid: &str, message: ChatMessage, time: String, is_web: bo
             info.pop = 0; // 新插入的是答案，pop重置为0
         },
     }
-    // 更新总输入或输出的token数
-    match token_count_message(&message) {
-        (n, true)  => info.token[0] += n, // 更新问题
-        (n, false) => info.token[1] += n, // 更新答案
-    }
     // 最后更新总信息数
     info.msg_len += 1;
+    // 问题或答案在Info的token中的索引
+    let token_idx = if let ChatMessage::User{..} = &message {
+        0
+    } else {
+        1
+    };
     // 插入本次的message、时间、原始问题、是否网络搜索、message属于第几个Q&A对
-    if qa_msg_p.is_some() { // 目前用户提出的问题都是Some，不需要加模型名称
-        info.messages.push(ChatData::new(info.messages.len(), message, time, query, is_web, qa_num, info.msg_len));
+    let chat_data = if qa_msg_p.is_some() { // 目前用户提出的问题都是Some，不需要加模型名称
+        ChatData::new(uuid, info.messages.len(), message, time, query, is_web, qa_num, info.msg_len)
     } else { // 目前模型回答的内容都是None
-        info.messages.push(ChatData::new(info.messages.len(), message, format!("{} {}", time, model), query, is_web, qa_num, info.msg_len)); // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
-    }
+        ChatData::new(uuid, info.messages.len(), message, format!("{} {}", time, model), query, is_web, qa_num, info.msg_len) // 在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+    };
+    // 更新总输入或输出的token数
+    info.token[token_idx] += chat_data.token;
+    // 插入message
+    info.messages.push(chat_data);
 }
 
 /// 客户端下拉选项`上下文消息数`改变时更新限制的问答对数量、限制的消息数量、提问是否包含prompt
@@ -722,12 +777,12 @@ pub fn get_messages(uuid: &str, update_token: bool) -> Vec<ChatMessage> {
                     unreachable!()
                 };
                 // 获取要保留的消息
-                let mut messages: Vec<ChatMessage> = info.get_inner_messages(skip_msg_num, skip_last_answer_num);
+                let mut messages: Vec<(ChatMessage, usize)> = info.get_inner_messages(skip_msg_num, skip_last_answer_num);
                 // 把prompt插入到第一位
                 if info.qa_msg_p.2 {
                     if let Some(p) = &info.prompt {
                         if total_num != keep_msg_num { // 把prompt插入到第一位，如果相等则已经包含了prompt则不必再插入
-                            messages.insert(0, p.clone());
+                            messages.insert(0, (p.clone(), token_count_message(&p).0));
                         }
                     }
                 }
@@ -745,7 +800,7 @@ pub fn get_messages(uuid: &str, update_token: bool) -> Vec<ChatMessage> {
                     info.token[0] -= m.token;
                 }
             }
-            final_messages
+            final_messages.into_iter().map(|m| m.0).collect()
         },
         None => vec![],
     }
@@ -995,15 +1050,55 @@ fn token_count_message(message: &ChatMessage) -> (usize, bool) {
 }
 
 /// 计算指定Vec<ChatMessage>中问题和答案的token数
+/*
 fn token_count_messages(messages: &Vec<ChatMessage>) -> [usize; 2] {
     let mut token_in_out: [usize; 2] = [0, 0];
     for message in messages {
-         match token_count_message(message) {
+        match token_count_message(message) {
             (n, true)  => token_in_out[0] += n,
             (n, false) => token_in_out[1] += n,
-         }
+        }
     }
     token_in_out
+}
+*/
+fn token_count_messages(messages: &Vec<(ChatMessage, usize)>) -> [usize; 2] {
+    let mut token_in_out: [usize; 2] = [0, 0];
+    for (message, token) in messages {
+        if let ChatMessage::User{..} = message {
+            token_in_out[0] += token;
+        } else {
+            token_in_out[1] += token;
+        }
+    }
+    token_in_out
+}
+
+/// get image file name
+fn get_image_name(message: &ChatMessage) -> Option<String> {
+    match message {
+        ChatMessage::System{content, ..} => if let ChatMessageContent::Text(t) = content {
+            Some(t.clone())
+        } else {
+            None
+        },
+        ChatMessage::User{content, ..} => if let ChatMessageContent::Text(t) = content {
+            Some(t.clone())
+        } else {
+            None
+        },
+        ChatMessage::Assistant{content, ..} => if let Some(ChatMessageContent::Text(t)) = content {
+            Some(t.clone())
+        } else {
+            None
+        },
+        ChatMessage::Developer{content, ..} => if let ChatMessageContent::Text(t) = content {
+            Some(t.clone())
+        } else {
+            None
+        },
+        ChatMessage::Tool{..} => None,
+    }
 }
 
 /// 获取指定输出路径下最近的指定格式后缀的文件路径，文件名为时间戳，例如：`2024-04-04_12-49-50.指定格式后缀`
