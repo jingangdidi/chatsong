@@ -1,6 +1,6 @@
 [package]
 name = "chatsong"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -42,4 +42,4 @@ zip = { version = "2.2" }
 pdf-extract = { version = "0.7.9" }
 ron = { version = "0.10.1" }
 base64 = { version = "0.22" }
-
+image = { version = "0.25.8" }
