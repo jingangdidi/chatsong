@@ -213,6 +213,15 @@ pub async fn use_stream(
             }
         }
     }
+    // if whole_answer is empty, send `no response result` to client
+    if whole_answer.is_empty() {
+        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "no response result".to_string(), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+            //println!("channel send error: {:?}", e);
+            event!(Level::WARN, "channel send error: {:?}", e);
+        } else {
+            event!(Level::WARN, "{} no response result", uuid);
+        }
+    }
     // 记录答案
     let message = match role {
         1 => ChatMessage::User{
