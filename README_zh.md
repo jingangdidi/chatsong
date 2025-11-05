@@ -229,6 +229,7 @@ Options:
 
 ## ⏰ 更新记录
 - [2025.11.?] release v0.3.3
+  - 🛠修复：流式输出时，如果获取response无报错，但choices为空，则不会向前端页面发送答案，页面左侧不会创建回答的消息框，客户端消息数会比服务端少1，导致下次提问报错。在结束流式回答前，判断下回答的总字符串是否为空，如果为空，则发送“no response result”作为答案。
   - ⭐️增加：支持调用Qwen3-vl的api，发送图片（png、jpg、jpeg）或PDF文件（会自动将每页转为图片，注意格式后缀必须是小写`.pdf`，否则仅提取文本内容）进行提问。如果发送一篇pdf论文，每页大约占用1000个token，可以把最后引用文献那几页删掉以节省token。可以使用千问官方提供的Qwen3-VL的api，也可以使用[llama.cpp](https://github.com/ggml-org/llama.cpp)通过`llama-server`本地部署。
   - 💪🏻优化：命令行显示的第一条信息`Running on http://127.0.0.1:8080`改为`Running on http://127.0.0.1:8080/v1`
 - [2025.10.15] release v0.3.2
