@@ -3,7 +3,7 @@ use std::process::exit;
 
 use tokio::net::TcpListener;
 use tracing::{event, Level};
-use tracing_subscriber;
+use tracing_subscriber::{self, fmt::time::LocalTime};
 /*
 use tracing_subscriber::{
     layer::SubscriberExt,
@@ -31,12 +31,15 @@ async fn main() {
 
     // Start tracing
     //tracing_subscriber::registry().with(tracing_subscriber::fmt::layer()).init();
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init(); // 限制输入级别，如果是TRACE则全部输出，会有很多信息，尤其联网搜索时特别多，这里限制为INFO，即INFO、WARN、ERROR的信息才输出，https://github.com/tokio-rs/tracing/blob/master/examples/examples/hyper-echo.rs
+    tracing_subscriber::fmt() // 限制输入级别，如果是TRACE则全部输出，会有很多信息，尤其联网搜索时特别多，这里限制为INFO，即INFO、WARN、ERROR的信息才输出，https://github.com/tokio-rs/tracing/blob/master/examples/examples/hyper-echo.rs
+        .with_max_level(Level::INFO)
+        .with_timer(LocalTime::rfc_3339()) // 使用本地时间，格式为 RFC 3339，需要在Cargo.toml的features中添加"local-time"
+        .init();
 
     // 测试不同Level（TRACE、DEBUG、INFO、WARN、ERROR），可以比较，TRACE最高，ERROR最低，越高则有越多的verbose
     //event!(Level::TRACE, "Running on http://{}:{}", PARAS.addr_str, PARAS.port); // 紫色，very low priority, often extremely verbose, information. The most fine-grained information, useful for detailed debugging.
     //event!(Level::DEBUG, "Running on http://{}:{}", PARAS.addr_str, PARAS.port); // 蓝色，lower priority information. Useful during development for debugging problems.
-    event!(Level::INFO, "Running on http://{}:{}", PARAS.addr_str, PARAS.port);  // 绿色，useful information. General operational information about the state of the application.
+    event!(Level::INFO, "Running on http://{}:{}/v1", PARAS.addr_str, PARAS.port);  // 绿色，useful information. General operational information about the state of the application.
     //event!(Level::WARN, "Running on http://{}:{}", PARAS.addr_str, PARAS.port);  // 黄绿色，hazardous situations. Indication of issues that are not critical but might lead to problems.
     //event!(Level::ERROR, "Running on http://{}:{}", PARAS.addr_str, PARAS.port); // 黄色，very serious errors. Critical problems that need immediate attention.
 
