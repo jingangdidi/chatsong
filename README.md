@@ -228,6 +228,9 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2025.11.?] release v0.3.3
+  - ⭐️Add: Support Qwen3-vl api, you can send images (png, jpg, jpeg) or PDF documents (automatically converting each page into an image, note that the file extension must be lowercase (.pdf), otherwise only textual content will be extracted) for inquiry. You can use the officially provided Qwen3-VL model or run [llama.cpp](https://github.com/ggml-org/llama.cpp) locally.
+  - 💪🏻Optimize: change command line info `Running on http://127.0.0.1:8080` to `Running on http://127.0.0.1:8080/v1`
 - [2025.10.15] release v0.3.2
   - 🛠Fix: Fix the issue where other computers on the intranet are not accessible.
   - 🛠Fix: The abbreviation for the chain of thought model in config.txt is spelled incorrectly, changing "cof" to "cot".
