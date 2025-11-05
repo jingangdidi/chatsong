@@ -671,7 +671,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
 </body>
 
 <!-- js -->
-<script type='text/javascript'>
+<script type='module'>
 ";
     result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n    var qa_num = {}; // 问答对数量\n    var m_num = {}; // 信息数\n    var last_is_answer = true; // 最后一条信息是否是回答\n", PARAS.addr_str, PARAS.port, v, next_msg_id, qa_num, m_num);
     result += r###"    var emptyInput = true; // 全局变量，存储输入问题是否为空
@@ -679,6 +679,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     var already_clear_log = false; // 是否已清除了当前的记录
     var for_markdown = ''; // 累加原始信息，用于markdown显示
     var del_id = ''; // 要删除的信息的id
+    var submit_send_stop;
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
         select.addEventListener('change', function() {
@@ -791,7 +792,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     let isStopped = true; // 是否停止接收答案
     // 左下按钮，切换左侧参数栏
     let toggleMain = true; // true显示主参数，false显示其余参数
-    function toggle () {
+    function toggle() {
         toggleMain = !toggleMain;
         const left_main = document.getElementById('left-part');
         const left_other = document.getElementById('left-part-other');
@@ -811,36 +812,182 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             });
         }
     }
-    function sleep (time) {
+    window.toggle = toggle;
+    function sleep(time) {
         return new Promise((resolve) => setTimeout(resolve, time));
     }
+
+    // 将pdf每页转为图片
+    //import { getDocument, GlobalWorkerOptions } from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.min.mjs';
+    //GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.mjs';
+    // 渲染单页PDF为Blob对象
+    // pdfDocument: pdf.js加载的文档对象
+    // pageNo: 页码 (从1开始)
+    // conversion_config: - 转换配置，如scale
+    // 返回一个包含图片数据的Blob对象的Promise
+    function renderPage(pdfDocument, pageNo, conversion_config) {
+        // 返回一个Promise，因为页面渲染和toBlob都是异步的
+        return new Promise((resolve, reject) => {
+            // 获取指定页码的页面对象
+            pdfDocument.getPage(pageNo).then(page => {
+                const scale = conversion_config.scale || 1.5;
+                const viewport = page.getViewport({ scale: scale });
+
+                // 创建一个离屏canvas元素
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                // 渲染配置
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport,
+                };
+
+                // 开始渲染页面到canvas上
+                page.render(renderContext).promise.then(() => {
+                    // 渲染完成后，将canvas内容转换为Blob对象
+                    // toBlob是异步的，它接受一个回调函数
+                    canvas.toBlob(blob => {
+                        if (blob) {
+                            resolve(blob); // 成功，将blob传递出去
+                        } else {
+                            reject(new Error(`Failed to create blob for page ${pageNo}`));
+                        }
+                    }, 'image/png'); // 输出为PNG格式
+                }).catch(reject); // 捕获渲染错误
+            }).catch(reject); // 捕获获取页面错误
+        });
+    }
+
+    // 将PDF文件转换为图片Blob数组
+    // pdfInput: 上传的File对象或一个ArrayBuffer
+    // getDocument: 从PDF.js动态导入的getDocument函数
+    // conversion_config: 配置对象，比如 { scale: 1.5 }
+    // 返回一个包含所有页面图片Blob的数组的Promise
+    function convertPdfToImages(pdfInput, getDocument, conversion_config = {}) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            // 当FileReader读取完成时
+            reader.onload = function(event) {
+                const pdfData = event.target.result; // 这是ArrayBuffer
+
+                // 使用pdf.js加载PDF数据
+                const loadingTask = getDocument(pdfData);
+                loadingTask.promise.then(pdfDocument => {
+                    const numPages = pdfDocument.numPages;
+                    const pagePromises = [];
+
+                    // 为每一页创建一个渲染任务（Promise）
+                    for (let i = 1; i <= numPages; i++) {
+                        pagePromises.push(renderPage(pdfDocument, i, conversion_config));
+                    }
+
+                    // 等待所有页面的渲染任务完成
+                    Promise.all(pagePromises)
+                        .then(imageBlobs => {
+                            resolve(imageBlobs); // 所有页面转换成功，返回Blob数组
+                        })
+                        .catch(reject); // 捕获Promise.all中的任何一个错误
+                }).catch(reject); // 捕获加载PDF文档的错误
+            };
+
+            // 当FileReader读取失败时
+            reader.onerror = function() {
+                reject(new Error("Failed to read the file."));
+            };
+
+            // 如果输入是File对象，开始读取它
+            if (pdfInput instanceof File) {
+                reader.readAsArrayBuffer(pdfInput);
+            } 
+            // 如果已经是ArrayBuffer，直接处理
+            else if (pdfInput instanceof ArrayBuffer) {
+                // 模拟onload事件，以便重用逻辑
+                reader.onload({ target: { result: pdfInput } });
+            } else {
+                reject(new Error("Invalid input type. Expected File or ArrayBuffer."));
+            }
+        });
+    }
+
     // 存储上传的文件
     let uploadedFiles = {};
-    document.getElementById("upload-file").onchange = function(event) {
+    document.getElementById("upload-file").onchange = async function(event) {
         uploadedFiles = {};
         const formData = new FormData();
         for (let i = 0; i < event.target.files.length; i++) {
             const file = event.target.files[i];
             if (file) {
-                formData.append('files', file);
-                uploadedFiles[file.name] = 'm'+current_id;
-                insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
-                let new_id = 'm'+(current_id-1);
-                const msg_req_right = document.getElementById(new_id);
-                if (file.type.startsWith('image/')) { // 插入显示上传的图片或文件名
-                    // 生成临时URL并设置为图片的src
-                    const objectURL = URL.createObjectURL(file);
-                    let right_img = document.createElement("img");
-                    right_img.src = objectURL;
-                    msg_req_right.appendChild(right_img);
-                } else { // 如果不是图片，显示上传文件的名称
-                    msg_req_right.textContent = file.name;
+                //if (file.name.toLowerCase().endsWith('.pdf')) {
+                if (file.name.endsWith('.pdf')) { // lowercase means convert to image, otherwise upload pdf file, extract text from pdf file
+                    // convert pdf to images
+                    try {
+                        // 1. 动态导入PDF.js库。这个操作返回一个Promise
+                        // 只有当用户上传PDF时，才会执行这里的网络请求
+                        const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.min.mjs');
+                        // 2. 从导入的模块中解构出所需的函数和对象
+                        const { getDocument, GlobalWorkerOptions } = pdfjsLib;
+                        // 3. 设置PDF.js的worker路径
+                        GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.mjs';
+                        // 4. 调用转换函数，并将getDocument作为参数传入
+                        const imageBlobs = await convertPdfToImages(file, getDocument, { scale: 1.5 }); // 1.0有点模糊，2.0浪费token
+                        // 5. 转换完成后，再将 Blob 添加到 formData
+                        imageBlobs.forEach((blob, i) => {
+                            // 页面右侧插入图片
+                            uploadedFiles[`${i + 1}.png`] = 'm'+current_id;
+                            insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
+                            let new_id = 'm'+(current_id-1);
+                            const msg_req_right = document.getElementById(new_id);
+                            // 生成临时URL并设置为图片的src
+                            const objectURL = URL.createObjectURL(blob);
+                            let right_img = document.createElement("img");
+                            right_img.src = objectURL;
+                            msg_req_right.appendChild(right_img);
+                            // 记录要上传的图片
+                            const fileName = `${i + 1}.png`;
+                            formData.append('files', blob, fileName);
+                            //console.log(`Appended ${fileName} to FormData`);
+                        });
+                    } catch (error) {
+                        // 这个 catch 块会捕获两种错误：
+                        // a) 动态 import() 失败（因为无网络）
+                        // b) convertPdfToImages() 内部处理PDF时出错（文件损坏等）
+                        console.error("PDF conversion failed for", file.name, error);
+                        alert(`Unable to process the PDF file "${file.name}". Please ensure you have an internet connection to use this feature, or verify the file's validity`);
+                        continue; // 跳过这个文件，继续处理下一个
+                    }
+                } else {
+                    uploadedFiles[file.name] = 'm'+current_id;
+                    insert_right_image(); // 先插入右侧的空内容，后面写入图片或上传文件的文件名
+                    let new_id = 'm'+(current_id-1);
+                    const msg_req_right = document.getElementById(new_id);
+                    formData.append('files', file);
+                    if (file.type.startsWith('image/')) { // 插入显示上传的图片或文件名
+                        // 生成临时URL并设置为图片的src
+                        const objectURL = URL.createObjectURL(file);
+                        let right_img = document.createElement("img");
+                        right_img.src = objectURL;
+                        msg_req_right.appendChild(right_img);
+                    } else { // 如果不是图片，显示上传文件的名称
+                        msg_req_right.textContent = file.name;
+                    }
                 }
                 sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
                     scroll();
                 });
             }
         }
+
+        /*
+        console.log(formData);
+        for (let [key, value] of formData.entries()) {
+            console.log(key, value);
+        }
+        */
+
         // 上传
 "###;
     result += &format!("        fetch('http://{}:{}{}/upload', {{", PARAS.addr_str, PARAS.port, v);
@@ -887,7 +1034,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         disabled_option.setAttribute("selected", "");
         disabled_option.text = "--select uuid--";
         options.appendChild(disabled_option);
-        for (i of uuids) {
+        for (let i of uuids) {
             let uuid_option = document.createElement("option");
             uuid_option.setAttribute("value", i[0]);
             uuid_option.text = i[0]+' ('+i[1]+')';
@@ -1130,6 +1277,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         //console.log(textToCopy);
         navigator.clipboard.writeText(textToCopy);
     }
+    window.copy = copy;
     /* chat region scroll bottom */
     function scroll() {
         var scrollMsg = document.getElementById("scrolldown");
@@ -1190,7 +1338,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     result += r###"
         document.getElementById('input_query').disabled = true; // 完成回复之前禁止继续提问
         // 将参数加到问题后面
-        req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature;
+        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature;
         return [req, req2];
     }
     // 回答完成后恢复提问输入框
@@ -1238,14 +1386,23 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         let buffer = ''; // Buffer to accumulate partial messages
         // 解析数据
         while (!isStopped) {
-            const { done, value } = await reader.read();
-            if (done) {
-                // Process any remaining data in buffer if it forms a complete message
-                if (buffer.trim()) processSseBuffer(); 
-                break;
+            try {
+                const { done, value } = await reader.read();
+                if (done) {
+                    // Process any remaining data in buffer if it forms a complete message
+                    if (buffer.trim()) processSseBuffer(); 
+                    break;
+                }
+                buffer += decoder.decode(value, { stream: true }); // stream: true is important
+                processSseBuffer();
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    console.log('The request has been terminated');
+                } else {
+                    //console.error(`Failed to parse JSON for event '${currentEvent}':`, e, 'Raw data:', eventData);
+                    console.log('Failed to parse JSON:', e);
+                }
             }
-            buffer += decoder.decode(value, { stream: true }); // stream: true is important
-            processSseBuffer();
         }
         restore_input();
         // 解析完整数据
@@ -1275,97 +1432,92 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 // 用\n将data数据合并为一个字符串
                 const eventData = currentData.join('\n');
                 // 基于event类型解析数据
-                try {
-                    const jsonData = JSON.parse(eventData);
-                    switch (currentEvent) {
-                        case 'metadata':
-                            incognito_toggle(jsonData.is_incognito);
-                            if (jsonData.current_token > 0) { // 回答结束，更新token数
-                                let answer_id = 'm'+(current_id - 1); // 当前回答的id
-                                let msg_lr = document.getElementById(answer_id);
-                                const currentTitle = msg_lr.getAttribute("title");
+                const jsonData = JSON.parse(eventData);
+                switch (currentEvent) {
+                    case 'metadata':
+                        incognito_toggle(jsonData.is_incognito);
+                        if (jsonData.current_token > 0) { // 回答结束，更新token数
+                            let answer_id = 'm'+(current_id - 1); // 当前回答的id
+                            let msg_lr = document.getElementById(answer_id);
+                            const currentTitle = msg_lr.getAttribute("title");
 "###;
-    result += &format!("                                msg_lr.setAttribute('title', currentTitle+jsonData.current_token+'{}');", page_data.m_qa_token[3]);
+    result += &format!("                            msg_lr.setAttribute('title', currentTitle+jsonData.current_token+'{}');", page_data.m_qa_token[3]);
     result += r###"
-                            }
-                            //console.log('Received metadata:', jsonData);
-                            // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
-                            document.getElementById("show-prompt").value = jsonData.prompt;
-                            document.getElementById("show-uuid").value = jsonData.current_uuid;
-                            document.getElementById("show-in-token").value = jsonData.in_token;
-                            document.getElementById("show-out-token").value = jsonData.out_token;
-                            related_uuid(jsonData.related_uuid);
+                        }
+                        //console.log('Received metadata:', jsonData);
+                        // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
+                        document.getElementById("show-prompt").value = jsonData.prompt;
+                        document.getElementById("show-uuid").value = jsonData.current_uuid;
+                        document.getElementById("show-in-token").value = jsonData.in_token;
+                        document.getElementById("show-out-token").value = jsonData.out_token;
+                        related_uuid(jsonData.related_uuid);
+                        if (autoScroll) {
+                            scroll();
+                        }
+                        break; // 否则会继续执行下面的case
+                    case 'maindata':
+                        //console.log('Received maindata:', jsonData);
+                        // 如果信息是之前的问答记录，先清空当前所有信息
+                        if (!already_clear_log && jsonData.is_history) {
+                            clear_all_child('scrolldown');
+                            already_clear_log = true;
+                            current_id = 0;
+                            qa_num = 0;
+                            m_num = 0;
+                            last_is_answer = true;
+                        }
+                        // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
+                        // https://www.answeroverflow.com/m/1302587682957824081
+                        window.addEventListener('wheel', function(event) { // “scroll”无效
+                            // event.deltaY 的值：负值表示向上滚动，正值表示向下滚动
                             if (autoScroll) {
+                                //console.log('Scrolling via mouse');
+                                if (event.deltaY < 0) { // 向上滚动
+                                    autoScroll = false; // 用户手动向上滚动，停止自动向下滚动
+                                }
+                            } else {
+                                if (event.deltaY > 0) { // 向下滚动
+                                    autoScroll = true; // 用户手动向下滚动，恢复自动向下滚动
+                                }
+                            }
+                        });
+                        window.addEventListener('touchmove', function() { // 触屏这个有效，没有deltaY，先不考虑触屏滚动方向
+                            if (autoScroll) {
+                                //console.log('Scrolling via touch');
+                                autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
+                            }
+                        });
+                        no_message = false;
+                        // 如果是之前的记录，则用传递的id更新当前id，因为传递的id可能不连续（有部分被用户点击删除）
+                        if (jsonData.is_history && jsonData.id !== current_id && jsonData.id !== current_id - 1) {
+                            current_id = jsonData.id
+                        }
+                        // 插入信息
+                        if (jsonData.time_model) {
+                            insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
+                        } else { // 没有传递时间则使用当前时间
+                            if (jsonData.is_left) {
+                                insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
+                            } else {
+                                insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
+                            }
+                        }
+                        //Prism.highlightAll();
+                        if (autoScroll) {
+                            if (jsonData.is_img) {
+                                sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
+                                    scroll();
+                                });
+                            } else {
                                 scroll();
                             }
-                            break; // 否则会继续执行下面的case
-                        case 'maindata':
-                            //console.log('Received maindata:', jsonData);
-                            // 如果信息是之前的问答记录，先清空当前所有信息
-                            if (!already_clear_log && jsonData.is_history) {
-                                clear_all_child('scrolldown');
-                                already_clear_log = true;
-                                current_id = 0;
-                                qa_num = 0;
-                                m_num = 0;
-                                last_is_answer = true;
-                            }
-                            // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
-                            // https://www.answeroverflow.com/m/1302587682957824081
-                            window.addEventListener('wheel', function(event) { // “scroll”无效
-                                // event.deltaY 的值：负值表示向上滚动，正值表示向下滚动
-                                if (autoScroll) {
-                                    //console.log('Scrolling via mouse');
-                                    if (event.deltaY < 0) { // 向上滚动
-                                        autoScroll = false; // 用户手动向上滚动，停止自动向下滚动
-                                    }
-                                } else {
-                                    if (event.deltaY > 0) { // 向下滚动
-                                        autoScroll = true; // 用户手动向下滚动，恢复自动向下滚动
-                                    }
-                                }
-                            });
-                            window.addEventListener('touchmove', function() { // 触屏这个有效，没有deltaY，先不考虑触屏滚动方向
-                                if (autoScroll) {
-                                    //console.log('Scrolling via touch');
-                                    autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
-                                }
-                            });
-                            no_message = false;
-                            // 如果是之前的记录，则用传递的id更新当前id，因为传递的id可能不连续（有部分被用户点击删除）
-                            if (jsonData.is_history && jsonData.id !== current_id && jsonData.id !== current_id - 1) {
-                                current_id = jsonData.id
-                            }
-                            // 插入信息
-                            if (jsonData.time_model) {
-                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
-                            } else { // 没有传递时间则使用当前时间
-                                if (jsonData.is_left) {
-                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
-                                } else {
-                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
-                                }
-                            }
-                            //Prism.highlightAll();
-                            if (autoScroll) {
-                                if (jsonData.is_img) {
-                                    sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
-                                        scroll();
-                                    });
-                                } else {
-                                    scroll();
-                                }
-                            }
-                            break; // 否则会继续执行下面的case
-                        case 'close':
-                            //console.log('Received close:', jsonData);
-                            break; // 否则会继续执行下面的case
-                        default:
-                            console.log(`Received unhandled event '${currentEvent}':`, jsonData);
-                    }
-                } catch (e) {
-                    //console.error(`Failed to parse JSON for event '${currentEvent}':`, e, 'Raw data:', eventData);
-                    console.log(`Failed to parse JSON for event '${currentEvent}':`, e, 'Raw data:', eventData);
+                        }
+                        break; // 否则会继续执行下面的case
+                    case 'close':
+                        //console.log('Received close:', jsonData);
+                        break; // 否则会继续执行下面的case
+                    default:
+                        console.log(`Received unhandled event '${currentEvent}':`, jsonData);
                 }
             }
         }
