@@ -29,6 +29,7 @@ use crate::{
         DataType, // 存储问答信息的数据
         try_read_file, // 判断指定字符串是否是指定uuid中的文件，如果是则读取内容
         token_count_str, // 计算指定字符串的token数
+        get_msg_token, // pos>=0表示索引位置，pos<0表示倒数第几个，比如0表示第1个，1表示第2个，-1表示最后一个，-2表示倒数第个
     },
     openai::for_image::image_to_base64, // 图片转base64，返回base64编码的字符串
     parse_paras::PARAS,
@@ -79,13 +80,13 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
 
         // 插入message
         let lowercase_name = name.to_lowercase();
-        if lowercase_name.ends_with(".png") || lowercase_name.ends_with(".jpg") {
-            file_token.insert(name.clone(), 0);
+        if lowercase_name.ends_with(".png") || lowercase_name.ends_with(".jpg") || lowercase_name.ends_with(".jpeg") {
             let message = ChatMessage::User{
                 content: ChatMessageContent::Text(name.clone()),
                 name: None,
             };
             insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
+            file_token.insert(name, get_msg_token(&uuid, -1)); // pos>=0表示索引位置，pos<0表示倒数第几个，比如0表示第1个，1表示第2个，-1表示最后一个，-2表示倒数第个
         } else if [".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"].iter().any(|x| lowercase_name.ends_with(x)) {
             file_token.insert(name.clone(), 0);
             let message = ChatMessage::User{
