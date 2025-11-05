@@ -232,21 +232,21 @@ Options:
   - 🛠Fix: When use streaming, if there is no error in obtaining the response but the choices are empty, the answer will not be sent to the client, and a message box for the answer will not be created on the left side of the page. The client messages number will be 1 less than the server, resulting in an error in the next question. Before ending the streaming answer, check if the total string of the answer is empty. If it is empty, send "no response result" as the answer.
   - ⭐️Add: Support Qwen3-vl api, you can send images (png, jpg, jpeg) or PDF documents (automatically converting each page into an image, note that the file extension must be lowercase (.pdf), otherwise only textual content will be extracted) for inquiry. You can use the officially provided Qwen3-VL model or run [llama.cpp](https://github.com/ggml-org/llama.cpp) locally.
   - 💪🏻Optimize: change command line info `Running on http://127.0.0.1:8080` to `Running on http://127.0.0.1:8080/v1`
-- [2025.10.15] release v0.3.2
+- [2025.10.15] release [v0.3.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.2)
   - 🛠Fix: Fix the issue where other computers on the intranet are not accessible.
   - 🛠Fix: The abbreviation for the chain of thought model in config.txt is spelled incorrectly, changing "cof" to "cot".
   - ⭐️Add: The command line supports "-h", previously only "--help" could be used.
   - ⭐️Add: Support calling the official API of the Z.AI GLM model. Currently, the official APIs of Deepseek, QWEN, Z.AI GLM, and Moonshot Kimi can all be called.
   - 💪🏻Optimize: The default value for "contextual messages" on the left side of the page has been changed from "unlimit" to "prompt + 1 Q&A pair".
-- [2025.08.11] release v0.3.1
+- [2025.08.11] release [v0.3.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.1)
   - 🛠Fix: If the "stop" button is clicked while a response is in progress, the next input will be appended to the end of the incomplete answer. Switch "cancel" to "abort" ensures the server promptly detects the termination signal and ceases responding.
   - 🛠Fix: When navigating back to the previous chat history page, if any messages have been deleted from the prior records, all subsequent messages following the deleted content will not be displayed due to the discontinuity between server-side IDs and their frontend counterparts.
-- [2025.07.15] release v0.3.0
+- [2025.07.15] release [v0.3.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.0)
   - ⭐️Add: Support delete message.
   - ⭐️Add: Support incognito mode.
   - 💪🏻Optimize: Place the upload file button on the left side of the input box.
   - 💪🏻Optimize: Place the download button and usage button in the bottom left corner of the page.
-- [2025.07.11] release v0.2.2
+- [2025.07.11] release [v0.2.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.2.2)
   - 🛠Fix: When saving chat history by clicking the left-side button, consecutive unanswered questions at the end should no longer be removed. Previously, this caused ID mismatches between the server and the page when continuing the conversation, resulting in errors.
   - 🛠Fix: When syncing chat history across different computers, if continuing a conversation on Computer A based on a chat from Computer B, the chat history would fail to save due to path discrepancies upon closing the service.
   - ⭐️Add: Auto-scroll pauses when scrolling upward and resumes when scrolling downward.
@@ -254,17 +254,17 @@ Options:
   - ⭐️Add: Display token count for uploaded files. If the file is an image or audio, the token count will not be shown.
   - 💪🏻Optimize: Command logs now use LocalTime (e.g., 2025-07-07T13:33:48.032687+08:00) instead of the default UTC time.
   - 💪🏻Optimize: The command line now displays both the current question number and its corresponding QA pair index. Previously, it only showed the question number. 
-- [2025.07.07] release v0.2.1
+- [2025.07.07] release [v0.2.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.2.1)
   -  🛠Fix: When copying a newly posed question or freshly received answer (excluding prior conversation history) by clicking the avatar, the input field not automatically gains focus.
   -  🛠Fix: Token consumption not updating upon query submission.
   -  🛠Fix: Lack of response in non-streaming output scenarios.
   -  ⭐️Add: When using web search, prefix the timestamp of the query with 🌐 to indicate an web search was performed.
   -  ⭐️Add: Upon hovering over the message box, display the message number, Q&A pair number and token count for this message.
-- [2025.07.01] release v0.2.0
+- [2025.07.01] release [v0.2.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.2.0)
   - Fix the issue of excessive memory usage by optimizing code highlighting.
   - Optimize contextual messages, support Q&A pair.
   - When there is no input question and the last message is an answer, the question will be asked again based on the last question.
   - There are too many parameters on the left side of the page, so the infrequently used ones will be placed separately on the "back". The left parameter area can be flipped by clicking the bottom left button, and the main commonly used parameters will be displayed on the "front" by default.
   - Add a schematic diagram of Q&A pairs by [Excalibraw](https://excalidraw.com)
-- [2025.06.30] release v0.1.1
-- [2025.06.20] release v0.1.0
+- [2025.06.30] release [v0.1.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.1.1)
+- [2025.06.20] release [v0.1.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.1.0)
