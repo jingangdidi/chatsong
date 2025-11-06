@@ -228,7 +228,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2025.11.?] release v0.3.3
+- [2025.11.06] release [v0.3.3](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.3)
   - 🛠Fix: When use streaming, if there is no error in obtaining the response but the choices are empty, the answer will not be sent to the client, and a message box for the answer will not be created on the left side of the page. The client messages number will be 1 less than the server, resulting in an error in the next question. Before ending the streaming answer, check if the total string of the answer is empty. If it is empty, send "no response result" as the answer.
   - ⭐️Add: Support Qwen3-vl api, you can send images (png, jpg, jpeg) or PDF documents (automatically converting each page into an image, note that the file extension must be lowercase (.pdf), otherwise only textual content will be extracted) for inquiry. You can use the officially provided Qwen3-VL model or run [llama.cpp](https://github.com/ggml-org/llama.cpp) locally.
   - 💪🏻Optimize: change command line info `Running on http://127.0.0.1:8080` to `Running on http://127.0.0.1:8080/v1`
