@@ -25,9 +25,9 @@
 - ✂️ 支持删除问题或回答
 - 😎 支持无痕模式
 - 📡 支持调用Deepseek、Qwen、智谱GLM、月之暗面Kimi等兼容OpenAI格式的api
-- 支持内置文件系统工具（读写文件、压缩解压等）
-- 支持调用自定义的外部工具、MCP的stdio工具
-- 支持计划模式，复杂问题先制定计划，再调用工具逐个实现
+- 🔧 支持内置文件系统工具（读写文件、压缩解压等）
+- 🔨 支持调用自定义的外部工具、MCP的stdio工具
+- 🤔 支持计划模式，复杂问题先制定计划，再调用工具逐个实现
 
 ## 🚀 使用示例
 **目录结构**
@@ -43,7 +43,7 @@
 
 **2. 准备config.txt**
 
-填写自己要用的模型，以及api key、api地址等，详见[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)
+填写自己要用的模型，以及api key、api地址等，参考[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)
 
 **3. 开启服务**
 
@@ -72,84 +72,92 @@ ip_address: "192.168.1.5",
 按下`Ctrl+C`将自动保存所有问答记录等信息至输出路径，下次开启服务可基于之前的问答继续提问。
 ```
 
-## 调用工具
+## 🛠 调用工具
 从`v0.4.0`开始支持调用工具，除了内置的文件系统工具，还可以通过`config.txt`的`SingleExternalTool`和`StdIoServer`指定自己的外部工具和MCP的stdio工具。
+
 在页面左侧的`调用工具`下拉选项中：
-- 白色⚪表示不使用任何工具
-- 红色🔴表示选择所有工具
-- 绿色🟢表示选择内置工具
-- 紫色🟣表示选择所有自定义的外部工具
-- 黄色🟡表示选择MCP工具
-- 其他选项表示单选一个工具
+
+  - 白色⚪表示不使用任何工具
+  - 红色🔴表示选择所有工具
+  - 绿色🟢表示选择内置工具
+  - 紫色🟣表示选择所有自定义的外部工具
+  - 黄色🟡表示选择MCP工具
+  - 其他选项表示单选一个工具
 
 在`config.txt`中添加工具：
-1. 内置工具
-  这些工具已经编译在`chatsong`内，不需要额外配置`config.txt`即可直接调用
 
-2. 自己的外部工具
+**1. 内置工具**
+
+  这些工具已经编译在`chatsong`内，不需要额外配置`config.txt`，可直接调用
+
+**2. 自己的外部工具**
+
   `command`填写要调用的命令，`args`填写脚本以及其他参数，`description`填写该工具的功能，模型会据此判断是否使用该工具来完成某项任务
   ```
   external_tools: [
-      SingleExternalTool(
-          name: "工具1名称",
-          command: "工具1调用的程序，例如：./my_tool.exe",
-          description: "工具1的功能描述",
-          schema: r#"json格式参数说明"#,
-      ),
-      SingleExternalTool(
-          name: "工具2名称",
-          command: "工具2调用的程序，例如：python3",
-          args: ["脚本和其他参数在这个列表中指定，例如：my_tool.py"],
-          description: "工具2的功能描述",
-          schema: r#"json格式参数说明"#,
-      )
+    SingleExternalTool(
+      name: "工具1名称",
+      command: "工具1调用的程序，例如：./my_tool.exe",
+      description: "工具1的功能描述",
+      schema: r#"json格式参数说明"#,
+    ),
+    SingleExternalTool(
+      name: "工具2名称",
+      command: "工具2调用的程序，例如：python3",
+      args: ["脚本和其他参数在这个列表中指定，例如：my_tool.py"],
+      description: "工具2的功能描述",
+      schema: r#"json格式参数说明"#,
+    )
   ]
   ```
-  注意`schema`填写json格式的参数类型及说明，由于会含有`"`，因此放在`r#"`和`"#`之间，例如下面示例是自己写的一个python脚本，用来计算2个数的加和，第一个参数是`--a`指定第一个数，第二个参数是`--b`指定第二个数，`type`指定参数类型，`description`描述该参数的作用：
+  注意`schema`填写json格式的参数类型及说明，由于会含有`"`和换行，因此放在`r#"`和`"#`之间，例如下面示例是自己写的一个python脚本，用来计算2个数的加和，第一个参数是`--a`指定第一个数，第二个参数是`--b`指定第二个数，`type`指定参数类型，`description`描述该参数的作用：
   ```
+  schema: r#"
   {
-      "properties": {
-          "a": {
-              "type": "integer",
-              "description": "The first value.",
-          },
-          "b": {
-              "type": "integer",
-              "description": "The second value.",
-          },
+    "properties": {
+      "a": {
+        "type": "integer",
+        "description": "The first value.",
       },
-      "required": ["a", "b"],
-      "type": "object",
+      "b": {
+        "type": "integer",
+        "description": "The second value.",
+      },
+    },
+    "required": ["a", "b"],
+    "type": "object",
   }
+  "#
   ```
 
-3. MCP的stdio工具
+**3. MCP的stdio工具**
+
   `command`填写要调用的命令，`args`填写参数，例如：
   ```
   mcp_servers: [
-      StdIoServer(
-          command: "./rust-mcp-filesystem",
-          args: [
-              "--allow-write",
-              "./",
-          ],
-      ),
-      StdIoServer(
-          command: "uvx",
-          args: [
-              "excel-mcp-server",
-              "stdio",
-          ],
-      ),
+    StdIoServer(
+      command: "./rust-mcp-filesystem",
+      args: [
+        "--allow-write",
+        "./",
+      ],
+    ),
+    StdIoServer(
+      command: "uvx",
+        args: [
+          "excel-mcp-server",
+          "stdio",
+        ],
+    ),
   ]
   ```
 
 对于复杂任务，可以开启`计划模式`（仅在调用工具时有效），会先制定计划，将问题拆分为多个子任务，然后逐个完成。每一步都会基于之前已完成的步骤进行判断，继续下一步还是更新计划。如果任务超出模型和指定工具的能力范围，则会直接结束，并返回原因。
 
-<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/plan_mode.png">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/plan_mode.png" width="50%">
 
-## 总结历史记录
-太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除图表将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">，对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
+## 🍔 总结历史记录
+太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除图表将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮（<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">），对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
 
 ## 📺 详细示例
 [YouTube示例视频](https://youtu.be/c1DeuIodiSk)
@@ -169,7 +177,7 @@ ip_address: "192.168.1.5",
 - 一对问答是指：一个或连续的多个问题，加上一个或连续的多个答案，一对问答包含至少2条消息
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/QA-pair.png">
 
-## 🛠 从源码编译
+## ⌨️ 从源码编译
 ```
 git clone https://github.com/jingangdidi/chatsong.git
 cd chatsong

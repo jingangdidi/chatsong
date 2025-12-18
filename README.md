@@ -25,6 +25,9 @@
 - ✂️ Support delete message
 - 😎 Support incognito mode
 - 📡 Support calling APIs compatible with the OpenAI format, such as Deepseek, Qwen, Z.AI GLM, and Moonshot Kimi
+- 🔧 Support built-in filesystem tools
+- 🔨 Support custom external tools and MCP stdio tools
+- 🤔 Support planning mode
 
 ## 🚀 Quick-Start
 **structure**
@@ -69,10 +72,107 @@ ip_address: "192.168.1.5",
 press `Ctrl+C` to automatically save all chat records to the output directory while simultaneously updating the graph file
 ```
 
+## 🛠 Call tools
+Starting from `v0.4.0`, chatsong supports calling tools. In addition to the built-in file system tools, you can also specify your own external tools and MCP's stdio tools through `SingleExternalTool` and `StdIoServer` in `config.txt`.
+
+The `Call tools` dropdown option on the left side of the page supports the following options:
+
+  - ⚪ white indicates not using any tools
+  - 🔴 red indicates selecting all tools
+  - 🟢 green indicates selecting built-in tools
+  - 🟣 purple indicates selecting all custom external tools
+  - 🟡 yellow indicates selecting MCP tools
+  - other options indicate selecting only one tool
+
+Add tools in `config.txt`:
+
+**1. built-in tools**
+
+  These tools have been compiled in `chatsong` and do not require additional configuration of `config.txt`. They can be called directly.
+
+**2. custom external tools**
+
+  `command`: fill in the command to be called
+  `args`: fill in the script and other parameters
+  `description`: fill in the functionality of the tool. The model will use this description to determine whether to use it to complete a task
+  ```
+  external_tools: [
+    SingleExternalTool(
+      name: "The name of Tool 1",
+      command: "The command called by Tool 1, e.g., ./my_tool.exe",
+      description: "The description of Tool 1",
+      schema: r#"json format schema"#,
+    ),
+    SingleExternalTool(
+      name: "The name of Tool 2",
+      command: "The command called by Tool 1, e.g., python3",
+      args: ["Script and other parameters are specified in this list, e.g., my_tool.py"],
+      description: "The description of Tool 2",
+      schema: r#"json format schema"#,
+    )
+  ]
+  ```
+
+  Note that the `schema` parameter type and description should be filled in JSON format. As it may contain `"` and line breaks, it should be placed between `r"#` and `"#`. For example, the following example is a Python script I wrote myself to calculate the sum of two numbers. The first parameter is `--a`, which specifies the first number, the second parameter is `--b`, which specifies the second number, the `type`, which specifies the parameter type, and the `description`, which describes the function of the parameter:
+  ```
+  schema: r#"
+  {
+    "properties": {
+      "a": {
+        "type": "integer",
+        "description": "The first value.",
+      },
+      "b": {
+        "type": "integer",
+        "description": "The second value.",
+      },
+    },
+    "required": ["a", "b"],
+    "type": "object",
+  }
+  "#
+  ```
+
+**3. MCP stdio tools**
+
+  `command`: fill in the command to be called
+  `args`: fill in parameters
+  ```
+  mcp_servers: [
+    StdIoServer(
+      command: "./rust-mcp-filesystem",
+      args: [
+        "--allow-write",
+        "./",
+      ],
+    ),
+    StdIoServer(
+      command: "uvx",
+        args: [
+          "excel-mcp-server",
+          "stdio",
+        ],
+    ),
+  ]
+  ```
+
+For complex tasks, you can activate the `plan mode` (only valid when calling tools), which will first create a plan, break down the problem into multiple subtasks, and then complete them one by one. Each step will be judged based on the previously completed steps, whether to proceed to the next step or update the plan. If the task exceeds the capabilities of the model and specified tools, it will end directly and return the reason.
+
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/plan_mode.png" width="50%">
+
+## 🍔 Summarize and compress historical messages
+太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除图表将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮（<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">），对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
+
+Too many historical messages can take up valuable context. If previous messages are unrelated to recent tasks, you can use `contextual messages` to limit the number of historical messages included in each question, or click the delete button above the message box to delete them. But if there are many historical messages related to the current tasks, you can click the summary button (<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">) in the bottom left corner of the page to summarize and compress the historical messages within the specified range of `contextual messages`. This not only preserves the previous historical message information, but also reduces the use of context.
+
 ## 📺 Detailed Instructions
 [YouTube demo vedio](https://youtu.be/c1DeuIodiSk)
 
 [bilibili demo vedio](https://www.bilibili.com/video/BV1bBuzzAEXs)
+
+[Chinese demo](https://github.com/jingangdidi/chatsong/blob/main/doc/chinese_demo.md)
+
+[English demo](https://github.com/jingangdidi/chatsong/blob/main/doc/english_demo.md)
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-en-label.png">
 
@@ -83,7 +183,7 @@ This section remains pending completion and will be duly supplemented.
 - One Q&A pair can contain multiple messages (multiple consecutive questions + multiple consecutive answers)
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/QA-pair.png">
 
-## 🛠 Building from source
+## ⌨️ Building from source
 ```
 git clone https://github.com/jingangdidi/chatsong.git
 cd chatsong
@@ -117,6 +217,7 @@ Options:
     port: 8080,              // required
     google_engine_key: "",   // optional, used for web search
     google_search_key: "",   // optional, used for web search
+    allowed_path: "./",      // optional, allowed path for tools, multiple paths separated by commas, default: ./
     maxage: "1DAY",          // required, cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
     show_english: true,      // required, true: show english page，false: show chinese page
     outpath: "./chat-log",   // required, where to save chat log files
@@ -223,11 +324,84 @@ Options:
             name: "Rewrite to Rust",
             content: "Rewrite the following code in Rust.",
         ),
+    ],
+    external_tools: [
+        SingleExternalTool(
+            name: "complement_DNA_or_RNA",
+            command: "./complement-linux-x86_x64-musl",
+            description: "Calculate complement of given DNA or RNA",
+            schema: r#"
+{
+    "properties": {
+        "seq": {
+            "type": "string",
+            "description": "DNA or RNA sequence.",
+        },
+        "revcomp": {
+            "type": "boolean",
+            "description": "Whether to obtain the reverse complementary sequence. If present, enables reverse complementation.",
+        },
+        "rna": {
+            "type": "boolean",
+            "description": "Whether to use RNA alphabet.",
+        },
+    },
+    "required": ["seq"],
+    "type": "object",
+}
+"#,
+        ),
+        SingleExternalTool(
+            name: "add_two_value",
+            command: "python",
+            args: ["add_two_value.py"],
+            description: "add two value",
+            schema: r#"
+{
+    "properties": {
+        "a": {
+            "type": "integer",
+            "description": "The first value.",
+        },
+        "b": {
+            "type": "integer",
+            "description": "The second value.",
+        },
+    },
+    "required": ["a", "b"],
+    "type": "object",
+}
+"#,
+        ),
+    ],
+    mcp_servers: [
+        StdIoServer(
+            command: "./rust-mcp-filesystem",
+            args: [
+                "--allow-write",
+                "./",
+            ],
+        ),
+        StdIoServer(
+            command: "uvx",
+            args: [
+                "excel-mcp-server",
+                "stdio",
+            ],
+        ),
     ]
 )
 ```
 
 ## ⏰ changelog
+- [2025.12.?] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
+  - ⭐️Add: Add built-in filesystem tools.
+  - ⭐️Add: Support the use of custom external tools, specified through `SingleExternalTool` in `config.txt`.
+  - ⭐️Add: Support the use of MCP stdio tools, specified through `StdIoServer` in `config.txt`.
+  - ⭐️Add: When calling tools, chatsong supports the planning mode, which first breaks down complex problems into multiple small tasks, and then call tools to implement them one by one.
+  - ⭐️Add: Add a button to summarize the current history (bottom left corner of the page)
+  - 💪🏻Optimize: Enlarge the question input box.
+  - 💪🏻Optimize: When selecting models and tools from the dropdown menu, use clearer grouping.
 - [2025.11.06] release [v0.3.3](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.3)
   - 🛠Fix: When use streaming, if there is no error in obtaining the response but the choices are empty, the answer will not be sent to the client, and a message box for the answer will not be created on the left side of the page. The client messages number will be 1 less than the server, resulting in an error in the next question. Before ending the streaming answer, check if the total string of the answer is empty. If it is empty, send "no response result" as the answer.
   - ⭐️Add: Support Qwen3-vl api, you can send images (png, jpg, jpeg) or PDF documents (automatically converting each page into an image, note that the file extension must be lowercase (.pdf), otherwise only textual content will be extracted) for inquiry. You can use the officially provided Qwen3-VL model or run [llama.cpp](https://github.com/ggml-org/llama.cpp) locally.
