@@ -104,9 +104,21 @@
         transition: transform 0.3s;
     }
 
+    /* 左下总结压缩按钮 */
+    #left-compress {
+        left: 155px;
+        transition: transform 0.3s ease-in-out; /* 平滑过渡 */
+    }
+
+    #left-compress:hover {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s;
+    }
+
     /* 左下无痕模式按钮 */
     #left-incognito {
-        left: 155px;
+        left: 205px;
         transition: transform 0.3s ease-in-out; /* 平滑过渡 */
     }
 
@@ -400,7 +412,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 8vh;
+        height: 13vh;
         /*border: 1px solid blue;*/
     }
 
@@ -434,7 +446,7 @@
         /*border: none;*/
         color: var(--font-color);
         resize: none;
-        height: 5vh;
+        height: 10vh;
         overflow-y: hidden; /* hover时才显示 */
         border: 0px solid transparent;
         box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
@@ -471,7 +483,7 @@
     /* 对话区域 */
     .chat-content-area {
         overflow: auto;
-        height: 85vh;
+        height: 80vh;
         overflow-x: hidden;
     }
 
