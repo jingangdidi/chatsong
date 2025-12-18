@@ -157,7 +157,7 @@ ip_address: "192.168.1.5",
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/plan_mode.png" width="50%">
 
 ## 🍔 总结历史记录
-太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除图表将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮（<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">），对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
+太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除按钮将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮（<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">），对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
 
 ## 📺 详细示例
 [YouTube示例视频](https://youtu.be/c1DeuIodiSk)
