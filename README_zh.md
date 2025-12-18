@@ -25,6 +25,9 @@
 - ✂️ 支持删除问题或回答
 - 😎 支持无痕模式
 - 📡 支持调用Deepseek、Qwen、智谱GLM、月之暗面Kimi等兼容OpenAI格式的api
+- 支持内置文件系统工具（读写文件、压缩解压等）
+- 支持调用自定义的外部工具、MCP的stdio工具
+- 支持计划模式，复杂问题先制定计划，再调用工具逐个实现
 
 ## 🚀 使用示例
 **目录结构**
@@ -69,10 +72,93 @@ ip_address: "192.168.1.5",
 按下`Ctrl+C`将自动保存所有问答记录等信息至输出路径，下次开启服务可基于之前的问答继续提问。
 ```
 
+## 调用工具
+从`v0.4.0`开始支持调用工具，除了内置的文件系统工具，还可以通过`config.txt`的`SingleExternalTool`和`StdIoServer`指定自己的外部工具和MCP的stdio工具。
+在页面左侧的`调用工具`下拉选项中：
+- 白色⚪表示不使用任何工具
+- 红色🔴表示选择所有工具
+- 绿色🟢表示选择内置工具
+- 紫色🟣表示选择所有自定义的外部工具
+- 黄色🟡表示选择MCP工具
+- 其他选项表示单选一个工具
+
+在`config.txt`中添加工具：
+1. 内置工具
+  这些工具已经编译在`chatsong`内，不需要额外配置`config.txt`即可直接调用
+
+2. 自己的外部工具
+  `command`填写要调用的命令，`args`填写脚本以及其他参数，`description`填写该工具的功能，模型会据此判断是否使用该工具来完成某项任务
+  ```
+  external_tools: [
+      SingleExternalTool(
+          name: "工具1名称",
+          command: "工具1调用的程序，例如：./my_tool.exe",
+          description: "工具1的功能描述",
+          schema: r#"json格式参数说明"#,
+      ),
+      SingleExternalTool(
+          name: "工具2名称",
+          command: "工具2调用的程序，例如：python3",
+          args: ["脚本和其他参数在这个列表中指定，例如：my_tool.py"],
+          description: "工具2的功能描述",
+          schema: r#"json格式参数说明"#,
+      )
+  ]
+  ```
+  注意`schema`填写json格式的参数类型及说明，由于会含有`"`，因此放在`r#"`和`"#`之间，例如下面示例是自己写的一个python脚本，用来计算2个数的加和，第一个参数是`--a`指定第一个数，第二个参数是`--b`指定第二个数，`type`指定参数类型，`description`描述该参数的作用：
+  ```
+  {
+      "properties": {
+          "a": {
+              "type": "integer",
+              "description": "The first value.",
+          },
+          "b": {
+              "type": "integer",
+              "description": "The second value.",
+          },
+      },
+      "required": ["a", "b"],
+      "type": "object",
+  }
+  ```
+
+3. MCP的stdio工具
+  `command`填写要调用的命令，`args`填写参数，例如：
+  ```
+  mcp_servers: [
+      StdIoServer(
+          command: "./rust-mcp-filesystem",
+          args: [
+              "--allow-write",
+              "./",
+          ],
+      ),
+      StdIoServer(
+          command: "uvx",
+          args: [
+              "excel-mcp-server",
+              "stdio",
+          ],
+      ),
+  ]
+  ```
+
+对于复杂任务，可以开启`计划模式`（仅在调用工具时有效），会先制定计划，将问题拆分为多个子任务，然后逐个完成。每一步都会基于之前已完成的步骤进行判断，继续下一步还是更新计划。如果任务超出模型和指定工具的能力范围，则会直接结束，并返回原因。
+
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/plan_mode.png">
+
+## 总结历史记录
+太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除图表将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">，对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
+
 ## 📺 详细示例
 [YouTube示例视频](https://youtu.be/c1DeuIodiSk)
 
 [bilibili示例视频](https://www.bilibili.com/video/BV1bBuzzAEXs)
+
+[中文示例](https://github.com/jingangdidi/chatsong/blob/main/doc/chinese_demo.md)
+
+[英文示例](https://github.com/jingangdidi/chatsong/blob/main/doc/english_demo.md)
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-zh-label.png">
 
@@ -117,6 +203,7 @@ Options:
     port: 8080,              // 必填
     google_engine_key: "",   // 可以空着，网络搜索时要用
     google_search_key: "",   // 可以空着，网络搜索时要用
+    allowed_path: "./",      // 可以空着，调用工具时允许读写的路径，多个路径用英文逗号间隔，默认当前路径
     maxage: "1DAY",          // 必填，cookie的maxage，支持：SECOND, MINUTE, HOUR, DAY, WEEK
     show_english: true,      // 必填，true表示英文页面，fasle表示中文页面
     outpath: "./chat-log",   // 必填，问答记录的保存路径
@@ -223,11 +310,84 @@ Options:
             name: "Rewrite to Rust",
             content: "Rewrite the following code in Rust.",
         ),
+    ],
+    external_tools: [
+        SingleExternalTool(
+            name: "complement_DNA_or_RNA",
+            command: "./complement-linux-x86_x64-musl",
+            description: "Calculate complement of given DNA or RNA",
+            schema: r#"
+{
+    "properties": {
+        "seq": {
+            "type": "string",
+            "description": "DNA or RNA sequence.",
+        },
+        "revcomp": {
+            "type": "boolean",
+            "description": "Whether to obtain the reverse complementary sequence. If present, enables reverse complementation.",
+        },
+        "rna": {
+            "type": "boolean",
+            "description": "Whether to use RNA alphabet.",
+        },
+    },
+    "required": ["seq"],
+    "type": "object",
+}
+"#,
+        ),
+        SingleExternalTool(
+            name: "add_two_value",
+            command: "python",
+            args: ["add_two_value.py"],
+            description: "add two value",
+            schema: r#"
+{
+    "properties": {
+        "a": {
+            "type": "integer",
+            "description": "The first value.",
+        },
+        "b": {
+            "type": "integer",
+            "description": "The second value.",
+        },
+    },
+    "required": ["a", "b"],
+    "type": "object",
+}
+"#,
+        ),
+    ],
+    mcp_servers: [
+        StdIoServer(
+            command: "./rust-mcp-filesystem",
+            args: [
+                "--allow-write",
+                "./",
+            ],
+        ),
+        StdIoServer(
+            command: "uvx",
+            args: [
+                "excel-mcp-server",
+                "stdio",
+            ],
+        ),
     ]
 )
 ```
 
 ## ⏰ 更新记录
+- [2025.12.?] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
+  - ⭐️增加: 增加内置的文件系统工具，包含读写文件、压缩解压等
+  - ⭐️增加: 支持使用自定义的外部工具，在config.txt中通过SingleExternalTool指定
+  - ⭐️增加: 支持使用MCP的stdio工具，在config.txt中通过StdIoServer指定
+  - ⭐️增加: 调用工具时支持计划模式，先把复杂问题拆分为多个小任务，再调用工具逐个实现
+  - ⭐️增加: 增加总结当前历史记录的按钮（页面左下角）
+  - 💪🏻优化: 将问题输入框放大
+  - 💪🏻优化: 下拉选择模型和工具时，更清晰的分组
 - [2025.11.06] release [v0.3.3](https://github.com/jingangdidi/chatsong/releases/tag/v0.3.3)
   - 🛠修复：流式输出时，如果获取response无报错，但choices为空，则不会向前端页面发送答案，页面左侧不会创建回答的消息框，客户端消息数会比服务端少1，导致下次提问报错。在结束流式回答前，判断下回答的总字符串是否为空，如果为空，则发送“no response result”作为答案。
   - ⭐️增加：支持调用Qwen3-vl的api，发送图片（png、jpg、jpeg）或PDF文件（会自动将每页转为图片，注意格式后缀必须是小写`.pdf`，否则仅提取文本内容）进行提问。如果发送一篇pdf论文，每页大约占用1000个token，可以把最后引用文献那几页删掉以节省token。可以使用千问官方提供的Qwen3-VL的api，也可以使用[llama.cpp](https://github.com/ggml-org/llama.cpp)通过`llama-server`本地部署。
