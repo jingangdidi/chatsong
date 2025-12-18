@@ -93,8 +93,11 @@ Add tools in `config.txt`:
 **2. custom external tools**
 
   `command`: fill in the command to be called
+
   `args`: fill in the script and other parameters
+
   `description`: fill in the functionality of the tool. The model will use this description to determine whether to use it to complete a task
+
   ```
   external_tools: [
     SingleExternalTool(
@@ -136,7 +139,9 @@ Add tools in `config.txt`:
 **3. MCP stdio tools**
 
   `command`: fill in the command to be called
+
   `args`: fill in parameters
+
   ```
   mcp_servers: [
     StdIoServer(
@@ -161,8 +166,6 @@ For complex tasks, you can activate the `plan mode` (only valid when calling too
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/plan_mode.png" width="50%">
 
 ## 🍔 Summarize and compress historical messages
-太多的历史消息会占用宝贵的上下文，如果早前的消息与最近的问题无关，可以使用`上下文消息数`限制每次提问时包含的历史消息数量，也可以点击消息框上方的删除图表将其删除。但如果历史记录很多，又都与当前问题相关，则可以点击页面左下角的总结按钮（<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">），对指定`上下文消息数`范围内的历史记录进行总结压缩，这样既保留了之前的历史记录信息，有减少了上下文占用。
-
 Too many historical messages can take up valuable context. If previous messages are unrelated to recent tasks, you can use `contextual messages` to limit the number of historical messages included in each question, or click the delete button above the message box to delete them. But if there are many historical messages related to the current tasks, you can click the summary button (<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/format-space-less-svgrepo-com.svg" width="18" height="18" align="center">) in the bottom left corner of the page to summarize and compress the historical messages within the specified range of `contextual messages`. This not only preserves the previous historical message information, but also reduces the use of context.
 
 ## 📺 Detailed Instructions
