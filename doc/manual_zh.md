@@ -31,7 +31,7 @@
 ## 压缩总结上下文
 - 当前对话消息很多时，每次提问都带上太多消息记录会消耗很多token，如果之前问答信息与当前问题无关，可以使用`上下文消息数`限制发送当前问题时包含的消息记录。
 - 如果对话消息很多，且都与当前问题相关，还想减少token用量或上下文空间，可以点击页面左下角压缩总结按钮（左起第四个），会将`上下文消息数`范围内的问答信息压缩总结为一条信息。
-<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_button_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
 
 ## token用量统计
 - 页面左侧最后3项分别显示向LLM发送请求的总token、LLM返回的总token、最后一次提问发送和接收的总token。
@@ -49,18 +49,18 @@
 ## 基于图像问答
 - 模型需要支持图片提问，例如qwen3-vl系列模型。
 - 点击输入框左侧的上传附件按钮，可以选择上传图片或pdf文件。
-- 如果是pdf图片则会自动将每页转为一张图片（每页大约1000个token），每页的图片会作为一条单独消息框显示在页面右侧，再次按下回车前可以点击消息框上方的删除按钮，手动删除不重要的图片页，比如最后的参考文献，以节省token。
+- 如果是pdf文件（注意格式后缀`.pdf`全小写），则会自动将每页转为一张图片（每页大约1000个token），每页的图片会作为一条单独消息框显示在页面右侧，再次按下回车正式提问前，可以点击消息框上方的删除按钮，手动删除不重要的图片页，比如最后的参考文献，以节省token。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/upload_pdf_to_image.png" width="20%">
 
 ## 下载当前对话记录
 - 每个对话的记录都以`json`格式保存在输出路径下相应uuid文件中中。
 - 可以点击页面左下角保存按钮（左起第二个），将当前对话保存为一个无依赖的`html`文件。
-<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_button_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
 
 ## 无痕模式
 - 如果不想将当前对话保存至本地输出路径，可以点击页面左下角的无痕模式按钮（左起第五个）。
 - 图标为黑色眼镜表示已开启无痕模式，关闭当前页面再次打开，或刷新当前页面，都将丢失当前对话的记录、关闭chatsong服务时不会自动保存该对话，直接丢弃。
-<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_button_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
 
 ## 内网多用户访问
 - 在内网电脑A通过命令行参数`-a <ip>`，例如`-a 192.168.1.5`，指定ip地址开启chatsong服务，则内网的其他用户可以通过`http://192.168.1.5:8080/v1`调用chatsong服务。
