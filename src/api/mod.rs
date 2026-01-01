@@ -3,7 +3,6 @@ use axum::Router;
 pub mod parse_paras;
 pub mod info;
 pub mod error;
-pub mod token;
 pub mod prompt;
 pub mod web;
 pub mod openai;
@@ -12,6 +11,8 @@ pub mod pdf;
 pub mod html_page;
 pub mod graph;
 pub mod ctrlc;
+pub mod tools;
+pub mod mcp;
 
 mod handlers;
 mod v1;

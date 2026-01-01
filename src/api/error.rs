@@ -9,6 +9,7 @@ use axum::{
 };
 use base64::DecodeError;
 use glob::PatternError;
+use grep::regex::Error as grep_error;
 use openai_dive::v1::{
     resources::{
         chat::ChatCompletionParametersBuilderError,
@@ -126,6 +127,18 @@ pub enum MyError {
     #[error("Error - serde_json::to_string: {error}")]
     JsonToStringError{error: io::Error},
 
+    // parse json string error
+    #[error("Error - serde_json::from_str: {error}")]
+    SerdeJsonFromStrError{error: json_error},
+
+    // struct json Value error
+    #[error("Error - struct to json Value: {error}")]
+    StructToJsonValueError{error: json_error},
+
+    // parse json Value to struct error
+    #[error("Error - serde_json::from_value: {error}")]
+    SerdeJsonToStructError{error: json_error},
+
     // Response错误
     #[error("Error - {uuid} build Response: {error}")]
     ResponseError{uuid: String, error: http_error},
@@ -169,6 +182,38 @@ pub enum MyError {
     // base64解码为图片错误
     #[error("Error - decode base64 to image {file}: {error}")]
     Base64DecodeError{file: String, error: DecodeError},
+
+    // tool id not exist
+    #[error("Error - Tool {id} ({info}) not exist")]
+    ToolNotExistError{id: String, info: String},
+
+    // plan mode error
+    #[error("Error - {info}")]
+    PlanModeError{info: String},
+
+    // run command error
+    #[error("Error - {info}")]
+    CommandError{info: String},
+
+    // get stdout error
+    #[error("Error - {info}")]
+    StdOutError{info: String},
+
+    // get stderr error
+    #[error("Error - {info}")]
+    StdErrError{info: String},
+
+    // grep error
+    #[error("Error - grep error: {error}")]
+    GrepError{error: grep_error},
+
+    // MCP error
+    #[error("Error - {info}")]
+    McpError{info: String},
+
+    // other error
+    #[error("Error - {info}")]
+    OtherError{info: String},
 
     // 参数使用错误
     #[error("Error - {para}")]

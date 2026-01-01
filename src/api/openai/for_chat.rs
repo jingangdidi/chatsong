@@ -3,15 +3,18 @@ use futures::StreamExt;
 use openai_dive::v1::{
     api::Client,
     endpoints::chat::RoleTrackingStream,
-    resources::chat::{
-        ChatCompletionParameters,
-        ChatMessage,
-        ChatMessageContent,
-        DeltaChatMessage,
+    resources::{
+        chat::{
+            ChatCompletionParameters,
+            ChatMessage,
+            ChatMessageContent,
+            DeltaChatMessage,
+        },
+        shared::Usage,
     },
 };
 use tokio::sync::mpsc::Sender;
-use tokio::time::{sleep, Duration};
+//use tokio::time::{sleep, Duration};
 use tracing::{event, Level};
 
 /// info: 记录所有用户的信息
@@ -19,10 +22,9 @@ use tracing::{event, Level};
 use crate::{
     info::{
         insert_message, // 将指定message插入到指定uuid的messages中
-        //save_log, // 保存chat记录至指定路径下的uuid文件夹，以本次对话开始的时间戳为文件名，格式为json
-        //update_token, // 计算指定message的token数，并更新指定uuid的问题或答案的总token数
         DataType, // 存储问答信息的数据
         get_messages_num, // 获取指定uuid的messages总数
+        update_token,
     },
     api::handlers::chat::MainData,
     error::MyError,
@@ -43,6 +45,7 @@ pub async fn use_stream(
     show_thought: bool,
 ) -> Result<(), MyError> {
     let mut whole_answer = "".to_string(); // 存储完整答案
+    let mut msg_token = None;
     let mut role: u8 = 3; // 1表示User，2表示System，3表示Assistant，4表示Developer
     let mut think = true; // 是否属于think思维链部分
     let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
@@ -73,7 +76,7 @@ pub async fn use_stream(
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                     }
-                    sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                 },
                 DeltaChatMessage::System{content: ChatMessageContent::Text(c), ..} => {
                     whole_answer += &c;
@@ -86,7 +89,7 @@ pub async fn use_stream(
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                     }
-                    sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                 },
                 /*
                 DeltaChatMessage::Assistant{content: Some(ChatMessageContent::Text(c)), ..} => {
@@ -100,7 +103,7 @@ pub async fn use_stream(
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                     }
-                    sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                 },
                 */
                 DeltaChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
@@ -122,7 +125,7 @@ pub async fn use_stream(
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                     }
-                    sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                 },
                 DeltaChatMessage::Developer{content: ChatMessageContent::Text(c), ..} => {
                     whole_answer += &c;
@@ -135,7 +138,7 @@ pub async fn use_stream(
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                     }
-                    sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                 },
                 /*
                 DeltaChatMessage::Untagged{content: Some(ChatMessageContent::Text(c)), ..} => { // llama.cpp的llama-server的api传输的答案会在这里
@@ -212,6 +215,10 @@ pub async fn use_stream(
                 _ => (),
             }
         }
+        // get token usage from last response
+        if let Some(usage) = chat_response.usage {
+            msg_token = get_print_token(usage, &uuid);
+        }
     }
     // if whole_answer is empty, send `no response result` to client
     if whole_answer.is_empty() {
@@ -250,11 +257,7 @@ pub async fn use_stream(
         },
     };
     // 将回答加到问答记录中
-    insert_message(&uuid, message, tmp_time, false, DataType::Normal, None, model, None);
-    // 计算当前回答的token数，并更新当前uuid的回答的总token数
-    //update_token(&uuid, &whole_answer, false);
-    // 保存chat记录，每次回答完成后都保存一次
-    //save_log(&uuid);
+    insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
     Ok(())
 }
 
@@ -269,9 +272,11 @@ pub async fn not_use_stream(
     parameters: ChatCompletionParameters,
     model: &str,
     show_thought: bool,
+    insert_this_message: bool, // insert result to history messages
 ) -> Result<String, MyError> {
     //let result = client.chat().create(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
     let mut whole_answer = "".to_string(); // 存储完整答案
+    let mut msg_token = None;
     let mut role: u8 = 3; // 1表示User，2表示System，3表示Assistant，4表示Developer
     match client.chat().create(parameters).await { // 这里遇到错误不能直接返回，否则服务端与前端id差一个，后面代码insert_message没有执行，下个问题会显示在这个未回答完的答案末尾
         Ok(result) => {
@@ -351,6 +356,9 @@ pub async fn not_use_stream(
                 },
                 ChatMessage::Tool{content, ..} => event!(Level::INFO, "{}", content), // println!("{}", content),
             }
+            if let Some(usage) = result.usage {
+                msg_token = get_print_token(usage, &uuid);
+            }
         },
         Err(e) => event!(Level::ERROR, "{} {:?}", uuid, e),
     }
@@ -384,10 +392,32 @@ pub async fn not_use_stream(
         },
     };
     // 将回答加到问答记录中
-    insert_message(&uuid, message, tmp_time, false, DataType::Normal, None, model, None);
-    // 计算当前回答的token数，并更新当前uuid的回答的总token数
-    //update_token(&uuid, &whole_answer, false);
-    // 保存chat记录，每次回答完成后都保存一次
-    //save_log(&uuid);
+    if insert_this_message {
+        insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
+    } else if let Some(tokens) = msg_token {
+        update_token(&uuid, tokens);
+    }
     Ok(whole_answer)
+}
+
+// print and update total token usage
+fn get_print_token(usage: Usage, uuid: &str) -> Option<(u32, u32, u32)> { 
+    match (usage.prompt_tokens, usage.completion_tokens) {
+        (Some(prompt_tokens), Some(completion_tokens)) => {
+            event!(Level::INFO, "{} {{prompt_tokens: {}, completion_tokens: {}, total_tokens: {}}}", uuid, prompt_tokens, completion_tokens, usage.total_tokens);
+            Some((prompt_tokens, completion_tokens, usage.total_tokens))
+        },
+        (Some(prompt_tokens), None) => {
+            event!(Level::INFO, "{} {{prompt_tokens: {}, completion_tokens: None, total_tokens: {}}}", uuid, prompt_tokens, usage.total_tokens);
+            Some((prompt_tokens, 0, usage.total_tokens))
+        },
+        (None, Some(completion_tokens)) => {
+            event!(Level::INFO, "{} {{prompt_tokens: None, completion_tokens: {}, total_tokens: {}}}", uuid, completion_tokens, usage.total_tokens);
+            Some((0, completion_tokens, usage.total_tokens))
+        },
+        (None, None) => {
+            event!(Level::INFO, "{} {{prompt_tokens: None, completion_tokens: None, total_tokens: {}}}", uuid, usage.total_tokens);
+            Some((0, 0, usage.total_tokens))
+        },
+    }
 }

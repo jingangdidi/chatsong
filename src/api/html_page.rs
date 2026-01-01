@@ -17,6 +17,7 @@ use crate::{
 };
 
 /// 将svg图片编码为base64使用，注意要加上“data:image/svg+xml;base64,”前缀，notepad++设置编码为“以UTF-8无BOM格式编码”
+/// https://base64.run/
 const ICON_SHORTCUT: &str = include_str!("../../assets/image/robot-7.txt");
 const ICON_USER: &str = include_str!("../../assets/image/user-icon-1.txt");
 const ICON_CHATGPT: &str = include_str!("../../assets/image/robot-1.txt");
@@ -30,6 +31,7 @@ const ICON_SETTING: &str = include_str!("../../assets/image/setting.txt");
 const ICON_DELETE: &str = include_str!("../../assets/image/delete-svgrepo-com.svg");
 const ICON_INCOGNITO1: &str = include_str!("../../assets/image/incognito-svgrepo-com-1.txt");
 const ICON_INCOGNITO2: &str = include_str!("../../assets/image/incognito-svgrepo-com-2.txt");
+const ICON_COMPRESS: &str = include_str!("../../assets/image/format-space-less-svgrepo-com.txt");
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -60,6 +62,8 @@ struct LeftInfo {
 struct PageInfo {
     prompt:       LeftInfo,    // 指定prompt开启新对话
     name:         LeftInfo,    // 可选填的新对话名称
+    tool:         LeftInfo,    // call tools
+    plan_mode:    LeftInfo,    // plan mode
     model:        LeftInfo,    // 选择要用的模型
     message:      LeftInfo,    // 上下文消息数
     web:          LeftInfo,    // 网络搜索
@@ -67,10 +71,12 @@ struct PageInfo {
     uuid_current: LeftInfo,    // 当前uuid
     input:        LeftInfo,    // 输入的总token数
     output:       LeftInfo,    // 输出的总token数
+    context_len:  LeftInfo,    // context tokens
     cot:          LeftInfo,    // 思考的深度
     uuid_input:   LeftInfo,    // 要跳转的uuid
     uuid_drop:    LeftInfo,    // 下拉相关uuid
     temp:         LeftInfo,    // 温度
+    top_p:        LeftInfo,    // top-p
     stream:       LeftInfo,    // 流式输出
     voice:        LeftInfo,    // 声音
     copy:         String,      // 点击头像复制
@@ -78,7 +84,7 @@ struct PageInfo {
     m_qa_token:   [String; 4], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
     upload:       String,      // 上传文件的title
     textarea:     String,      // 输入框内的提示信息
-    button:       [String; 3], // 左下角设置、下载、使用说明这3个按钮的title
+    button:       [String; 4], // 左下角设置、下载、使用说明、压缩总结这4个按钮的title
     incognito:    [String; 3], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
     wait:         [String; 3], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
 }
@@ -89,17 +95,31 @@ impl PageInfo {
             PageInfo {
                 prompt: LeftInfo{ // 指定prompt开启新对话
                     label:       "start new chat".to_string(),
-                    title:       "Select a \"Prompt\" to initiate a new conversation; choose \"keep current chat\" to continue with the existing dialogue without starting afresh".to_string(),
+                    title:       "Select a &quot;Prompt&quot; to initiate a new conversation; choose &quot;keep current chat&quot; to continue with the existing dialogue without starting afresh".to_string(),
                     disabled:    Some("select prompt".to_string()),
                     option:      Some(vec![("keep current chat".to_string(), None), ("no prompt".to_string(), None)]),
                     placeholder: None,
                 },
                 name: LeftInfo{ // 可选填的新对话名称
-                    label:       "new chat name (optional)".to_string(),
-                    title:       "Feel free to designate a specific title for each new conversation, facilitating easier selection within the \"Related UUIDs\" section".to_string(),
+                    label:       "current chat name (optional)".to_string(),
+                    title:       "Feel free to designate a specific name for current conversation, facilitating easier selection within the &quot;Related UUIDs&quot; section".to_string(),
                     disabled:    None,
                     option:      None,
                     placeholder: Some("chat name (optional)".to_string()),
+                },
+                tool: LeftInfo{ // call tools
+                    label:       "call tools".to_string(),
+                    title:       "Choose one or more tools to solve complex problems. When using tools, a plan will be created first, and then implemented item by item. After each execution is completed, it will be judged whether the plan needs to be updated, and finally the final result will be returned. ⚪ not using any tools, 🔴 select all tools, 🟢 select built-in tools, 🟣 select all custom external tools, 🟡 select MCP tools, while other options indicate the selection of a single tool".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
+                },
+                plan_mode: LeftInfo{ // plan mode
+                    label:       "plan mode".to_string(),
+                    title:       "Effective when invoking &quot;call tools&quot;, the planning mode is activated to first devise a strategy, breaking down the problem into multiple sub-tasks, which are then addressed sequentially—ideal for handling complex tasks.".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
                 },
                 model: LeftInfo{ // 选择要用的模型
                     label:       "models".to_string(),
@@ -137,15 +157,22 @@ impl PageInfo {
                     placeholder: None,
                 },
                 input: LeftInfo{ // 输入的总token数
-                    label:       "input token".to_string(),
+                    label:       "total input tokens".to_string(),
                     title:       "The total input tokens used in the current conversation".to_string(),
                     disabled:    None,
                     option:      None,
                     placeholder: None,
                 },
                 output: LeftInfo{ // 输出的总token数
-                    label:       "output token".to_string(),
+                    label:       "total output tokens".to_string(),
                     title:       "The total output tokens used in the current conversation".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
+                },
+                context_len: LeftInfo{ // context tokens
+                    label:       "context usage".to_string(),
+                    title:       "The total number of tokens of prompt_tokens and completion_tokens in the last request, used to evaluate context usage, note that it will only be updated after each request".to_string(),
                     disabled:    None,
                     option:      None,
                     placeholder: None,
@@ -154,7 +181,14 @@ impl PageInfo {
                     label:       "reasoning effort".to_string(),
                     title:       "effort on reasoning for reasoning models and the visibility of the reasoning process, applicable solely to the reasoning models".to_string(),
                     disabled:    Some("select effort".to_string()),
-                    option:      Some(vec![("High & Hide the reasoning process".to_string(), Some("favors more complete reasoning".to_string())), ("High & Display the reasoning process".to_string(), Some("favors more complete reasoning".to_string())), ("Medium & Hide the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())), ("Medium & Display the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())), ("Low & Hide the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())), ("Low & Display the reasoning process".to_string(), Some("favors speed and economical token usage".to_string()))]),
+                    option:      Some(vec![
+                        ("Display the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())),
+                        ("Hide the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())),
+                        ("Display the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())),
+                        ("Hide the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())),
+                        ("Display the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
+                        ("Hide the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
+                    ]),
                     placeholder: None,
                 },
                 uuid_input: LeftInfo{ // 要跳转的uuid
@@ -178,6 +212,13 @@ impl PageInfo {
                     option:      None,
                     placeholder: Some("temperature".to_string()),
                 },
+                top_p: LeftInfo{ // top-p
+                    label:       "top-p".to_string(),
+                    title:       "An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: Some("top-p".to_string()),
+                },
                 stream: LeftInfo{ // 流式输出
                     label:       "stream".to_string(),
                     title:       "partial messages will be sent, like in ChatGPT".to_string(),
@@ -197,7 +238,7 @@ impl PageInfo {
                 m_qa_token: ["message ".to_string(), ", Q&A pair ".to_string(), ", ".to_string(), " tokens".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "upload files".to_string(), // 上传文件的title
                 textarea:   "Input your query (Press Shift+Enter for line breaks)".to_string(), // 输入框内的提示信息
-                button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string()], // 左下角设置、下载、使用说明这3个按钮的title
+                button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string()], // 左下角设置、下载、使用说明、压缩总结这4个按钮的title
                 incognito:  ["Activate incognito mode, where the current conversation will not be locally preserved upon program termination and shall be irrevocably discarded, refreshing or reopening the current page will also erase the conversation history".to_string(), "Disable the incognito mode, and your current conversation will be preserved locally upon exiting the application, allowing you to resume seamlessly during your next session".to_string(), "Ac".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
@@ -211,11 +252,25 @@ impl PageInfo {
                     placeholder: None,
                 },
                 name: LeftInfo{ // 可选填的新对话名称
-                    label:       "新对话名称（可选）".to_string(),
-                    title:       "每次开启新对话时，可以指定对话名称，这样在“相关uuid”中方便选择".to_string(),
+                    label:       "当前对话名称（可选）".to_string(),
+                    title:       "可以给当前对话指定一个名称，这样在“相关uuid”中方便选择".to_string(),
                     disabled:    None,
                     option:      None,
                     placeholder: Some("chat name (optional)".to_string()),
+                },
+                tool: LeftInfo{ // call tools
+                    label:       "调用工具".to_string(),
+                    title:       "选择一个或多个工具解决复杂问题。使用工具时会先制定计划，然后逐条实现，并在每条执行结束后判断是否需要更新计划，最后返回最终结果。⚪表示不使用任何工具，🔴表示选择所有工具，🟢表示选择内置工具，🟣表示选择所有自定义的外部工具，🟡表示选择MCP工具，其他选项表示单选一个工具".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
+                },
+                plan_mode: LeftInfo{ // plan mode
+                    label:       "计划模式".to_string(),
+                    title:       "调用工具时有效，开启计划模式时，会先制定计划，将问题拆分为多个子问题，然后逐个完成，适用于复杂任务".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
                 },
                 model: LeftInfo{ // 选择要用的模型
                     label:       "模型".to_string(),
@@ -266,11 +321,25 @@ impl PageInfo {
                     option:      None,
                     placeholder: None,
                 },
+                context_len: LeftInfo{ // context tokens
+                    label:       "上下文使用量".to_string(),
+                    title:       "上次提问发送的总token数+模型回答的token数，用于评估模型上下文使用量，注意每次回答之后才会更新".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
+                },
                 cot: LeftInfo{ // 思考的深度
                     label:       "思考的深度".to_string(),
                     title:       "选择思考的深度和是否显示思考过程，仅对CoT（chain of thought）模型有效".to_string(),
                     disabled:    Some("选择思考的深度".to_string()),
-                    option:      Some(vec![("Low--显示思考过程".to_string(), Some("简单问答，显示思考过程".to_string())), ("Low--不显示思考过程".to_string(), Some("简单问答，不显示思考过程".to_string())), ("Medium--显示思考过程".to_string(), Some("多步骤推理，显示思考过程".to_string())), ("Medium--不显示思考过程".to_string(), Some("多步骤推理，不显示思考过程".to_string())), ("High--显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())), ("High--不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string()))]),
+                    option:      Some(vec![
+                        ("显示思考过程".to_string(), Some("简单问答，显示思考过程".to_string())),
+                        ("不显示思考过程".to_string(), Some("简单问答，不显示思考过程".to_string())),
+                        ("显示思考过程".to_string(), Some("多步骤推理，显示思考过程".to_string())),
+                        ("不显示思考过程".to_string(), Some("多步骤推理，不显示思考过程".to_string())),
+                        ("显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())),
+                        ("不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string())),
+                    ]),
                     placeholder: None,
                 },
                 uuid_input: LeftInfo{ // 要跳转的uuid
@@ -289,10 +358,17 @@ impl PageInfo {
                 },
                 temp: LeftInfo{ // 温度
                     label:       "温度".to_string(),
-                    title:       "控制模型生成文本的随机性，取值范围为0~2。温度越高，生成的文本越随机、越发散；温度越低，生成的文本越保守、越集中".to_string(),
+                    title:       "控制模型生成文本的随机性，取值范围为0~2。温度越高，生成的文本越随机、越发散；温度越低，生成的文本越保守、越集中。即通过调整token生成的概率分布来控制输出的随机性".to_string(),
                     disabled:    None,
                     option:      None,
                     placeholder: Some("temperature".to_string()),
+                },
+                top_p: LeftInfo{ // top-p
+                    label:       "核采样".to_string(),
+                    title:       "控制模型生成文本的随机性，取值范围为0~1。将候选token按照概率从高到低排序，当累积概率超过设定的top-p累积概率阈值时，剩下的候选token将被舍弃，答案将从保留的token中选择。即通过限制模型考虑的token范围来控制输出的随机性".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: Some("top-p".to_string()),
                 },
                 stream: LeftInfo{ // 流式输出
                     label:       "流式输出".to_string(),
@@ -313,7 +389,7 @@ impl PageInfo {
                 m_qa_token: ["第".to_string(), "条信息，第".to_string(), "对问答，".to_string(), "个token".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "上传文件".to_string(), // 上传文件的title
                 textarea:   "输入你的问题 (Shift+Enter换行)".to_string(), // 输入框内的提示信息
-                button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string()], // 左下角设置、下载、使用说明这3个按钮的title
+                button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string()], // 左下角设置、下载、使用说明、压缩总结这4个按钮的title
                 incognito:  ["开启无痕模式，关闭程序时，当前对话不会被保存在本地，直接舍弃，刷新或重新打开当前页面也将丢弃对话记录".to_string(), "关闭无痕模式，关闭程序时，当前对话会被保存在本地，下次可以接着提问".to_string(), "开启".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
@@ -388,10 +464,24 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <input id='input-chat-name' class='left_para' type='text' name='chat-name' placeholder='{}'>
         </div>
 
+        <div class='top_add_space' title='{}'>
+            <label>{}</label>
+            <select id='select-tool' class='left_para for_focus' name='tool'>
+                {}
+                {}
+            </select>
+        </div>
+
+        <div class='top_add_space switch-toggle' title='{}'>
+            <label>{}</label>
+            <input id='select-plan' class='left_para for_focus' type='checkbox' name='plan'>
+            <label for='select-plan'></label>
+        </div>
+
         <!-- select model -->
         <div class='top_add_space' title='{}'>
             <label>{}</label>
-            <select id='select-model' class='left_para for_focus' name='model'>\n", page_data.name.title, page_data.name.label, page_data.name.placeholder.as_ref().unwrap(), page_data.model.title, page_data.model.label);
+            <select id='select-model' class='left_para for_focus' name='model'>\n", page_data.name.title, page_data.name.label, page_data.name.placeholder.as_ref().unwrap(), page_data.tool.title, page_data.tool.label, PARAS.tools.html, PARAS.mcp_servers.html, page_data.plan_mode.title, page_data.plan_mode.label, page_data.model.title, page_data.model.label);
     result += &PARAS.api.pulldown_model;
     result += r###"            </select>
         </div>
@@ -458,6 +548,12 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <label>{}</label>
             <input id='show-out-token' class='left_para'>
         </div>
+
+        <!-- show context token -->
+        <div class='top_add_space' title='{}'>
+            <label>{}</label>
+            <input id='show-context-token' class='left_para' placeholder='0'>
+        </div>
     </div>
 
     <div id='left-part-other' class='side-nav'>
@@ -466,12 +562,18 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <label>{}</label>
             <select id='select-effort' class='left_para for_focus' name='effort'>
                 <option disabled>--{}--</option>
-                <option value='1' selected title='{}'>{}</option>
-                <option value='2' title='{}'>{}</option>
-                <option value='3' title='{}'>{}</option>
-                <option value='4' title='{}'>{}</option>
-                <option value='5' title='{}'>{}</option>
-                <option value='6' title='{}'>{}</option>
+                <optgroup label='Low'>
+                    <option value='1' selected title='{}'>{}</option>
+                    <option value='2' title='{}'>{}</option>
+                </optgroup>
+                <optgroup label='Medium'>
+                    <option value='3' title='{}'>{}</option>
+                    <option value='4' title='{}'>{}</option>
+                </optgroup>
+                <optgroup label='High'>
+                    <option value='5' title='{}'>{}</option>
+                    <option value='6' title='{}'>{}</option>
+                </optgroup>
             </select>
         </div>
 
@@ -485,7 +587,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <select id='select-related-uuid' class='left_para for_focus' name='related-uuid'>
-                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
+                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
     for i in related_uuid_prompt {
         result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
     }
@@ -497,6 +599,12 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <input id='input-temperature' class='left_para' type='number' min='0' max='2' name='temperature' placeholder='{}'>
+        </div>
+
+        <!-- top-p -->
+        <div class='top_add_space' title='{}'>
+            <label>{}</label>
+            <input id='input-top-p' class='left_para' type='number' min='0' max='1' name='top-p' placeholder='{}'>
         </div>
 
         <!-- select stream -->
@@ -533,11 +641,34 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     <!-- chat part -->
     <div id='right-part' class='content'>
         <!-- chat content region -->
-        <div id='scrolldown' class='chat-content-area'>", page_data.temp.title, page_data.temp.label, page_data.temp.placeholder.as_ref().unwrap(), page_data.stream.title, page_data.stream.label, page_data.voice.title, page_data.voice.label, page_data.voice.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0);
+        <div id='scrolldown' class='chat-content-area'>", page_data.temp.title, page_data.temp.label, page_data.temp.placeholder.as_ref().unwrap(), page_data.top_p.title, page_data.top_p.label, page_data.top_p.placeholder.as_ref().unwrap(), page_data.stream.title, page_data.stream.label, page_data.voice.title, page_data.voice.label, page_data.voice.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0);
 
     let (next_msg_id, m_num, qa_num, logs) = get_log_for_display(uuid, true); // cookie对应的chat记录
     for log in logs.iter() {
         if log.is_query { // 用户输入的问题
+            let tmp_title = if log.token > 0 {
+                format!("{}{}{}{}{}{}{}", 
+                    page_data.m_qa_token[0],
+                    log.idx_m,
+                    page_data.m_qa_token[1],
+                    log.idx_qa,
+                    page_data.m_qa_token[2],
+                    log.token,
+                    page_data.m_qa_token[3],
+                )
+            } else {
+                format!("{}{}{}{}{}", 
+                    page_data.m_qa_token[0],
+                    log.idx_m,
+                    page_data.m_qa_token[1],
+                    log.idx_qa,
+                    if page_data.m_qa_token[2].ends_with("，") {
+                        page_data.m_qa_token[2].strip_suffix("，").unwrap()
+                    } else {
+                        ""
+                    },
+                )
+            };
             result += &format!("\n            <!-- user -->
             <div class='right-time'>
                 <span id='d{}' class='for_focus_button del_btn' title='{}'>
@@ -547,8 +678,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             </div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
-                    <div class='chat-txt right' id='m{}' title='{}{}{}{}{}{}{}'></div>
-                    <div class='chat-icon'>\n", log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, log.time, log.id, page_data.m_qa_token[0], log.idx_m, page_data.m_qa_token[1], log.idx_qa, page_data.m_qa_token[2], log.token, page_data.m_qa_token[3]);
+                    <div class='chat-txt right' id='m{}' title='{}'></div>
+                    <div class='chat-icon'>\n", log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, log.time, log.id, tmp_title);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -612,9 +743,12 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <a href='http://{}:{}{}/usage' id='left-usage' class='left-bottom' title='{}'>
             <img src='{}' aria-hidden='true' />
         </a>
+        <div id='left-compress' class='left-bottom' title='{}'>
+            <img src='{}' id='compress' aria-hidden='true' />
+        </div>
         <div id='left-incognito' class='left-bottom' title='{}'>
             <img src='{}' id='incognito' aria-hidden='true' />
-        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 });
+        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 });
     result += r###"
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
@@ -679,6 +813,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     var already_clear_log = false; // 是否已清除了当前的记录
     var for_markdown = ''; // 累加原始信息，用于markdown显示
     var del_id = ''; // 要删除的信息的id
+    var compress = 'false'; // summary/compress current chat history
     var submit_send_stop;
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
@@ -1221,7 +1356,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     msg_lr.setAttribute('title', '{}'+m_num+'{}'+qa_num+'{}'+current_token+'{}');
                 }} else {{
                     msg_lr.setAttribute('title', '{}'+m_num+'{}'+qa_num+'{}'); // 这里先不显示token数，等回答完成后再加上
-                }}", page_data.delete[1], page_data.delete[0], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2]);
+                }}", page_data.delete[1], page_data.delete[0], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], if page_data.m_qa_token[2].ends_with("，") { page_data.m_qa_token[2].strip_suffix("，").unwrap() } else { "" });
     result += r###"
                 /* 提问的头像和内容放到一个div右侧对齐 */
                 let q_icon_query_div = document.createElement("div");
@@ -1299,6 +1434,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         // https://stackoverflow.com/questions/1085801/get-selected-value-in-dropdown-list-using-javascript
         // 获取选择的模型
         var para_model = document.getElementById("select-model").value;
+        // get selected tools
+        var para_tool = document.getElementById("select-tool").value;
+        // plan mode
+        var para_plan = document.getElementById("select-plan").checked;
         // 获取选择的思考深度
         var para_effort = document.getElementById("select-effort").value;
         // 获取输入的对话名称
@@ -1313,6 +1452,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         }
         // 获取输入的temperature
         var para_temperature = document.getElementById("input-temperature").value;
+        // 获取输入的top-p
+        var para_top_p = document.getElementById("input-top-p").value;
         // 获取选择的stream
         var para_stm = document.getElementById("select-stm").checked;
         // 获取是否网络搜索
@@ -1338,7 +1479,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     result += r###"
         document.getElementById('input_query').disabled = true; // 完成回复之前禁止继续提问
         // 将参数加到问题后面
-        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature;
+        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature+"&topp="+para_top_p+"&tools="+para_tool+"&compress="+compress+"&plan="+para_plan;
+        compress = 'false';
         return [req, req2];
     }
     // 回答完成后恢复提问输入框
@@ -1347,7 +1489,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     result += &format!("        submit_send_stop.innerHTML = \"<img src='{}' class='search_btn' aria-hidden='true' />\";\n", ICON_SEND);
     result += r###"        isStopped = true;
         document.getElementById("select-prompt").value = '-1'; // prompt恢复为不开启新会话
-        document.getElementById("input-chat-name").value = ''; // 清空填写的对话名称
+        //document.getElementById("input-chat-name").value = ''; // 清空填写的对话名称
         document.getElementById("input-uuid").value = ''; // 清空填写的uuid，此时左下“current uuid”中显示的即是填写的uuid
         document.getElementById("input_query").value = "";
         document.getElementById('input_query').disabled = false; // 已完成回复，可以继续提问
@@ -1436,20 +1578,22 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 switch (currentEvent) {
                     case 'metadata':
                         incognito_toggle(jsonData.is_incognito);
+                        let answer_id = 'm'+(current_id - 1); // 当前回答的id
+                        let msg_lr = document.getElementById(answer_id);
+                        const currentTitle = msg_lr.getAttribute("title");
                         if (jsonData.current_token > 0) { // 回答结束，更新token数
-                            let answer_id = 'm'+(current_id - 1); // 当前回答的id
-                            let msg_lr = document.getElementById(answer_id);
-                            const currentTitle = msg_lr.getAttribute("title");
 "###;
     result += &format!("                            msg_lr.setAttribute('title', currentTitle+jsonData.current_token+'{}');", page_data.m_qa_token[3]);
     result += r###"
                         }
                         //console.log('Received metadata:', jsonData);
                         // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
+                        document.getElementById("input-chat-name").value = jsonData.chat_name;
                         document.getElementById("show-prompt").value = jsonData.prompt;
                         document.getElementById("show-uuid").value = jsonData.current_uuid;
                         document.getElementById("show-in-token").value = jsonData.in_token;
                         document.getElementById("show-out-token").value = jsonData.out_token;
+                        document.getElementById("show-context-token").value = jsonData.context_token;
                         related_uuid(jsonData.related_uuid);
                         if (autoScroll) {
                             scroll();
@@ -1556,6 +1700,20 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             controller = null;
         }
     });
+    // click left bottom summary/compress button
+    document.getElementById("left-compress").addEventListener("click", async(e) => {
+        if (isStopped) { // 发送问题
+            del_id = '';
+            compress = 'true';
+            await send_query_receive_answer();
+        } else { // 停止接收回答
+            //if (reader) reader.cancel();
+            controller.abort();
+            restore_input();
+            isStopped = true;
+            controller = null;
+        }
+    });
 </script>
 
 </html>
@@ -1608,12 +1766,35 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
     };
     for log in logs.iter() {
         if log.is_query { // 用户输入的问题
+            let tmp_title = if log.token > 0 {
+                format!("{}{}{}{}{}{}{}", 
+                    page_data.m_qa_token[0],
+                    log.idx_m,
+                    page_data.m_qa_token[1],
+                    log.idx_qa,
+                    page_data.m_qa_token[2],
+                    log.token,
+                    page_data.m_qa_token[3],
+                )
+            } else {
+                format!("{}{}{}{}{}", 
+                    page_data.m_qa_token[0],
+                    log.idx_m,
+                    page_data.m_qa_token[1],
+                    log.idx_qa,
+                    if page_data.m_qa_token[2].ends_with("，") {
+                        page_data.m_qa_token[2].strip_suffix("，").unwrap()
+                    } else {
+                        ""
+                    },
+                )
+            };
             result += &format!("            <!-- user -->
             <div class='right-time'>{}{}</div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
-                    <div class='chat-txt right' id='m{}' title='{}{}{}{}{}{}{}'></div>
-                    <div class='chat-icon'>\n", if log.is_web {"🌐 "} else {""}, log.time, log.id, page_data.m_qa_token[0], log.idx_m, page_data.m_qa_token[1], log.idx_qa, page_data.m_qa_token[2], log.token, page_data.m_qa_token[3]);
+                    <div class='chat-txt right' id='m{}' title='{}'></div>
+                    <div class='chat-icon'>\n", if log.is_web {"🌐 "} else {""}, log.time, log.id, tmp_title);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {

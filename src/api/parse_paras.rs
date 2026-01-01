@@ -1,24 +1,41 @@
 use std::collections::HashMap;
-use std::env::current_exe;
+use std::env::{current_dir, current_exe};
 use std::fs::{write, read_to_string, create_dir_all, remove_dir_all}; // remove_dir只删除空文件夹
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::thread;
 
 use argh::FromArgs;
 use chrono::NaiveDateTime;
 use once_cell::sync::Lazy;
 use ron::de::from_str;
 use serde::Deserialize;
-use tiktoken_rs::CoreBPE;
 use time::Duration;
 
 /// token: 编码类型，返回CoreBPE对象
 /// prompt: 内置的prompt
 /// error: 定义的错误类型，用于错误传递
 use crate::{
-    token::get_tokenizer,
     prompt::create_prompt,
     error::MyError,
+    tools::{
+        Tools,
+        built_in_tools::filesystem::utils::{
+            check_path,
+            normalize_path,
+        },
+        external_tools::{
+            SingleExternalTool,
+            ExternalTools,
+        },
+    },
+    mcp::{
+        McpServers,
+        stdio::{
+            StdIoServer,
+            StdIoServers,
+        },
+    },
 };
 
 /// 全局变量，可以修改，存储解析的命令行参数，在解析命令行参数时初始化
@@ -56,6 +73,10 @@ struct Paras {
     #[argh(option, short = 's')]
     search_key: Option<String>,
 
+    /// allowed path, used for call tools, multiple paths separated by commas, default: ./
+    #[argh(option, short = 'w')]
+    allowed_path: Option<String>,
+
     /// graph file, default: search for the latest *.graph file in the output path
     #[argh(option, short = 'g')]
     graph: Option<String>,
@@ -80,25 +101,36 @@ struct Paras {
 /// 存储解析后的命令行参数
 ///#[derive(Debug, Default)]
 pub struct ParsedParas {
-    pub api:        Api,                         // 各api的信息
-    pub addr:       [u8; 4],                     // 要监听的地址，默认127.0.0.1，解析为[127, 0, 0, 1]
-    pub addr_str:   String,                      // 要监听的地址，默认127.0.0.1
-    pub port:       u16,                         // 要监听的端口，默认8080
-    pub engine_key: String,                      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
-    pub search_key: String,                      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
-    pub bpe:        CoreBPE,                     // tokenizer编码类型，用于计算token数，目前固定为o200k，详见token.rs
-    pub prompt:     HashMap<usize, [String; 2]>, // 存储prompt
-    pub graph:      String,                      // 图文件，默认在指定输出路径下搜索最新的“时间戳.graph”，指定的文件不存在或没有搜索到则创建空图结构，每次使用`ctrl-c`停止服务时程序会自动保存图文件
-    pub maxage:     Duration,                    // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
-    pub share:      bool,                        // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
-    pub english:    bool,                        // 是否展示英文界面，不指定则展示中文界面
-    pub outpath:    String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
+    pub api:          Api,                         // 各api的信息
+    pub addr:         [u8; 4],                     // 要监听的地址，默认127.0.0.1，解析为[127, 0, 0, 1]
+    pub addr_str:     String,                      // 要监听的地址，默认127.0.0.1
+    pub port:         u16,                         // 要监听的端口，默认8080
+    pub engine_key:   String,                      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    pub search_key:   String,                      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    pub allowed_path: Vec<(PathBuf, PathBuf)>,     // allowed path (absolute path (may be not exist), normalized path) for tools, multiple paths separated by commas, default: ./
+    pub prompt:       HashMap<usize, [String; 2]>, // 存储prompt
+    pub graph:        String,                      // 图文件，默认在指定输出路径下搜索最新的“时间戳.graph”，指定的文件不存在或没有搜索到则创建空图结构，每次使用`ctrl-c`停止服务时程序会自动保存图文件
+    pub maxage:       Duration,                    // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
+    pub share:        bool,                        // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
+    pub english:      bool,                        // 是否展示英文界面，不指定则展示中文界面
+    pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
+    pub tools:        Tools,                       // all tools
+    pub mcp_servers:  McpServers,                  // mcp servers
 }
 
 /// 解析参数
 pub fn parse_para() -> Result<ParsedParas, MyError> {
     let para: Paras = argh::from_env();
     let (api, other_para) = Api::new(para.config)?;
+    let english = if para.english { // 是否展示英文界面，不指定则展示中文界面
+        true
+    } else {
+        if other_para.show_english {
+            true
+        } else {
+            false
+        }
+    };
     let out: ParsedParas = ParsedParas{
         api: api,
         addr: match &para.addr { // 要监听的地址，默认127.0.0.1，解析为[127, 0, 0, 1]
@@ -139,7 +171,22 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
             Some(s) => s,
             None => other_para.google_search_key,
         },
-        bpe: get_tokenizer("o200k"), // tokenizer编码类型，用于计算token数，目前固定为o200k，详见token.rs
+        allowed_path: match para.allowed_path { // allowed path (absolute path (may be not exist), normalized path) for tools, multiple paths separated by commas, default: ./
+            Some(w) => get_allowed_path(&w)?,
+            None => {
+                if other_para.allowed_path.is_empty() {
+                    let tmp_path = PathBuf::from("./");
+                    let absolute_path = match current_dir() {
+                        Ok(c) => c.join(tmp_path),
+                        Err(e) => return Err(MyError::OtherError{info: format!("get current dir: {}", e)}),
+                    };
+                    let normalized_path = absolute_path.canonicalize().unwrap();
+                    vec![(absolute_path, normalized_path)]
+                } else {
+                    get_allowed_path(&other_para.allowed_path)?
+                }
+            },
+        },
         prompt: if other_para.prompt.len() == 0 {
             create_prompt() // 参数文件没指定prompt，则使用默认prompt，使用索引获取
         } else {
@@ -152,7 +199,7 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         maxage: match para.maxage { // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK，不区分大小写
             Some(m) => get_maxage(&m)?,
             None => {
-                if other_para.maxage.is_empty() {
+                if !other_para.maxage.is_empty() {
                     get_maxage(&other_para.maxage)?
                 } else {
                     Duration::DAY
@@ -160,15 +207,7 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
             },
         },
         share: para.share, // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
-        english: if para.english { // 是否展示英文界面，不指定则展示中文界面
-            true
-        } else {
-            if other_para.show_english {
-                true
-            } else {
-                false
-            }
-        },
+        english, // 是否展示英文界面，不指定则展示中文界面
         outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
             Some(o) => get_outpath(&o),
             None => {
@@ -179,6 +218,8 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
                 }
             },
         },
+        tools: Tools::new(other_para.external_tools, english)?, // all tools
+        mcp_servers: McpServers::new(other_para.mcp_servers, english), // mcp servers
     };
     // 输出路径不存在则创建，已存在则删除其中的空uuid文件夹
     let tmp_outpath = Path::new(&out.outpath);
@@ -269,6 +310,18 @@ fn get_maxage(m: &str) -> Result<Duration, MyError> {
         },
         _ => return Err(MyError::ParaError{para: format!("-m only support SECOND, MINUTE, HOUR, DAY, WEEK, not {}", m)}),
     }
+}
+
+/// get allowed path
+fn get_allowed_path(p: &str) -> Result<Vec<(PathBuf, PathBuf)>, MyError> {
+    let mut allowed_path: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for i in p.split(",") {
+        let tmp_path = Path::new(&i);
+        let absolute_path = check_path(tmp_path, true)?;
+        let normalized_path = normalize_path(&absolute_path);
+        allowed_path.push((absolute_path, normalized_path));
+    }
+    Ok(allowed_path)
 }
 
 /// 去除输出路径的后缀“/”或“\”
@@ -386,27 +439,36 @@ struct Prompt {
 
 #[derive(Deserialize)]
 struct Para {
-    ip_address:        String,      // 要监听的地址，默认127.0.0.1
-    port:              u16,         // 要监听的端口，默认8080
-    google_engine_key: String,      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
-    google_search_key: String,      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
-    maxage:            String,      // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
-    show_english:      bool,        // true展示英文界面，false展示中文界面
-    outpath:           String,      // 问答结果输出路径
-    model_config:      Vec<Config>, // 模型参数
-    prompts:           Vec<Prompt>, // prompt
+    ip_address:        String,                  // 要监听的地址，默认127.0.0.1
+    port:              u16,                     // 要监听的端口，默认8080
+    google_engine_key: String,                  // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    google_search_key: String,                  // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    allowed_path:      String,                  // allowed path for tools, multiple paths separated by commas, default: ./
+    maxage:            String,                  // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
+    show_english:      bool,                    // true展示英文界面，false展示中文界面
+    outpath:           String,                  // 问答结果输出路径
+    model_config:      Vec<Config>,             // 模型参数
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    prompts:           Vec<Prompt>,             // prompt
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    external_tools:    Vec<SingleExternalTool>, // external tools
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    mcp_servers:       Vec<StdIoServer>,        // mcp servers, currently only support stdio, not http
 }
 
-#[derive(Deserialize)]
+//#[derive(Deserialize)]
 struct OptherPara {
     ip_address:        String,                      // 要监听的地址，默认127.0.0.1
     port:              u16,                         // 要监听的端口，默认8080
     google_engine_key: String,                      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     google_search_key: String,                      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    allowed_path:      String,                      // allowed path for tools, multiple paths separated by commas, default: ./
     maxage:            String,                      // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                        // true展示英文界面，false展示中文界面
     outpath:           String,                      // 问答结果输出路径
     prompt:            HashMap<usize, [String; 2]>, // key: 序号，value: [prompt名称, prompt内容]
+    external_tools:    ExternalTools,               // external tools
+    mcp_servers:       StdIoServers,                // mcp servers, currently only support stdio, not http
 }
 
 /// 支持的所有api
@@ -474,11 +536,12 @@ impl Api {
                 idx += 1;
                 models.insert(idx, (c.provider.clone(), m.name.clone(), m.is_cot));
                 if m.group != pulldown_model_group {
-                    pulldown_model += &format!("                <option disabled>---{} {}---</option>\n", c.provider, m.group); // 显示`---模型提供者 分组---`
+                    //pulldown_model += &format!("                <option disabled>---{} {}---</option>\n", c.provider, m.group); // 显示`---模型提供者 分组---`
+                    pulldown_model += &format!("                <optgroup label='{} {}'>\n", c.provider, m.group); // 显示`---模型提供者 分组---`
                     pulldown_model_group = m.group.clone();
                 }
                 pulldown_model += &format!(
-                    "                <option value='{}'{}{}>{}{}</option>\n",
+                    "                    <option value='{}'{}{}>{}{}</option>\n",
                     idx,
                     if m.is_default {
                         " selected"
@@ -505,12 +568,23 @@ impl Api {
                 }
             }
         }
+        pulldown_model += "                </optgroup>\n";
         if default == 0 { // 参数文件没有指定默认模型
             default = 1; // 使用参数文件中第一个模型作为默认模型
         }
         // 这里i要加1，即参数文件第一个prompt是1，因为内置“保持当前对话”是-1，“无prompt”是0
         let pulldown_prompt = all_para.prompts.iter().enumerate().fold("".to_string(), |acc, (i, p)| format!("{}                <option value='{}'>{}</option>\n", acc, i+1, p.name));
         let prompt: HashMap<usize, [String; 2]> = all_para.prompts.into_iter().enumerate().map(|(i, p)| (i+1, [p.name, p.content])).collect();
+        // get mcp servers
+        let mcp_servers = {
+            let handle = thread::spawn(|| {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    StdIoServers::new(all_para.mcp_servers).await
+                })
+            });
+            handle.join().unwrap()
+        }?;
         Ok(
             (
                 Api {
@@ -521,14 +595,17 @@ impl Api {
                     pulldown_model,  // 给html使用的模型下拉选项字符串，用于创建页面
                 },
                 OptherPara {
-                    ip_address:        all_para.ip_address,        // 要监听的地址，默认127.0.0.1
-                    port:              all_para.port,              // 要监听的端口，默认8080
-                    google_engine_key: all_para.google_engine_key, // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
-                    google_search_key: all_para.google_search_key, // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
-                    outpath:           all_para.outpath,           // 问答结果输出路径
-                    maxage:            all_para.maxage,            // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
-                    show_english:      all_para.show_english,      // true展示英文界面，false展示中文界面
-                    prompt,                                        // key: 序号，value: (prompt名称, prompt内容)
+                    ip_address:        all_para.ip_address,                         // 要监听的地址，默认127.0.0.1
+                    port:              all_para.port,                               // 要监听的端口，默认8080
+                    google_engine_key: all_para.google_engine_key,                  // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+                    google_search_key: all_para.google_search_key,                  // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+                    allowed_path:      all_para.allowed_path,                       // allowed path for tools, multiple paths separated by commas, default: ./
+                    outpath:           all_para.outpath,                            // 问答结果输出路径
+                    maxage:            all_para.maxage,                             // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
+                    show_english:      all_para.show_english,                       // true展示英文界面，false展示中文界面
+                    prompt,                                                         // key: 序号，value: (prompt名称, prompt内容)
+                    external_tools:    ExternalTools::new(all_para.external_tools), // external tools
+                    mcp_servers,                                                    // mcp servers, currently only support stdio, not http
                 },
             )
         )

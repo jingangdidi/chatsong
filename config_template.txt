@@ -3,6 +3,7 @@
     port: 8080,              // required
     google_engine_key: "",   // optional, used for web search
     google_search_key: "",   // optional, used for web search
+    allowed_path: "./",      // optional, allowed path for tools, multiple paths separated by commas, default: ./
     maxage: "1DAY",          // required, cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
     show_english: true,      // required, true: show english page，false: show chinese page
     outpath: "./chat-log",   // required, where to save chat log files
@@ -124,6 +125,71 @@
         Prompt(
             name: "Rewrite to Rust",
             content: "Rewrite the following code in Rust.",
+        ),
+    ],
+    external_tools: [
+        SingleExternalTool(
+            name: "complement_DNA_or_RNA",
+            command: "./complement-linux-x86_x64-musl",
+            description: "Calculate complement of given DNA or RNA",
+            schema: r#"
+{
+    "properties": {
+        "seq": {
+            "type": "string",
+            "description": "DNA or RNA sequence.",
+        },
+        "revcomp": {
+            "type": "boolean",
+            "description": "Whether to obtain the reverse complementary sequence. If present, enables reverse complementation.",
+        },
+        "rna": {
+            "type": "boolean",
+            "description": "Whether to use RNA alphabet.",
+        },
+    },
+    "required": ["seq"],
+    "type": "object",
+}
+"#,
+        ),
+        SingleExternalTool(
+            name: "add_two_value",
+            command: "python",
+            args: ["./doc/add_two_value.py"],
+            description: "add two value",
+            schema: r#"
+{
+    "properties": {
+        "a": {
+            "type": "integer",
+            "description": "The first value.",
+        },
+        "b": {
+            "type": "integer",
+            "description": "The second value.",
+        },
+    },
+    "required": ["a", "b"],
+    "type": "object",
+}
+"#,
+        ),
+    ],
+    mcp_servers: [
+        StdIoServer(
+            command: "./rust-mcp-filesystem",
+            args: [
+                "--allow-write",
+                "./",
+            ],
+        ),
+        StdIoServer(
+            command: "uvx",
+            args: [
+                "excel-mcp-server",
+                "stdio",
+            ],
         ),
     ]
 )

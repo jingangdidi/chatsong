@@ -28,7 +28,6 @@ use crate::{
         insert_message, // 将指定message插入到指定uuid的messages中
         DataType, // 存储问答信息的数据
         try_read_file, // 判断指定字符串是否是指定uuid中的文件，如果是则读取内容
-        token_count_str, // 计算指定字符串的token数
         get_msg_token, // pos>=0表示索引位置，pos<0表示倒数第几个，比如0表示第1个，1表示第2个，-1表示最后一个，-2表示倒数第个
     },
     openai::for_image::image_to_base64, // 图片转base64，返回base64编码的字符串
@@ -52,7 +51,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
     // uuid文件夹不存在则创建
     create_uuid_dir(&uuid)?;
     // 获取上传的每个文件，保存到服务端
-    let mut file_token: HashMap<String, usize> = HashMap::new(); // 存储上传的文件的token数
+    let mut file_token: HashMap<String, u32> = HashMap::new(); // 存储上传的文件的token数
     while let Some(mut field) = multipart.next_field().await.map_err(|e| MyError::ParseMultipartError{error: e})? {
         // 获取文件名
         let name = match field.file_name() {
@@ -85,7 +84,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(name.clone()),
                 name: None,
             };
-            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
+            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
             file_token.insert(name, get_msg_token(&uuid, -1)); // pos>=0表示索引位置，pos<0表示倒数第几个，比如0表示第1个，1表示第2个，-1表示最后一个，-2表示倒数第个
         } else if [".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"].iter().any(|x| lowercase_name.ends_with(x)) {
             file_token.insert(name.clone(), 0);
@@ -93,7 +92,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(name),
                 name: None,
             };
-            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Voice, None, "", None); // 以音频文件名称作为用户提问内容
+            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Voice, None, "", None); // 以音频文件名称作为用户提问内容
         } else {
             let content = if lowercase_name.ends_with(".pdf") {
                 match extract_pdf_content(&uuid, &PARAS.outpath, &name) {
@@ -130,12 +129,12 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                     file_content
                 }
             };
-            file_token.insert(name.clone(), token_count_str(&content));
+            file_token.insert(name.clone(), 0);
             let message = ChatMessage::User{
                 content: ChatMessageContent::Text(content),
                 name: None,
             };
-            insert_message(&uuid, message, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Raw(name), None, "", None); // 以文件名称作为用户提问内容，并记录提取的内容字符串
+            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Raw(name), None, "", None); // 以文件名称作为用户提问内容，并记录提取的内容字符串
         }
     }
     let response = serde_json::to_string(&file_token).map_err(|e| MyError::ToJsonStirngError{uuid: uuid, error: e})?;
