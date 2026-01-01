@@ -24,8 +24,8 @@
 - 如果是复杂问题，可以开启`计划模式`（仅调用工具时有效），会先制定计划，先把发送的问题拆分为多个子问题，然后逐一完成，每步的结果都会以一条单独消息返回页面。如果模型自身和选择的工具都无法完成发送的问题，则会停止回答，并返回一条信息解释缺少什么能力。
 - 调用工具支持选择同一分组的所有工具，也可以只选择一个工具，选择的工具越多，消耗的token也越多。
 - 目前内置了`file system`工具，主要包括文件读写、压缩解压等访问本地数据的能力。
-- 可以在`config.txt`中自定义MCP的stdio工具，比如读写excel、访问网络，具体格式见示例`config_template.txt`。
-- 可以在`config.txt`中自定义自己写的外部工具，比如自己写的python脚本（注意参数需要用`--`指定），具体格式见示例`config_template.txt`。
+- 可以在`config.txt`中自定义MCP的stdio工具，比如读写excel、访问网络，具体格式见示例[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)。
+- 可以在`config.txt`中自定义自己写的外部工具，比如自己写的python脚本（注意参数需要用`--`指定），具体格式见示例[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/call_tools_zh.png" width="20%">
 
 ## 压缩总结上下文
@@ -53,13 +53,13 @@
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/upload_pdf_to_image.png" width="20%">
 
 ## 下载当前对话记录
-- 每个对话的记录都以`json`格式保存在输出路径下相应uuid文件中中。
+- 每个对话的记录都以`json`格式保存在输出路径下相应uuid文件中。
 - 可以点击页面左下角保存按钮（左起第二个），将当前对话保存为一个无依赖的`html`文件。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
 
 ## 无痕模式
-- 如果不想将当前对话保存至本地输出路径，可以点击页面左下角的无痕模式按钮（左起第五个）。
-- 图标为黑色眼镜表示已开启无痕模式，关闭当前页面再次打开，或刷新当前页面，都将丢失当前对话的记录、关闭chatsong服务时不会自动保存该对话，直接丢弃。
+- 如果不想将当前对话保存至本地输出路径，可以点击页面左下角的无痕模式按钮（右起第一个）。
+- 图标为黑色眼镜表示已开启无痕模式，关闭当前页面再次打开，或刷新当前页面，都将丢失当前对话的记录；关闭chatsong服务时不会自动保存该对话，直接丢弃。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
 
 ## 内网多用户访问
