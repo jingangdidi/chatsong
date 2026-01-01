@@ -398,7 +398,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2026.01.?] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
+- [2026.01.01] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
   - ⭐️Add: Add built-in filesystem tools.
   - ⭐️Add: Support the use of custom external tools, specified through `SingleExternalTool` in `config.txt`.
   - ⭐️Add: Support the use of MCP stdio tools, specified through `StdIoServer` in `config.txt`.

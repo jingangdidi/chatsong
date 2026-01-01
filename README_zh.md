@@ -389,7 +389,7 @@ Options:
 ```
 
 ## ⏰ 更新记录
-- [2026.01.?] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
+- [2026.01.01] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
   - ⭐️增加: 增加内置的文件系统工具，包含读写文件、压缩解压等
   - ⭐️增加: 支持使用自定义的外部工具，在config.txt中通过SingleExternalTool指定
   - ⭐️增加: 支持使用MCP的stdio工具，在config.txt中通过StdIoServer指定
