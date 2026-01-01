@@ -173,9 +173,9 @@ Too many historical messages can take up valuable context. If previous messages 
 
 [bilibili demo vedio](https://www.bilibili.com/video/BV1bBuzzAEXs)
 
-[Chinese demo](https://github.com/jingangdidi/chatsong/blob/main/doc/chinese_demo.md)
+[Chinese manual](https://github.com/jingangdidi/chatsong/blob/main/doc/manual_zh.md)
 
-[English demo](https://github.com/jingangdidi/chatsong/blob/main/doc/english_demo.md)
+[English manual](https://github.com/jingangdidi/chatsong/blob/main/doc/manual_en.md)
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-en-label.png">
 

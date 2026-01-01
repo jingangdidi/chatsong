@@ -164,9 +164,9 @@ ip_address: "192.168.1.5",
 
 [bilibili示例视频](https://www.bilibili.com/video/BV1bBuzzAEXs)
 
-[中文示例](https://github.com/jingangdidi/chatsong/blob/main/doc/chinese_demo.md)
+[中文说明](https://github.com/jingangdidi/chatsong/blob/main/doc/manual_zh.md)
 
-[英文示例](https://github.com/jingangdidi/chatsong/blob/main/doc/english_demo.md)
+[英文说明](https://github.com/jingangdidi/chatsong/blob/main/doc/english_demo.md)
 
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/screenshot-zh-label.png">
 
