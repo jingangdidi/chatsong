@@ -5,12 +5,14 @@
 - `config.txt`中`maxage`设置当前使用的对话，在最后一次提问后多长时间内，再次打开页面还显示该对话，如果超过了`maxage`则会开启一个新对话，之前的对话可通过在`uuid`中输入对话的uuid访问。例如默认`1DAY`，当前对话最后一次提问是9点，第二天9点之前再次打开页面（或没关闭页面直接提问），还显示这个对话，可继续提问，若在9点后打开页面（或没关闭页面直接提问），会自动开启一个新对话。这个设置是为了避免不相关的问题都在同一个对话中。
 - 每次提问时都可以填写或修改`当前对话名称`。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/start_new_chat_zh.png" width="20%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/prompt_1.5x.gif">
 
 ## 连续的问题或答案
 - 提交问题后不会直接向LLM发送求取，需要在不输入内容时再按一次回车才会确认发送，这样的好处是可以连续输入多次，比如把一个复杂问题分多次描述。
 - 如果对当前使用的模型的回答不满意，可以直接按回车（在此之前可以在页面左侧`模型`中切换模型），会忽略最后一次提问后面的所有回答，重新进行回答。
 - 如果提问时在页面左侧`调用工具`中选择了工具，则LLM每次调用工具的结果都会以单独一条消息返回，页面显示的就是多个答案消息框。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/QA-pair.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/multiple_models_1.5x.gif">
 
 ## 上下文消息数
 - 该下拉选项可以自定义每次提问时，将之前的多少条信息也一起发送给模型。
@@ -27,6 +29,7 @@
 - 可以在`config.txt`中自定义MCP的stdio工具，比如读写excel、访问网络，具体格式见示例[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)。
 - 可以在`config.txt`中自定义自己写的外部工具，比如自己写的python脚本（注意参数需要用`--`指定），具体格式见示例[config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt)。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/call_tools_zh.png" width="20%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/mcp_1.5x.gif">
 
 ## 压缩总结上下文
 - 当前对话消息很多时，每次提问都带上太多消息记录会消耗很多token，如果之前问答信息与当前问题无关，可以使用`上下文消息数`限制发送当前问题时包含的消息记录。

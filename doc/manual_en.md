@@ -5,12 +5,14 @@
 - The `maxage` setting in `config.txt` determines how long a conversation remains persistent after its last interaction. If the time elapsed exceeds this threshold, such as the default 1DAY, a new session will automatically begin upon re-entry. Previous conversations may still be accessed by entering their `uuid`. For instance, if the final query was made at 9 AM, the same session persists until 9 AM the next day, even without closing the page; beyond that window, a new chat is initiated. This mechanism prevents unrelated queries from polluting a single dialogue thread.
 - Each query allows you to define or modify the current conversation title.
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/start_new_chat_en.png" width="20%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/prompt_1.5x.gif">
 
 ## Continuous Queries and Responses
 - After submitting a question, no immediate request is sent to the LLM. Instead, pressing Enter again while the input field is empty confirms and transmits the message. This design enables users to enter multiple questions sequentially, for example, breaking down a complex query into parts over several inputs.
 - Should you remain dissatisfied with the model's response, simply press Enter (after optionally switching models via the `model` dropdown on the left). This discards all subsequent replies following the last input, prompting a fresh generation.
 - When a tool is selected in the `call tools` section on the left, each invocation returns as an individual message block, enabling the display of multiple answer segments simultaneously.
 <img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/QA-pair.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/multiple_models_1.5x.gif">
 
 ## Context Length Management
 - This dropdown allows customization of how many prior chat logs are included when sending a new query to the model.
@@ -27,6 +29,7 @@
 - Custom MCP stdio tools, such as Excel manipulation or network access, can be configured in `config.txt`, following the syntax detailed in [config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt).
 - External scripts (e.g., Python script) may also be integrated via `config.txt`, provided arguments are prefixed with `--`. Refer to [config_template.txt](https://github.com/jingangdidi/chatsong/blob/main/config_template.txt) for precise formatting guidelines.
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/call_tools_en.png" width="20%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/mcp_1.5x.gif">
 
 ## Context Compression & Summarization
 - When a conversation accumulates extensive history, transmitting all prior messages with each query becomes inefficient due to high token cost. If earlier interactions are irrelevant to the current inquiry, use `contextual messages` to restrict the number of included messages.
