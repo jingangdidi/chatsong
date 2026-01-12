@@ -35,6 +35,7 @@
 - When a conversation accumulates extensive history, transmitting all prior messages with each query becomes inefficient due to high token cost. If earlier interactions are irrelevant to the current inquiry, use `contextual messages` to restrict the number of included messages.
 - When the dialogue is both lengthy and contextually cohesive, yet efficiency is desired, click the `Compress & Summarize` button (fourth from the left in the bottom-left corner). This condenses the most recent Q&A pairs within the specified context range into a single, concise summary message, reducing both token usage and context load.
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/compress_1.5x.gif">
 
 ## Token Usage Statistics
 - The three entries at the far left of the interface display cumulative token counts: total tokens sent to the LLM, total received from it, and the combined volume of the most recent request-response cycle.
@@ -64,6 +65,7 @@
 - To prevent local storage of the current conversation, activate `Incognito Mode` via the button on the bottom-left (first from the right).
 - A black eye icon indicates that incognito mode is enabled. Upon closing the browser tab, reopening it, or refreshing, the conversation history vanishes. Furthermore, terminating the chatsong service will discard the session without saving, ensuring complete privacy.
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/incognito_mode_1.5x.gif">
 
 ## Internal Network Multi-User Access
 - On machine A within your local network, launch `chatsong` using the command-line flag `-a <ip>`, e.g., `-a 192.168.1.5`, to bind the service to a specific IP address. Other users on the same network can then access the API at `http://192.168.1.5:8080/v1`.

@@ -35,6 +35,7 @@
 - 当前对话消息很多时，每次提问都带上太多消息记录会消耗很多token，如果之前问答信息与当前问题无关，可以使用`上下文消息数`限制发送当前问题时包含的消息记录。
 - 如果对话消息很多，且都与当前问题相关，还想减少token用量或上下文空间，可以点击页面左下角压缩总结按钮（左起第四个），会将`上下文消息数`范围内的问答信息压缩总结为一条信息。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/compress_1.5x.gif">
 
 ## token用量统计
 - 页面左侧最后3项分别显示向LLM发送请求的总token、LLM返回的总token、最后一次提问发送和接收的总token。
@@ -64,6 +65,7 @@
 - 如果不想将当前对话保存至本地输出路径，可以点击页面左下角的无痕模式按钮（右起第一个）。
 - 图标为黑色眼镜表示已开启无痕模式，关闭当前页面再次打开，或刷新当前页面，都将丢失当前对话的记录；关闭chatsong服务时不会自动保存该对话，直接丢弃。
 <img src="https://github.com/jingangdidi/chatsong/raw/main/doc/left_bottom_button.png" width="50%">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/doc/incognito_mode_1.5x.gif">
 
 ## 内网多用户访问
 - 在内网电脑A通过命令行参数`-a <ip>`，例如`-a 192.168.1.5`，指定ip地址开启chatsong服务，则内网的其他用户可以通过`http://192.168.1.5:8080/v1`调用chatsong服务。
