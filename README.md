@@ -7,7 +7,7 @@
 
 **轻量级大语言模型OpenAI格式api调用工具，无需安装，仅一个~10M可执行文件，支持自定义多种模型（OpenAI、Claude、Gemini、DeepSeek等，以及第三方提供的api）和prompt。**
 
-<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo_2x.gif">
+<img src="https://github.com/jingangdidi/chatsong/raw/main/assets/image/demo.png">
 
 ## 👑 Features
 - ​💪​ Single-file executable - no installation required
