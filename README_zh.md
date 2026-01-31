@@ -92,13 +92,14 @@ ip_address: "192.168.1.5",
 
 **2. 自己的外部工具**
 
-  `command`填写要调用的命令，`args`填写脚本以及其他参数，`description`填写该工具的功能，模型会据此判断是否使用该工具来完成某项任务
+  `command`填写要调用的命令，`args`填写脚本以及其他参数，`description`填写该工具的功能，模型会据此判断是否使用该工具来完成某项任务，`approval`表示调用该工具是否需要用户确认
   ```
   external_tools: [
     SingleExternalTool(
       name: "工具1名称",
       command: "工具1调用的程序，例如：./my_tool.exe",
       description: "工具1的功能描述",
+      approval: false,
       schema: r#"json格式参数说明"#,
     ),
     SingleExternalTool(
@@ -106,6 +107,7 @@ ip_address: "192.168.1.5",
       command: "工具2调用的程序，例如：python3",
       args: ["脚本和其他参数在这个列表中指定，例如：my_tool.py"],
       description: "工具2的功能描述",
+      approval: true,
       schema: r#"json格式参数说明"#,
     )
   ]
@@ -325,6 +327,7 @@ Options:
             name: "complement_DNA_or_RNA",
             command: "./complement-linux-x86_x64-musl",
             description: "Calculate complement of given DNA or RNA",
+            approval: false,
             schema: r#"
 {
     "properties": {
@@ -351,6 +354,7 @@ Options:
             command: "python",
             args: ["add_two_value.py"],
             description: "add two value",
+            approval: false,
             schema: r#"
 {
     "properties": {
@@ -389,6 +393,14 @@ Options:
 ```
 
 ## ⏰ 更新记录
+- [2026.01.?] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
+  - 🛠修复：内置工具`tail_file`和`read_file`。
+  - 🛠修复：调用工具时序号始终为1。
+  - ⭐️增加：调用内置工具`create_directory`、`edit_file`、`move_file`、`unzip_file`、`write_file`、`zip_directory`、`zip_files`前，会先弹窗要求用户确认是否继续。
+  - ⭐️增加：自定义的外部工具`SingleExternalTool`增加`approval`，调用该工具前是否需要弹窗确认。
+  - ⭐️增加：`-A`参数，调用所有工具时都不弹窗确认。
+  - 💪🏻优化: 计划模式prompt优化，使整个流程更健壮。
+  - 💪🏻优化: 调用`edit_file`时更好的显示修改的差异。
 - [2026.01.01] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
   - ⭐️增加: 增加内置的文件系统工具，包含读写文件、压缩解压等
   - ⭐️增加: 支持使用自定义的外部工具，在config.txt中通过SingleExternalTool指定

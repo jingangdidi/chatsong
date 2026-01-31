@@ -98,12 +98,15 @@ Add tools in `config.txt`:
 
   `description`: fill in the functionality of the tool. The model will use this description to determine whether to use it to complete a task
 
+  `approval`: does calling this tool require user confirmation.
+
   ```
   external_tools: [
     SingleExternalTool(
       name: "The name of Tool 1",
       command: "The command called by Tool 1, e.g., ./my_tool.exe",
       description: "The description of Tool 1",
+      approval: false,
       schema: r#"json format schema"#,
     ),
     SingleExternalTool(
@@ -111,6 +114,7 @@ Add tools in `config.txt`:
       command: "The command called by Tool 1, e.g., python3",
       args: ["Script and other parameters are specified in this list, e.g., my_tool.py"],
       description: "The description of Tool 2",
+      approval: true,
       schema: r#"json format schema"#,
     )
   ]
@@ -334,6 +338,7 @@ Options:
             name: "complement_DNA_or_RNA",
             command: "./complement-linux-x86_x64-musl",
             description: "Calculate complement of given DNA or RNA",
+            approval: false,
             schema: r#"
 {
     "properties": {
@@ -360,6 +365,7 @@ Options:
             command: "python",
             args: ["add_two_value.py"],
             description: "add two value",
+            approval: false,
             schema: r#"
 {
     "properties": {
@@ -398,6 +404,14 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2026.01.?] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
+  - 🛠Fix: built-in tool `tail_file` and `read_file`.
+  - 🛠Fix: When calling tools, the ID number is always 1.
+  - ⭐️Add: Before calling built-in tools `create_directory`, `edit_file`, `move_file`, `unzip_file`, `write_file`, `zip_directory`, `zip_files`, a pop-up window will appear asking the user to confirm whether to continue.
+  - ⭐️Add: Add `approval` to the custom external tool `SingleExternalTool`.
+  - ⭐️Add: Add `-A`: approval to call all tools without pop-up prompts.
+  - 💪🏻Optimize: Plan mode prompt optimization to make the entire process more robust.
+  - 💪🏻Optimize: Dispaly pretty diffs when calling `edit_file`.
 - [2026.01.01] release [v0.4.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.0)
   - ⭐️Add: Add built-in filesystem tools.
   - ⭐️Add: Support the use of custom external tools, specified through `SingleExternalTool` in `config.txt`.
