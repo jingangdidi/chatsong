@@ -14,6 +14,7 @@ use crate::{
 };
 
 /// function calling result
+#[derive(Clone)]
 pub enum CallToolResult {
     CallTool((ChatMessage, Vec<(String, String, String, Option<String>)>)), // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
     Text(String), // normal text result, not call tool

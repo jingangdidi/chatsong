@@ -67,4 +67,14 @@ impl BuiltIn for MoveFile {
         rename(valid_src_path, valid_dest_path)?;
         Ok(format!("Successfully move {} to {}", &params.src_path, &params.dest_path))
     }
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        if is_en {
+            Ok(Some(format!("Do you allow calling the move_file tool to move {} to {} ?{}", params.src_path, params.dest_path, info.unwrap_or_default())))
+        } else {
+            Ok(Some(format!("是否允许调用 move_file 工具将 {} 移动到 {}？{}", params.src_path, params.dest_path, info.unwrap_or_default())))
+        }
+    }
 }

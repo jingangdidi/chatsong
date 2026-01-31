@@ -93,7 +93,7 @@ impl TailFile {
         } else {
             // https://github.com/rust-mcp-stack/rust-mcp-filesystem/pull/70
             //*newline_positions.get(line_count - n).unwrap_or(&0) + 1
-            *newline_positions.get(n).unwrap_or(&0) + 1
+            *newline_positions.get(n-1).unwrap_or(&0) + 1
         };
 
         // Read forward from start_pos
@@ -154,5 +154,10 @@ impl BuiltIn for TailFile {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         let result = self.tail_file(&params.path, params.lines as usize)?;
         Ok(format!("Successfully get the last {} lines:\n```\n{}\n```", params.lines, if result.contains("```") { result.replace("```", "\\`\\`\\`") } else { result }))
+    }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
     }
 }

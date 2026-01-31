@@ -46,6 +46,10 @@ const CSS_CODE: &str = include_str!("../../assets/css/style.css");
 /// 下载页面用的css代码
 const CSS_CODE_DOWNLOAD: &str = include_str!("../../assets/css/style_for_download.css");
 
+/// diff2html generates pretty HTML diffs from git diff or unified diff output
+const DIFF2HTML_JS: &str = include_str!("../../assets/js/diff2html.min.js");
+const DIFF2HTML_CSS: &str = include_str!("../../assets/css/diff2html.min.css");
+
 /// 页面显示的信息，true是英文，false是中文，创建页面时填充进去
 static PAGE: Lazy<RwLock<HashMap<bool, PageInfo>>> = Lazy::new(|| RwLock::new(HashMap::from([(true, PageInfo::new(true)), (false, PageInfo::new(false))])));
 
@@ -427,6 +431,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     <!-- <script src="{{ v }}/templates/js/marked.min.js"></script> -->
     <!-- <script srx="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script> -->
     <!-- <script src="{{ v }}/templates/js/highlight.min.js"></script> -->
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" /> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html.min.js"></script> -->
 "###.to_string();
     //result += &format!("    <link rel='shortcut icon' href='{}/templates/images/robot-7.svg' type='image/x-icon'>\n", v);
     result += &format!("    <link rel='shortcut icon' href='{}' type='image/x-icon'>\n", ICON_SHORTCUT);
@@ -438,6 +444,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
 
     result += "<style type='text/css'>\n";
     result += PRISM_MIN_CSS;
+    result += "</style>\n";
+
+    result += "<style type='text/css'>\n";
+    result += DIFF2HTML_CSS;
     result += "</style>\n";
 
     result += r###"<body>
@@ -731,6 +741,18 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
 
     </div>
 
+    <!-- 弹窗结构 -->
+    <div class="modal-overlay" id="permissionModal">
+        <div id="modal-box">
+            <h3 class="modal-title">Approval</h3>
+            <div class="modal-message" id="modalMessage"></div>
+            <div class="modal-actions">
+                <button class="btn btn-agree" onclick="handleUserChoice(true)">Agree</button>
+                <button class="btn btn-disagree" onclick="handleUserChoice(false)">Disagree</button>
+            </div>
+        </div>
+    </div>
+
     <!-- footer -->
     <footer>
 "###;
@@ -758,6 +780,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
 "###;
     result += &format!("{}\n", PRISM_MIN_JS);
     result += &format!("{}\n", MARKED_MIN_JS);
+    result += &format!("{}\n", DIFF2HTML_JS);
     result += r###"    </script>
     <script>
         // markdown转html
@@ -791,7 +814,23 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         if log.is_query { // 用户输入的问题
             result += "                msg.textContent = tmp.replaceAll('\\\\n', '\\n');\n            }\n            // 问题不需要markdown解析\n";
         } else { // 答案
-            result += "                msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');\n            }\n";
+            result += &format!("                if (tmp.includes('edit_file') && tmp.includes(' result\\n```\\n--- ')) {{
+                    var text_diff = tmp.split(' result\\n```');
+                    msg.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', '');
+                    let diff_code = document.createElement('div');
+                    diff_code.setAttribute('id', 'm{}diff');
+                    const diffCode = Diff2Html.html('```'+text_diff[1], {{
+                        drawFileList: false,
+                        matching: 'lines',
+                        //colorScheme: 'dark',
+                        outputFormat: 'side-by-side'
+                    }});
+                    diff_code.innerHTML = diffCode;
+                    msg.appendChild(diff_code);
+                }} else {{
+                    msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                }}
+            }}", log.id);
         }
     }
     result += &format!("        }}
@@ -1235,7 +1274,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         message.appendChild(Con1);
     }
     // 插入左侧答案和右侧问题
-    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, is_web, current_token) {
+    function insert_left_right(message_content, message_time, id, is_left, is_img, is_voice, is_web, current_token, is_diff) {
         if (id === current_id) { // 当前消息还没插入
             let new_id = 'm'+current_id; // 当前要插入消息的id
             current_id += 1; // id序号加1
@@ -1266,12 +1305,28 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 if (is_left) { // 文本答案
                     for_markdown = message_content.replaceAll('srxtzn', '\n');
                     msg_lr.setAttribute("class", "chat-txt left");
-                    // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
-                    msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
-                    // 对每个代码块进行高亮
-                    msg_lr.querySelectorAll('pre code').forEach((block) => {
-                        Prism.highlightElement(block);
-                    });
+                    if (is_diff) {
+                        var text_diff = for_markdown.split(' result\n\`\`\`');
+                        // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
+                        msg_lr.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                        let diff_code = document.createElement("div");
+                        diff_code.setAttribute("id", new_id+'diff');
+                        const diffCode = Diff2Html.html('\`\`\`'+text_diff[1], {
+                            drawFileList: false,
+                            matching: 'lines',
+                            //colorScheme: 'dark',
+                            outputFormat: 'side-by-side'
+                        });
+                        diff_code.innerHTML = diffCode;
+                        msg_lr.appendChild(diff_code);
+                    } else {
+                        // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
+                        msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                        // 对每个代码块进行高亮
+                        msg_lr.querySelectorAll('pre code').forEach((block) => {
+                            Prism.highlightElement(block);
+                        });
+                    }
                 } else { // 文本问题
                     msg_lr.setAttribute("class", "chat-txt right");
                     msg_lr.textContent = message_content.replaceAll('srxtzn', '\n').replaceAll('\\n', '\n'); // 不要使用innerHTML，innerHTML会识别标签将内容解析为html，textContent只是文本，innerText会受到css影响，https://stackoverflow.com/questions/31002593/type-new-line-character-in-element-textcontent
@@ -1373,12 +1428,26 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             let new_id = 'm'+id; // 当前要插入消息的id
             let msg_lr = document.getElementById(new_id);
             for_markdown += message_content.replaceAll('srxtzn', '\n');
-            // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
-            msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
-            // 对每个代码块进行高亮
-            msg_lr.querySelectorAll('pre code').forEach((block) => {
-                Prism.highlightElement(block);
-            });
+            if (is_diff) {
+                var text_diff = for_markdown.split(' result\n\`\`\`');
+                // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
+                msg_lr.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                let diff_code = document.getElementById(new_id+'diff');
+                const diffCode = Diff2Html.html('\`\`\`'+text_diff[1], {
+                    drawFileList: false,
+                    matching: 'lines',
+                    //colorScheme: 'dark',
+                    outputFormat: 'side-by-side'
+                });
+                diff_code.innerHTML = diffCode;
+            } else {
+                // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
+                msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                // 对每个代码块进行高亮
+                msg_lr.querySelectorAll('pre code').forEach((block) => {
+                    Prism.highlightElement(block);
+                });
+            }
         } else { // 不应该出现
             console.error(`message id not match: current_id='${current_id}', received_id='${id}'`);
         }
@@ -1418,6 +1487,53 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         var scrollMsg = document.getElementById("scrolldown");
         scrollMsg.scrollTop = scrollMsg.scrollHeight;
     }
+"###;
+    result += &format!("    // ask approval
+    let wait_approval = false;
+    const modal = document.getElementById('permissionModal');
+    const messageEl = document.getElementById('modalMessage');
+    const modalBox = document.getElementById('modal-box');
+    function showApprovalWindow(msg, useDiff) {{
+        if (useDiff) {{
+            /*const diffStr = `
+--- /data/srx/cloud/test.py
++++ /data/srx/cloud/test.py
+@@ -1,6 +1,6 @@
+a = 1
+b = 2
+c = 3
+-println!('{{}}', a);
++print(a)
+print(b)
+-print(c/0)
++print(c)
+`;*/
+            const diffCode = Diff2Html.html(msg, {{
+                drawFileList: false,
+                matching: 'lines',
+                outputFormat: 'side-by-side'
+            }});
+            modalBox.style.maxWidth = '800px';
+            messageEl.innerHTML = diffCode;
+        }} else {{
+            modalBox.style.maxWidth = '400px';
+            messageEl.textContent = msg;
+        }}
+        modal.classList.add('active');
+    }}
+    function handleUserChoice(isAgreed) {{
+        modal.classList.remove('active');
+        sendApprovalToBackend(isAgreed);
+        wait_approval = false;
+    }}
+    window.handleUserChoice = handleUserChoice; // 暴露给全局
+    function sendApprovalToBackend(agreed) {{
+        fetch('http://{}:{}{}/approval?approval='+agreed).catch(error => {{
+            console.error('Failed send approval to server:', error);
+        }});
+    }}
+    //showApprovalWindow('是否允许运行该工具？', true);", PARAS.addr_str, PARAS.port, v);
+    result += r###"
     // 获取用户发起提问时提交的信息
     function get_url() {
         var req = document.getElementById("input_query").value;
@@ -1600,60 +1716,66 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                         }
                         break; // 否则会继续执行下面的case
                     case 'maindata':
-                        //console.log('Received maindata:', jsonData);
-                        // 如果信息是之前的问答记录，先清空当前所有信息
-                        if (!already_clear_log && jsonData.is_history) {
-                            clear_all_child('scrolldown');
-                            already_clear_log = true;
-                            current_id = 0;
-                            qa_num = 0;
-                            m_num = 0;
-                            last_is_answer = true;
-                        }
-                        // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
-                        // https://www.answeroverflow.com/m/1302587682957824081
-                        window.addEventListener('wheel', function(event) { // “scroll”无效
-                            // event.deltaY 的值：负值表示向上滚动，正值表示向下滚动
-                            if (autoScroll) {
-                                //console.log('Scrolling via mouse');
-                                if (event.deltaY < 0) { // 向上滚动
-                                    autoScroll = false; // 用户手动向上滚动，停止自动向下滚动
+                        // ask approval
+                        if (jsonData.approval) {
+                            wait_approval = true;
+                            showApprovalWindow(jsonData.approval.replaceAll('srxtzn', '\n'), jsonData.diff);
+                        } else if (!wait_approval || jsonData.content !== '') {
+                            //console.log('Received maindata:', jsonData);
+                            // 如果信息是之前的问答记录，先清空当前所有信息
+                            if (!already_clear_log && jsonData.is_history) {
+                                clear_all_child('scrolldown');
+                                already_clear_log = true;
+                                current_id = 0;
+                                qa_num = 0;
+                                m_num = 0;
+                                last_is_answer = true;
+                            }
+                            // https://stackoverflow.com/questions/15275969/javascript-scroll-handler-not-firing
+                            // https://www.answeroverflow.com/m/1302587682957824081
+                            window.addEventListener('wheel', function(event) { // “scroll”无效
+                                // event.deltaY 的值：负值表示向上滚动，正值表示向下滚动
+                                if (autoScroll) {
+                                    //console.log('Scrolling via mouse');
+                                    if (event.deltaY < 0) { // 向上滚动
+                                        autoScroll = false; // 用户手动向上滚动，停止自动向下滚动
+                                    }
+                                } else {
+                                    if (event.deltaY > 0) { // 向下滚动
+                                        autoScroll = true; // 用户手动向下滚动，恢复自动向下滚动
+                                    }
                                 }
-                            } else {
-                                if (event.deltaY > 0) { // 向下滚动
-                                    autoScroll = true; // 用户手动向下滚动，恢复自动向下滚动
+                            });
+                            window.addEventListener('touchmove', function() { // 触屏这个有效，没有deltaY，先不考虑触屏滚动方向
+                                if (autoScroll) {
+                                    //console.log('Scrolling via touch');
+                                    autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
+                                }
+                            });
+                            no_message = false;
+                            // 如果是之前的记录，则用传递的id更新当前id，因为传递的id可能不连续（有部分被用户点击删除）
+                            if (jsonData.is_history && jsonData.id !== current_id && jsonData.id !== current_id - 1) {
+                                current_id = jsonData.id
+                            }
+                            // 插入信息
+                            if (jsonData.time_model) {
+                                insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token, jsonData.diff);
+                            } else { // 没有传递时间则使用当前时间
+                                if (jsonData.is_left) {
+                                    insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token, jsonData.diff);
+                                } else {
+                                    insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token, jsonData.diff);
                                 }
                             }
-                        });
-                        window.addEventListener('touchmove', function() { // 触屏这个有效，没有deltaY，先不考虑触屏滚动方向
+                            //Prism.highlightAll();
                             if (autoScroll) {
-                                //console.log('Scrolling via touch');
-                                autoScroll = false; // 用户手动进行滚动，后面将不再自动滚动
-                            }
-                        });
-                        no_message = false;
-                        // 如果是之前的记录，则用传递的id更新当前id，因为传递的id可能不连续（有部分被用户点击删除）
-                        if (jsonData.is_history && jsonData.id !== current_id && jsonData.id !== current_id - 1) {
-                            current_id = jsonData.id
-                        }
-                        // 插入信息
-                        if (jsonData.time_model) {
-                            insert_left_right(jsonData.content, jsonData.time_model, jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
-                        } else { // 没有传递时间则使用当前时间
-                            if (jsonData.is_left) {
-                                insert_left_right(jsonData.content, formatDate(false), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
-                            } else {
-                                insert_left_right(jsonData.content, formatDate(true), jsonData.id, jsonData.is_left, jsonData.is_img, jsonData.is_voice, jsonData.is_web, jsonData.current_token);
-                            }
-                        }
-                        //Prism.highlightAll();
-                        if (autoScroll) {
-                            if (jsonData.is_img) {
-                                sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
+                                if (jsonData.is_img) {
+                                    sleep(100).then(() => { // 这里要等一小会儿，否则滚动到底之后图片才加载完，看上去未滚动到底
+                                        scroll();
+                                    });
+                                } else {
                                     scroll();
-                                });
-                            } else {
-                                scroll();
+                                }
                             }
                         }
                         break; // 否则会继续执行下面的case
@@ -1750,6 +1872,10 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
     result += PRISM_MIN_CSS;
     result += "</style>\n";
 
+    result += "<style type='text/css'>\n";
+    result += DIFF2HTML_CSS;
+    result += "</style>\n";
+
     result += r###"<body>
     <div id="right-part" class="content">
         <!-- chat content region -->
@@ -1834,6 +1960,7 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
 "###;
     result += &format!("{}\n", PRISM_MIN_JS);
     result += &format!("{}\n", MARKED_MIN_JS);
+    result += &format!("{}\n", DIFF2HTML_JS);
     result += r###"    </script>
     <script>
         // markdown转html
@@ -1851,7 +1978,23 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
         if log.is_query { // 用户输入的问题
             result += "                msg.textContent = tmp.replaceAll('\\\\n', '\\n');\n            }\n // 问题不需要markdown解析\n";
         } else { // 答案
-            result += "                msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');\n            }\n";
+            result += &format!("                if (tmp.includes('edit_file') && tmp.includes(' result\\n```\\n--- ')) {{
+                    var text_diff = tmp.split(' result\\n```');
+                    msg.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', '');
+                    let diff_code = document.createElement('div');
+                    diff_code.setAttribute('id', 'm{}diff');
+                    const diffCode = Diff2Html.html('```'+text_diff[1], {{
+                        drawFileList: false,
+                        matching: 'lines',
+                        //colorScheme: 'dark',
+                        outputFormat: 'side-by-side'
+                    }});
+                    diff_code.innerHTML = diffCode;
+                    msg.appendChild(diff_code);
+                }} else {{
+                    msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                }}
+            }}", log.id);
         }
     }
     result += r###"        }

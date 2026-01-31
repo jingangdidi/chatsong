@@ -93,6 +93,10 @@ struct Paras {
     #[argh(switch, short = 'l')]
     english: bool,
 
+    /// approval to call all tools without pop-up prompts
+    #[argh(switch, short = 'A')]
+    approval_all: bool,
+
     /// output path, default: ./chat-log
     #[argh(option, short = 'o')]
     outpath: Option<String>,
@@ -113,6 +117,7 @@ pub struct ParsedParas {
     pub maxage:       Duration,                    // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     pub share:        bool,                        // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
     pub english:      bool,                        // 是否展示英文界面，不指定则展示中文界面
+    pub approval_all: bool,                        // approval to call all tools without pop-up prompts
     pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
     pub tools:        Tools,                       // all tools
     pub mcp_servers:  McpServers,                  // mcp servers
@@ -208,6 +213,7 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         },
         share: para.share, // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
         english, // 是否展示英文界面，不指定则展示中文界面
+        approval_all: para.approval_all, // approval to call all tools without pop-up prompts
         outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
             Some(o) => get_outpath(&o),
             None => {

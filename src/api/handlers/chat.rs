@@ -169,12 +169,14 @@ pub struct MainData {
     is_web:        bool,           // 是否网络搜索
     time_model:    Option<String>, // 时间（如果是回答还包含调用的模型名称），Some在json中直接是字符串内容，None在json中是null
     current_token: u32,            // 当前问题或答案的token数，如果使用stream则直接设为0，最终的token数通过MetaData传递
+    approval:      Option<String>, // ask approval
+    diff:          bool,           // if ask approval content is diff
 }
 
 impl MainData {
     /// 将MainData转为SSE格式Vec<u8>
     /// current_token为None表示获取最后一个message的token，为Some则直接使用Some内的数值
-    pub fn prepare_sse(uuid: &str, id: usize, content: String, is_left: bool, is_img: bool, is_voice: bool, is_history: bool, is_web: bool, time_model: Option<String>, current_token: Option<u32>) -> Result<Vec<u8>, MyError> {
+    pub fn prepare_sse(uuid: &str, id: usize, content: String, is_left: bool, is_img: bool, is_voice: bool, is_history: bool, is_web: bool, time_model: Option<String>, current_token: Option<u32>, approval: Option<String>, diff: bool) -> Result<Vec<u8>, MyError> {
         let data = MainData{
             id,
             content,
@@ -188,6 +190,8 @@ impl MainData {
                 Some(t) => t, // 指定了token
                 None => get_msg_token(uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
             },
+            approval,
+            diff,
         };
         format_sse_message(uuid, "maindata", &data)
     }
@@ -254,7 +258,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     let tmp_uuid = client_para.uuid.clone();
                     let tmp_stream = async_stream::stream! {
                         // send summary prompt to user page
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, COMPRESSION_PROMPT.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -1)))?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, COMPRESSION_PROMPT.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -1)), None, false)?);
                         yield tmp;
                         // 传输答案
                         while let Some(m) = receiver.recv().await {
@@ -289,11 +293,11 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     let tmp_uuid = client_para.uuid.clone();
                     let tmp_stream = async_stream::stream! {
                         // send summary prompt to user page
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 2, COMPRESSION_PROMPT.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -1)))?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 2, COMPRESSION_PROMPT.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -1)), None, false)?);
                         yield tmp;
                         // 传输答案。非流式输出传输答案时，答案已经插入到服务端记录中，因此这里获取总消息数还需要减1
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", whole_answer.replace("\n", "<br>")).into_bytes()); // 这里要声明类型，否则报错，传递数据以`data: `起始，以`\n\n`终止
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None)?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
                         yield tmp;
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
@@ -412,7 +416,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 let tmp_uuid = client_para.uuid.clone();
                 let tmp_stream = async_stream::stream! {
                     // 传输图片base64字符串、从音频文件提取的文本内容、从音频文件翻译的文本内容。此时消息已经插入了，因此总消息数减1作为id
-                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, to_client, true, is_img, is_voice, false, false, None, None)?);
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, to_client, true, is_img, is_voice, false, false, None, None, None, false)?);
                     yield tmp;
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
@@ -476,20 +480,21 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             // 1. send to user page
                             let messages_num = get_messages_num(&tmp_uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
                             // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
-                            if let Err(err) = sender.send(MainData::prepare_sse(&tmp_uuid, messages_num, format!("{}", e).replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0)).unwrap()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(err) = sender.send(MainData::prepare_sse(&tmp_uuid, messages_num, format!("{}", e).replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false).unwrap()).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", err);
+                            } else {
+                                // 2. add result to main message history
+                                let message = ChatMessage::Assistant{
+                                    content: Some(ChatMessageContent::Text(format!("{}", e))),
+                                    reasoning_content: None,
+                                    refusal: None,
+                                    name: None,
+                                    audio: None,
+                                    tool_calls: None,
+                                };
+                                let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
+                                insert_message(&tmp_uuid, message, None, tmp_time, false, DataType::Normal, None, &client_para.model, None);
                             }
-                            // 2. add result to main message history
-                            let message = ChatMessage::Assistant{
-                                content: Some(ChatMessageContent::Text(format!("{}", e))),
-                                reasoning_content: None,
-                                refusal: None,
-                                name: None,
-                                audio: None,
-                                tool_calls: None,
-                            };
-                            let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                            insert_message(&tmp_uuid, message, None, tmp_time, false, DataType::Normal, None, &client_para.model, None);
                         }
                     });
                     // 创建stream对象，接收管道传递的数据
@@ -502,11 +507,11 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             for log in get_log_for_display(&tmp_uuid, false).3 {
                                 if log.is_query { // 显示在问答页面右侧的用户输入内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                                     yield tmp;
                                 } else { // 显示在问答页面左侧的回答内容
                                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                                     yield tmp;
                                 }
                             }
@@ -558,11 +563,11 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 for log in get_log_for_display(&tmp_uuid, false).3 {
                                     if log.is_query { // 显示在问答页面右侧的用户输入内容
                                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                                         yield tmp;
                                     } else { // 显示在问答页面左侧的回答内容
                                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                                         yield tmp;
                                     }
                                 }
@@ -607,11 +612,11 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 for log in get_log_for_display(&tmp_uuid, false).3 {
                                     if log.is_query { // 显示在问答页面右侧的用户输入内容
                                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                                         yield tmp;
                                     } else { // 显示在问答页面左侧的回答内容
                                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                                         yield tmp;
                                     }
                                 }
@@ -619,7 +624,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             */
                             // 传输答案。非流式输出传输答案时，答案已经插入到服务端记录中，因此这里获取总消息数还需要减1
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", whole_answer.replace("\n", "<br>")).into_bytes()); // 这里要声明类型，否则报错，传递数据以`data: `起始，以`\n\n`终止
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None)?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
                             yield tmp;
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
@@ -736,11 +741,11 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     for log in get_log_for_display(&tmp_uuid, false).3 {
                         if log.is_query {
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, false, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                             yield tmp;
                         } else {
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: leftsrx{}timesrx{}\n\n", log.3, log.1).as_bytes().to_vec()); // 这里要声明类型，否则报错
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token))?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, log.id, log.content, true, log.is_img, log.is_voice, true, log.is_web, Some(log.time), Some(log.token), None, false)?);
                             yield tmp;
                         }
                     }
@@ -749,22 +754,22 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     yield tmp;
                 /*} else if clear_page { // 清空页面之前的chat记录，显示当前问题
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: rightsrx{}timesrx{}\n\n", Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), tmp_query.replace("\n", "srxtzn")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, tmp_query.replace("\n", "srxtzn"), false, false, false, true, Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()))?);
+                    let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, tmp_query.replace("\n", "srxtzn"), false, false, false, true, Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string()), None, false)?);
                     yield tmp;
                 }*/
                 } else {
                     // 如果网络搜索或解析url和html有报错，则将错误信息恢复给客户端显示。由于前面`insert_message`插入了错误信息，因此这里返回给用户的id要减1
                     if !err_msg.is_empty() {
                         // 传输原始问题
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 2, body.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -2)))?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 2, body.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -2)), None, false)?);
                         yield tmp;
                         // 传输错误信息
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", err_msg.replace("\n", "srxtzn")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, err_msg.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(get_msg_token(&tmp_uuid, -1)))?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, err_msg.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(get_msg_token(&tmp_uuid, -1)), None, false)?);
                         yield tmp;
                     } else {
                         // 传输原始问题
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, body.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -1)))?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, body.replace("\n", "srxtzn"), false, false, false, false, client_para.web_search, None, Some(get_msg_token(&tmp_uuid, -1)), None, false)?);
                         yield tmp;
                     }
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
@@ -858,6 +863,17 @@ impl ClientPara {
             Some(c) => c.value().to_string(),
             None => "".to_string(),
         };
+        // summarize chat history
+        let compression = match params.get("compress") {
+            Some(c) => {
+                if c == "true" {
+                    true
+                } else {
+                    false
+                }
+            },
+            None => false,
+        };
         // 提问时最多提交几对问答，或几个消息，以及是否包含prompt
         // 返回(问答对数量, 消息数量, 是否包含prompt)
         let qa_msg_p: Option<(usize, usize, bool)> = match params.get("num") {
@@ -868,18 +884,34 @@ impl ClientPara {
                         let p_num = p_num_qa_msg.strip_suffix("qa").unwrap(); // 这里可以直接unwrap
                         if p_num.starts_with("p") { // `p数量qa`（指定数量个问答对，包含prompt），例如：`p1qa`
                             let num = p_num.strip_prefix("p").unwrap().parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num.strip_prefix("p").unwrap().to_string(), to: "usize".to_string(), error: e})?;
-                            Some((num, 0, true)) // Some((指定问答对数量, 0, 包含prompt))
+                            if compression { // 总结压缩占1对QA，因此这里加1
+                                Some((num+1, 0, true)) // Some((指定问答对数量, 0, 包含prompt))
+                            } else {
+                                Some((num, 0, true)) // Some((指定问答对数量, 0, 包含prompt))
+                            }
                         } else { // `数量qa`（指定数量个问答对，不包含prompt），例如：`1qa`
                             let num = p_num.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num.to_string(), to: "usize".to_string(), error: e})?;
-                            Some((num, 0, false)) // Some((指定问答对数量, 0, 不包含prompt))
+                            if compression { // 总结压缩占1对QA，因此这里加1
+                                Some((num+1, 0, false)) // Some((指定问答对数量, 0, 不包含prompt))
+                            } else {
+                                Some((num, 0, false)) // Some((指定问答对数量, 0, 不包含prompt))
+                            }
                         }
                     } else { // 视为指定的消息数
                         if p_num_qa_msg.starts_with("p") { // `p数量`（指定数量个消息，包含prompt），例如：`p1`
                             let num = p_num_qa_msg.strip_prefix("p").unwrap().parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.strip_prefix("p").unwrap().to_string(), to: "usize".to_string(), error: e})?;
-                            Some((0, num, true)) // Some((0, 指定消息数量, 包含prompt))
+                            if compression { // 总结压缩的prompt占1个消息，因此这里加1
+                                Some((0, num+1, true)) // Some((0, 指定消息数量, 包含prompt))
+                            } else {
+                                Some((0, num+1, true)) // Some((0, 指定消息数量, 包含prompt))
+                            }
                         } else { // `数量`（指定数量个消息，不包含prompt），例如：`1`
                             let num = p_num_qa_msg.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.to_string(), to: "usize".to_string(), error: e})?;
-                            Some((0, num, false)) // Some((0, 指定消息数量, 不包含prompt))
+                            if compression { // 总结压缩的prompt占1个消息，因此这里加1
+                                Some((0, num+1, false)) // Some((0, 指定消息数量, 不包含prompt))
+                            } else {
+                                Some((0, num+1, false)) // Some((0, 指定消息数量, 不包含prompt))
+                            }
                         }
                     }
                 },
@@ -1100,17 +1132,6 @@ impl ClientPara {
         let plan_mode = match params.get("plan") {
             Some(p) => {
                 if p == "true" {
-                    true
-                } else {
-                    false
-                }
-            },
-            None => false,
-        };
-        // summarize chat history
-        let compression = match params.get("compress") {
-            Some(c) => {
-                if c == "true" {
                     true
                 } else {
                     false

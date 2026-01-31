@@ -50,6 +50,9 @@ pub trait BuiltIn: Send + Sync {
 
     /// run tool
     fn run(&self, args: &str) -> Result<String, MyError>;
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError>;
 }
 
 /// tool group
@@ -162,5 +165,13 @@ impl MyTools for BuiltInTools {
             selected_tools.push(id.clone());
         }
         selected_tools
+    }
+
+    /// get approval message
+    fn get_approval(&self, id: &str, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        match self.id_map.get(id) {
+            Some(t) => t.tool.get_approval(args, info, is_en),
+            None => Err(MyError::ToolNotExistError{id: id.to_string(), info: "BuiltInTools::get_approval()".to_string()}),
+        }
     }
 }

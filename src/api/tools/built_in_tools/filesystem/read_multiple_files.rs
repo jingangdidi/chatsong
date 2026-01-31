@@ -64,6 +64,11 @@ impl BuiltIn for ReadMultipleFiles {
                 }
             })
             .collect();
-        Ok(format!("Successfully read multiple files:\n{}", contents.join("\n---\n")))
+        Ok(format!("Successfully read multiple files:\n---\n{}", contents.join("\n---\n")))
+    }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
     }
 }

@@ -102,4 +102,14 @@ impl BuiltIn for ZipFiles {
         zip_writer.finish().map_err(|e| MyError::ZipArchiveError{file: params.target_zip_file, error: e})?;
         Ok(format!("Successfully compressed {} {} into '{}'.", file_count, if file_count == 1 { "file" } else { "files" }, target_path.display()))
     }
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        if is_en {
+            Ok(Some(format!("Do you allow calling the zip_files tool to create a ZIP archive {} by compressing {:?} ?{}", params.target_zip_file, params.input_files, info.unwrap_or_default())))
+        } else {
+            Ok(Some(format!("是否允许调用 zip_files 工具将 {:?} 压缩至 {} ？{}", params.input_files, params.target_zip_file, info.unwrap_or_default())))
+        }
+    }
 }

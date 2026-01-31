@@ -75,4 +75,9 @@ impl BuiltIn for SearchFiles {
         };
         Ok(result)
     }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
+    }
 }

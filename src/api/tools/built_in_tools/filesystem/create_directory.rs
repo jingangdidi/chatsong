@@ -61,4 +61,14 @@ impl BuiltIn for CreateDirectory {
         create_dir_all(&valid_path)?;
         Ok(format!("successfully created directory {}", params.path))
     }
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        if is_en {
+            Ok(Some(format!("Do you allow calling the create_directory tool to create a new directory {} ?{}", params.path, info.unwrap_or_default())))
+        } else {
+            Ok(Some(format!("是否允许调用 create_directory 工具创建 {} 路径？{}", params.path, info.unwrap_or_default())))
+        }
+    }
 }

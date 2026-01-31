@@ -82,4 +82,9 @@ impl BuiltIn for GetFileInfo {
 
         Ok(format!("successfully get file info: {:?}", file_info))
     }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
+    }
 }

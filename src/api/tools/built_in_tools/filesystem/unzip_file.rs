@@ -111,4 +111,14 @@ impl BuiltIn for UnzipFile {
 
         Ok(format!("Successfully extracted {} {} into '{}':\n{}", file_count, if file_count == 1 { "file" } else { "files" }, target_dir_path.display(), result_files.join("\n")))
     }
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        if is_en {
+            Ok(Some(format!("Do you allow calling the unzip_file tool to extract the contents of {} to {} ?{}", params.zip_file, params.target_dir, info.unwrap_or_default())))
+        } else {
+            Ok(Some(format!("是否允许调用 unzip_file 工具将 {} 解压至 {}？{}", params.zip_file, params.target_dir, info.unwrap_or_default())))
+        }
+    }
 }

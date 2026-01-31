@@ -66,4 +66,14 @@ impl BuiltIn for WriteFile {
         write(valid_path, params.content)?;
         Ok(format!("Successfully wrote to {}", params.file_path))
     }
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        if is_en {
+            Ok(Some(format!("Do you allow calling the write_file tool to create {} or completely overwrite this file?{}\n{}", params.file_path, info.unwrap_or_default(), params.content)))
+        } else {
+            Ok(Some(format!("是否允许调用 write_file 工具创建 {}，或覆盖已有的这个文件？{}\n{}", params.file_path, info.unwrap_or_default(), params.content)))
+        }
+    }
 }

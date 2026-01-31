@@ -71,7 +71,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -84,7 +84,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -98,7 +98,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -120,7 +120,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -133,7 +133,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -147,7 +147,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -157,14 +157,14 @@ pub async fn use_stream(
                         if whole_answer == "<think>" {
                             whole_answer += "thinking ...<br>"; // 开始think时在最开始显示“thinking ...”
                             //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", e);
                                 break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
                         } else if c == "</think>" {
                             whole_answer += "<br>"; // think结束后换行
                             //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", e);
                                 break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
@@ -187,7 +187,7 @@ pub async fn use_stream(
                     //print!("{}", c);
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                     //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //println!("channel send error: {:?}", e);
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
@@ -197,14 +197,14 @@ pub async fn use_stream(
                         if whole_answer == "<think>" {
                             whole_answer += "thinking ...<br>"; // 开始think时在最开始显示“thinking ...”
                             //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", e);
                                 break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
                         } else if c == "</think>" {
                             whole_answer += "<br>"; // think结束后换行
                             //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", e);
                                 break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
@@ -222,7 +222,7 @@ pub async fn use_stream(
     }
     // if whole_answer is empty, send `no response result` to client
     if whole_answer.is_empty() {
-        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "no response result".to_string(), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "no response result".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
             //println!("channel send error: {:?}", e);
             event!(Level::WARN, "channel send error: {:?}", e);
         } else {

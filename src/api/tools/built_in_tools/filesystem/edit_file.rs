@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use serde::Deserialize; // Serialize
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/enum.Value.html
 use similar::TextDiff;
 
@@ -18,23 +18,23 @@ use crate::{
 };
 
 /// Represents a text replacement operation.
-#[derive(Deserialize, Clone, Debug)]
-struct EditOperation {
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct EditOperation {
     /// Text to search for - must match exactly.
     #[serde(rename = "oldText")]
-    old_text: String,
+    pub old_text: String,
 
     #[serde(rename = "newText")]
     /// Text to replace the matched text with.
-    new_text: String,
+    pub new_text: String,
 }
 
 /// params for integer edit_file
-#[derive(Deserialize)]
-struct Params {
-    file_path: String,
-    edits:     Vec<EditOperation>,
-    dry_run:   Option<bool>,
+#[derive(Deserialize, Serialize)]
+pub struct Params {
+    pub file_path: String,
+    pub edits:     Vec<EditOperation>,
+    pub dry_run:   Option<bool>,
     //save_to:   Option<String>,
 }
 
@@ -60,13 +60,14 @@ impl EditFile {
         let patch = diff
             .unified_diff()
             .header(
-                format!("{file_name}\toriginal").as_str(),
-                format!("{file_name}\tmodified").as_str(),
+                format!("{file_name}").as_str(),
+                format!("{file_name}").as_str(),
             )
             .context_radius(4)
             .to_string();
 
-        Ok(format!("Index: {}\n{}\n{}", file_name, "=".repeat(68), patch))
+        //Ok(format!("Index: {}\n{}\n{}", file_name, "=".repeat(68), patch))
+        Ok(patch)
     }
 
     fn detect_line_ending(&self, text: &str) -> &str {
@@ -253,23 +254,21 @@ impl BuiltIn for EditFile {
             }
         }
 
+        let mut relative_path = valid_path.clone();
+        for p in &PARAS.allowed_path {
+            if valid_path.starts_with(&p.0) {
+                relative_path = valid_path.strip_prefix(&p.0).unwrap().to_path_buf();
+                break
+            } else if valid_path.starts_with(&p.1) {
+                relative_path = valid_path.strip_prefix(&p.0).unwrap().to_path_buf();
+                break
+            }
+        }
         let diff = self.create_unified_diff(
             &content_str,
             &modified_content,
-            Some(valid_path.display().to_string()),
+            Some(relative_path.display().to_string()),
         )?;
-
-        // Format diff with appropriate number of backticks
-        let mut num_backticks = 3;
-        while diff.contains(&"`".repeat(num_backticks)) {
-            num_backticks += 1;
-        }
-        let formatted_diff = format!(
-            "{}diff\n{}{}\n\n",
-            "`".repeat(num_backticks),
-            diff,
-            "`".repeat(num_backticks)
-        );
 
         let is_dry_run = params.dry_run.unwrap_or(false);
 
@@ -280,6 +279,17 @@ impl BuiltIn for EditFile {
             fs::write(target, modified_content)?;
         }
 
-        Ok(format!("successfully edit file:\n{:?}", formatted_diff))
+        //Ok(format!("successfully edit file:\n{:?}", formatted_diff))
+        Ok(diff)
+    }
+
+    /// get approval message
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        if is_en {
+            Ok(Some(format!("Do you allow calling the edit_file tool to edit a text file {} ?{}\n{:?}", params.file_path, info.unwrap_or_default(), params.edits)))
+        } else {
+            Ok(Some(format!("是否允许调用 edit_file 工具编辑 {}？{}\n{:?}", params.file_path, info.unwrap_or_default(), params.edits)))
+        }
     }
 }

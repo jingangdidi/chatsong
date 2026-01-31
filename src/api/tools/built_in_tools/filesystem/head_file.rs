@@ -96,4 +96,9 @@ impl BuiltIn for HeadFile {
         let result = self.head_file(&params.path, params.lines as usize)?;
         Ok(format!("Successfully get the first {} lines:\n```\n{}\n```", params.lines, if result.contains("```") { result.replace("```", "\\`\\`\\`") } else { result }))
     }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
+    }
 }

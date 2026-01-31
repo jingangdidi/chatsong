@@ -99,4 +99,9 @@ impl BuiltIn for ListDirectoryWithSizes {
 
         Ok(output)
     }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
+    }
 }

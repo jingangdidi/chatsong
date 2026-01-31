@@ -12,7 +12,13 @@ use openai_dive::v1::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::mpsc::Sender;
+use tokio::{
+    sync::mpsc::Sender,
+    time::{
+        sleep,
+        Duration,
+    },
+};
 use tracing::{event, Level};
 
 use crate::{
@@ -21,6 +27,8 @@ use crate::{
         get_messages,
         get_messages_num,
         DataType,
+        update_approval,
+        approved,
     },
     openai::{
         for_tool::{
@@ -40,7 +48,7 @@ use crate::{
 pub mod built_in_tools;
 pub mod external_tools;
 
-use built_in_tools::{BuiltInTools, Group};
+use built_in_tools::{BuiltInTools, Group, filesystem::edit_file::Params};
 use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
@@ -65,6 +73,9 @@ pub trait MyTools {
 
     /// select all tools, return uuid vector
     fn select_all_tools(&self) -> Vec<String>;
+
+    /// get approval message
+    fn get_approval(&self, id: &str, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError>;
 }
 
 /// all tools: built-in tools & external tools
@@ -190,6 +201,17 @@ impl Tools {
             false
         }
     }
+
+    /// get approval message
+    pub fn get_approval(&self, id: &str, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        if self.built_in.id_map.contains_key(id) {
+            self.built_in.get_approval(id, args, info, is_en)
+        } else if self.external.id_map.contains_key(id) {
+            self.external.get_approval(id, args, info, is_en)
+        } else {
+            Err(MyError::ToolNotExistError{id: id.to_string(), info: "Tools::get_approval()".to_string()})
+        }
+    }
 }
 
 /// chat with tools: built-in + external tools
@@ -241,8 +263,10 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
     para_builder.tools(tool_schema);
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
     let mut count = 0; // limit loop
+    let mut call_tool_count = 0; // call tool count
+    let mut try_count = 0;
 
-    loop {
+    'outer: loop {
         // send query to LLM
         para_builder.messages(history_messages.clone());
         let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
@@ -250,30 +274,44 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
         // if answer is call tool result, continue; else break
         match answer {
             CallToolResult::CallTool((raw_message, call_tool_result)) => { // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
-                for (i, j) in call_tool_result.into_iter().enumerate() {
+                for j in call_tool_result {
+                    call_tool_count += 1;
                     // call tool
                     let name_id: Vec<&str> = j.0.split("__").collect();
-                    let (result, tool_name) = if PARAS.tools.contain_tool_id(name_id[1]) {
-                        (PARAS.tools.run(name_id[1], &j.1)?, name_id[0].to_string())
-                    } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {
-                        (PARAS.mcp_servers.run(&name_id, &j.1).await?, name_id[0].to_string())
-                    } else {
-                        return Err(MyError::ToolNotExistError{id: name_id[1].to_string(), info: "run_tools".to_string()})
+                    let result = match try_call_tool(&uuid, &name_id, &j.1, j.3.clone(), sender.clone()).await? {
+                        Ok(result) => {
+                            try_count = 0;
+                            result
+                        },
+                        Err(e) => {
+                            try_count += 1;
+                            if try_count >= 3 {
+                                return Err(e)
+                            } else {
+                                event!(Level::WARN, "{} call tool error, try again {}", uuid, try_count);
+                                continue 'outer
+                            }
+                        },
                     };
 
                     // 1. send call tool result to user page
                     let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
                     // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
+                    let test_result = if result.contains("```") {
+                        result.clone()
+                    } else {
+                        format!("```\n{}\n```", result)
+                    };
                     let test_result = if let Some(content) = &j.3 {
                         if content.is_empty() {
-                            format!("## 📌 {} call tool\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", i+1, tool_name, &j.1, result)
+                            format!("## 📌 {} call tool\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", call_tool_count, name_id[0], &j.1, test_result)
                         } else {
-                            format!("## 📌 {} call tool\n\n---\n\n{}\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", i+1, content, tool_name, &j.1, result)
+                            format!("## 📌 {} call tool\n\n---\n\n{}\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", call_tool_count, content, name_id[0], &j.1, test_result)
                         }
                     } else {
-                        format!("## 📌 {} call tool\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", i+1, tool_name, &j.1, result)
+                        format!("## 📌 {} call tool\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", call_tool_count, name_id[0], &j.1, test_result)
                     };
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, test_result.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, test_result.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, name_id[0] == "edit_file")?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break
                     }
@@ -306,7 +344,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
                 // 1. send to user page
                 let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
                 // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
-                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, test_result.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, test_result.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                     event!(Level::WARN, "channel send error: {:?}", e);
                 }
                 // 2. add result to main message history
@@ -325,7 +363,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
             },
         }
         count += 1;
-        if count > 10 {
+        if count > 50 {
             event!(Level::WARN, "{} already call tool {} times, stop this loop", uuid, count);
             break
         }
@@ -336,6 +374,47 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
         event!(Level::WARN, "channel send error: {:?}", e);
     }
     Ok(())
+}
+
+/// try run tool, if error not from call tool, return Err(), else return Ok(Ok()) or Ok(Err())
+async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>) -> Result<Result<String, MyError>, MyError> {
+    if PARAS.tools.contain_tool_id(name_id[1]) {
+        if PARAS.approval_all {
+            Ok(PARAS.tools.run(name_id[1], paras))
+        } else {
+            match PARAS.tools.get_approval(name_id[1], paras, info, PARAS.english)? {
+                Some(approval_msg) => {
+                    let approval_msg = if name_id[0] == "edit_file" {
+                        let mut params: Params = match serde_json::from_str(paras) {
+                            Ok(p) => p,
+                            Err(e) => return Ok(Err(MyError::SerdeJsonFromStrError{error: e})),
+                        };
+                        params.dry_run = Some(true);
+                        let dry_run_para = match serde_json::to_string(&params) {
+                            Ok(d) => d,
+                            Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
+                        };
+                        match PARAS.tools.run(name_id[1], &dry_run_para) {
+                            Ok(r) => r,
+                            Err(e) => return Ok(Err(e)),
+                        }
+                    } else {
+                        approval_msg
+                    };
+                    if ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await? {
+                        Ok(PARAS.tools.run(name_id[1], paras))
+                    } else {
+                        return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                    }
+                },
+                None => Ok(PARAS.tools.run(name_id[1], paras)),
+            }
+        }
+    } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {
+        Ok(PARAS.mcp_servers.run(&name_id, paras).await)
+    } else {
+        return Err(MyError::ToolNotExistError{id: name_id[1].to_string(), info: "run_tools".to_string()})
+    }
 }
 
 /// https://github.com/microsoft/TaskWeaver/blob/main/taskweaver/planner/planner_prompt.yaml
@@ -358,6 +437,7 @@ const PLAN_FORMAT_PROMPT: &str = r###"
             "description": "string",
             "status": "string", // 'pending', 'in_progress', 'completed', 'update_plan', 'failed'
             "tool_name": "string | null",
+            "ask_approval": "boolean",
             "result": "string"
         }
         // ... more steps
@@ -375,24 +455,28 @@ Example response (step 1 and 2 have been completed, next step is steps 3, step 4
             "description": "Read the content of the source data file.",
             "status": "completed",
             "tool_name": "read_file",
+            "ask_approval": false,
             "result": "Successfully read 'data.csv', it contains headers and 100 rows of data.",
         },
         {
-            "description": "nalyze the structure of the data to confirm it's tab-separated.",
+            "description": "analyze the structure of the data to confirm it's tab-separated.",
             "status": "completed",
             "tool_name": null,
+            "ask_approval": false,
             "result": "The file 'data.csv' uses a comma as a delimiter, not a tab. The plan will be updated.",
         },
         {
             "description": "Process the data using a comma delimiter and generate a summary.",
             "status": "in_progress",
             "tool_name": "data_analyzer",
+            "ask_approval": false,
             "result": "",
         },
         {
             "description": "Write the generated summary to a new file named 'summary.txt'.",
             "status": "pending",
             "tool_name": "write_file",
+            "ask_approval": true,
             "result": "",
         },
     ],
@@ -410,6 +494,45 @@ If ANY step cannot be executed due to missing tools or capabilities, return:
     "final_result": "",
     "error_msg": "Cannot complete the task because [specific step description] requires [required capability/tool] which is not available."
 }
+
+Example debug code plan:
+
+{
+    "steps": [
+        {
+            "description": "Read the content of the source code file to examine its current code.",
+            "status": "in_progress",
+            "tool_name": "read_file",
+            "ask_approval": false,
+            "result": "content of source code file",
+        },
+        {
+            "description": "Analyze the source code to identify any syntax errors, logical flaws, or runtime issues.",
+            "status": "pending",
+            "tool_name": "null",
+            "ask_approval": false,
+            "result": "errors, logical flaws, or runtime issues of source code.",
+        },
+        {
+            "description": "Generate a corrected version of code with the identified issues fixed.",
+            "status": "pending",
+            "tool_name": "null",
+            "ask_approval": false,
+            "result": "issues fixed code.",
+        },
+        {
+            "description": "Update the source code file with the corrected code using the edit_file tool.",
+            "status": "pending",
+            "tool_name": edit_file,
+            "ask_approval": true,
+            "result": "",
+        },
+    ],
+    "all_steps_completed": false,
+    "final_result": "",
+    "error_msg": "",
+}
+
 "###;
 
 const UPDATE_PLAN_PROMPT: &str = r###"
@@ -464,11 +587,16 @@ When creating or updating a plan, you must adhere to the following strict rules.
   2. **Internal vs. External Actions**:
      - **Internal Actions (Tool = null)**: You MAY perform pure reasoning, text summarization, formatting, or logic calculation using your internal knowledge.
      - **External Actions (Tool MUST exist)**: You MUST verify a tool exists for any step involving file manipulation, data retrieval, or persistent storage.
-  3. **The "Missing Tool" Protocol**: If a necessary step requires an External Action (e.g., "save to file") but no corresponding tool exists in the provided list:
+  3. **The "Missing Tool" Protocol**: If a necessary step requires an External Action (e.g., "save to file") but no corresponding tool exists in the provided list `<chatsong:available-tools>`:
      - You **MUST NOT** pretend you can do it.
      - You **MUST NOT** assign `tool_name: null` to that step.
      - You **MUST** immediately abort the entire planning process and return the **Error JSON**.
-  4. **Logical Sequence**: The order of steps must respect dependencies.
+  4. **Predictive Logical Sequence (CRITICAL)**:
+     - The order of steps must respect dependencies.
+     - You must generate a **comprehensive initial plan** that covers the entire lifecycle of the task.
+     - **Do NOT stop** the plan after information gathering (e.g., "list directories" or "search").
+     - **Always anticipate the next steps**: If a step gathers information (e.g., finding a file path), you **MUST** immediately follow it with steps that use that information (e.g., reading that file), assuming the information will be successfully retrieved.
+     - Example: If the task is "Fix a bug", the plan must include: 1. Find file -> 2. Read file -> 3. Modify file -> 4. Save file.
   5. **Atomicity**: Each step should be focused on a single, clear, and indivisible action.
   6. **Tool Matching**: Specify a `tool_name` only when a step genuinely requires it, and ensure the tool name is correct and exists.
   7. **Status-Independent Tooling**: The `tool_name` for a step is determined at the planning stage based on the step's intrinsic need for a tool. You MUST specify the correct `tool_name` for any step that requires a tool, regardless of whether its status is `pending`, `in_progress`, or `completed`. A `pending` status only means "waiting to be executed," not "tool undetermined".
@@ -481,10 +609,13 @@ When creating or updating a plan, you must adhere to the following strict rules.
 # Persona and Objective
   - The content of your plan should not involve doing anything that you aren't capable of doing.
   - Do not use plans for simple or single-step queries that you can just do or answer immediately.
-  - Each step should contains 3 properties:
+  - Each step should contains 5 properties:
     - description: clear purpose of this step.
     - status: progress status, include `in_progress`, `pending`, `completed`, `update_plan`, `failed`.
     - tool_name: specify the Tool name precisely if need use Tools.
+    - ask_approval: a boolean flag indicating whether user confirmation is required before executing this step.
+      - Set to `true` ONLY if the operation involves modifying system state, specifically: creating, modifying, or deleting files.
+      - Set to `false` for read-only operations (e.g., reading files, searching, querying), computational tasks, or steps that do not involve any tool usage.
     - result: result of this step.
   - Set the `status` of the **first step** to `in_progress`.
   - Set the `status` of **all other steps** to `pending`.
@@ -531,16 +662,25 @@ You will receive a JSON plan containing one step with `status: "in_progress"`. Y
 2.  **Evaluate and Decide**: Analyze the `result` of the current step.
 
     - **Scenario A: Continue to Next Step**
-        **Condition**: The `result` contains a successful, valid output. For tool calls, this means the tool returned a meaningful result without errors. For non-tool steps, it means the step's objective was met. The plan's logic still holds.
+        **Condition**: The `result` meets the objective of the current step, and the plan remains viable.
+        **Detailed Logic**:
+            1.  **For Analysis/Check Steps**: If the step is to "analyze", "check", "review", or "investigate", a result that lists "errors", "bugs", "issues", or "critical problems" is considered a **SUCCESSFUL OUTPUT**. Finding these issues implies the analysis step worked correctly and the next step (likely a fix) should proceed. Do **NOT** treat the discovery of bugs as a reason to update the plan unless the plan lacks a step to fix them.
+            2.  **For Tool Calls**: The tool returned meaningful data without execution failures (e.g., timeouts, API errors, or "File not found").
+            3.  **For General Steps**: The step's objective was achieved, even if the outcome reveals issues that need to be addressed in subsequent steps.
         **Action**:
             1.  Change the `status` of the current step from `"in_progress"` to `"completed"`.
             2.  Find the **next** step in the array (the one immediately following) whose `status` is `"pending"`.
-            3.  Change that next step's `status` to `"in_progress"`.
+            3.  Change that next step's `status` from `"pending"` to `"in_progress"`.
             4.  Keep `all_steps_completed` as `false`.
             5.  Keep `final_result` as `""`.
 
     - **Scenario B: Update the Plan**
-        **Condition**: The `result` indicates an error, failure, or unexpected outcome. This could be a tool error message, an empty result where data was expected, or information that reveals the original plan is flawed, incomplete, or impossible to proceed with.
+        **Condition**: The `result` indicates a **failure to perform the current step**, or reveals that the **subsequent plan is logically impossible or unnecessary**.
+        **Detailed Logic**:
+            1.  **Execution Failure**: The tool crashed, timed out, returned a system error, or could not be accessed (e.g., "File not found" when trying to read).
+            2.  **Empty/Unexpected Data**: Data was required to proceed, but the result was empty or in a completely unexpected format that the next step cannot handle.
+            3.  **Plan Obsolescence**: The result shows that the goal is already achieved (e.g., "File is already correct" before a fix step), making the next steps unnecessary.
+            4.  **Crucial Distinction**: If the result simply describes problems *within the target* (e.g., "Syntax error found in script"), but the current step was just to *analyze* it, this is **NOT** a reason to update the plan. This is a successful analysis. Only update if the *act of analyzing* failed or the next step cannot be performed.
         **Action**:
             1.  Change the `status` of the current step from `"in_progress"` to `"update_plan"`.
             2.  Ensure the `result` field clearly and concisely describes the reason for the update (e.g., "Tool 'search_web' failed with API error.", "Result was empty, cannot proceed.", "File content shows a different format than expected, requires new plan.").
@@ -594,10 +734,12 @@ impl Status {
 /// single step
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Step {
-    description: String,
-    status:      Status,
-    tool_name:   Option<String>,
-    result:      String,
+    description:  String,
+    status:       Status,
+    tool_name:    Option<String>,
+    #[serde(default)]
+    ask_approval: bool,
+    result:       String,
 }
 
 impl Step {
@@ -618,10 +760,16 @@ struct Plan {
 impl Plan {
     /// convert json string to Plan
     fn from_str(s: &str) -> Result<Self, MyError> {
-        match serde_json::from_str(s) {
+        let json_str = match (s.starts_with("```json"), s.ends_with("```")) {
+            (true, true) => s.strip_prefix("```json").unwrap().strip_suffix("```").unwrap(),
+            (true, false) => s.strip_prefix("```json").unwrap(),
+            (false, true) => s.strip_suffix("```").unwrap(),
+            (false, false) => s,
+        };
+        match serde_json::from_str(json_str.trim()) {
             Ok(p) => Ok(p),
             Err(e) => {
-                event!(Level::ERROR, "json string to Plan struct: {}", s);
+                event!(Level::ERROR, "json string to Plan struct: {}", json_str);
                 Err(MyError::SerdeJsonFromStrError{error: e})
             },
         }
@@ -734,7 +882,8 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
     let mcp_schema = PARAS.mcp_servers.get_desc_and_schema(&selected_tools).await?;
 
     tool_schema.extend(mcp_schema);
-    let tool_schema_json = serde_json::to_string(&tool_schema).map_err(|e| MyError::JsonToStringError{error: e.into()})?;
+    //let tool_schema_json = serde_json::to_string(&tool_schema).map_err(|e| MyError::JsonToStringError{error: e.into()})?;
+    let tool_schema_json = tool_schema.iter().map(|t| format!("tool: {}, description: {:?}", t.function.name, t.function.description)).collect::<Vec<String>>().join("\n");
     let plan_prompt = PLANER_PROMPT.replace("--tools--", &tool_schema_json).replace("--plan-format-prompt--", PLAN_FORMAT_PROMPT);
     let history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
 
@@ -749,28 +898,52 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
         plan_struct = Plan::from_str(&plan_string)?;
         if first_step {
             let msg = format!("## 🚩 make plan\n\n---\n\n{}", plan_struct.format_plan(true));
-            send_and_record_message(&uuid, msg, 0, model, sender.clone()).await?;
+            send_and_record_message(&uuid, msg, 0, model, sender.clone(), false).await?;
             first_step = false;
+        }
+        if plan_struct.all_steps_completed && plan_struct.steps.iter().any(|s| s.status == Status::Pending) {
+            plan_struct.all_steps_completed = false;
         }
         if !plan_struct.error_msg.is_empty() {
             let msg = format!("## 🤔 error\n\n---\n\n{}", plan_struct.error_msg);
-            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone()).await?;
+            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone(), false).await?;
             break
-        } else if plan_struct.all_steps_completed {
+        } else if plan_struct.all_steps_completed || plan_struct.steps.iter().all(|s| s.status == Status::Completed) {
             let msg = format!("## 📌 final result\n\n---\n\n{}", plan_struct.final_result);
-            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone()).await?;
+            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone(), false).await?;
             break
-        } else if plan_struct.steps.iter().any(|s| s.status == Status::InProgress || s.status == Status::UpdatePlan) {
+        } else {
+            if !plan_struct.steps.iter().any(|s| s.status == Status::InProgress || s.status == Status::UpdatePlan) {
+                if plan_struct.steps.iter().any(|s| s.status == Status::Pending) {
+                    event!(Level::WARN, "all steps not contain \"in_progress\" or \"update_plan\", change first \"Pending\" to \"InProgress\"");
+                    for i in 0..plan_struct.steps.len() {
+                        if plan_struct.steps[i].status == Status::Pending {
+                            plan_struct.steps[i].status = Status::InProgress;
+                        }
+                    }
+                }
+            }
             for i in 0..plan_struct.steps.len() {
                 match &plan_struct.steps[i].status {
                     Status::Pending | Status::Completed | Status::Failed => (),
                     Status::InProgress => {
+                        let mut tool_name = "".to_string();
+                        let mut edit_file_result = "".to_string();
                         if let Some(t) = &plan_struct.steps[i].tool_name {
+                            tool_name = t.clone();
                             let step_tools = match tool_schema.iter().find(|item| &item.function.name == t) {
                                 Some(s) => vec![s.clone()],
                                 None => {
-                                    event!(Level::ERROR, "step tool_name not correct: {}", t);
-                                    return Err(MyError::PlanModeError{info: format!("step tool_name not correct: {}", t)})
+                                    match tool_schema.iter().find(|item| item.function.name.starts_with(&format!("{}__", t))) {
+                                        Some(s) => {
+                                            event!(Level::WARN, "step use tool: {} ({})", t, s.function.name);
+                                            vec![s.clone()]
+                                        },
+                                        None => {
+                                            event!(Level::ERROR, "step tool_name not correct: {} ({})", t, tool_schema.iter().map(|iterm| iterm.function.name.clone()).collect::<Vec<_>>().join(", "));
+                                            return Err(MyError::PlanModeError{info: format!("step tool_name not correct: {}", t)})
+                                        },
+                                    }
                                 },
                             };
                             let step_messages = vec![
@@ -779,16 +952,35 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
                                     name: None,
                                 }
                             ];
-                            plan_struct.steps[i].result = function_calling(
-                                i+1,
-                                step_tools,
-                                step_messages,
-                                &uuid,
-                                client.clone(),
-                                para_builder.clone(),
-                                //sender.clone(),
-                                //model,
-                            ).await?;
+                            for j in 0..3 {
+                                match function_calling(
+                                    step_tools.clone(),
+                                    step_messages.clone(),
+                                    &uuid,
+                                    client.clone(),
+                                    para_builder.clone(),
+                                    sender.clone(),
+                                    plan_struct.steps[i].ask_approval,
+                                    //model,
+                                ).await? {
+                                    Ok(r) => {
+                                        if t == "edit_file" || t.starts_with("edit_file__") {
+                                            plan_struct.steps[i].result = format!("successfully edit file:\n{}", r);
+                                            edit_file_result = r;
+                                        } else {
+                                            plan_struct.steps[i].result = r;
+                                        }
+                                        break
+                                    },
+                                    Err(e) => {
+                                        if j == 2 {
+                                            return Err(e)
+                                        } else {
+                                            event!(Level::WARN, "{} call tool {} error, try again {}", uuid, t, j+1);
+                                        }
+                                    },
+                                }
+                            }
                         }
                         plan_string = serde_json::to_string(&plan_struct).map_err(|e| MyError::JsonToStringError{error: e.into()})?;
                         plan_string = make_decision(uuid.clone(), client.clone(), para_builder.clone(), model, history_messages.clone(), &plan_string).await?;
@@ -797,8 +989,17 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
                             plan_struct_new.steps[i].status = Status::UpdatePlan;
                             plan_string = serde_json::to_string(&plan_struct_new).map_err(|e| MyError::JsonToStringError{error: e.into()})?;
                         } else {
-                            let msg = format!("## 📌 step {}\n\n---\n\n### 📝 description\n{}\n\n### ✨ result\n{}", i+1, plan_struct_new.steps[i].description, plan_struct_new.steps[i].result);
-                            send_and_record_message(&uuid, msg, i+1, model, sender.clone()).await?;
+                            let msg = if plan_struct_new.steps[i].result.contains("```") {
+                                if edit_file_result.is_empty() {
+                                    plan_struct_new.steps[i].result.clone()
+                                } else {
+                                    edit_file_result
+                                }
+                            } else {
+                                format!("```\n{}\n```", if edit_file_result.is_empty() { &plan_struct_new.steps[i].result } else { &edit_file_result })
+                            };
+                            let msg = format!("## 📌 step {}\n\n---\n\n### 📝 description\n{}\n\n### ✨ result\n{}", i+1, plan_struct_new.steps[i].description, msg);
+                            send_and_record_message(&uuid, msg, i+1, model, sender.clone(), tool_name == "edit_file" || tool_name.starts_with("edit_file__")).await?;
                         }
                     },
                     Status::UpdatePlan => {
@@ -810,16 +1011,13 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
                             plan_string = make_update_plan(uuid.clone(), client.clone(), para_builder.clone(), model, history_messages.clone(), &plan_prompt, None).await?;
                             let plan_struct_new = Plan::from_str(&plan_string)?;
                             let msg = format!("## 📌 step {} update plan\n\n---\n\n{}", i+1, plan_struct_new.format_plan(false));
-                            send_and_record_message(&uuid, msg, i+1, model, sender.clone()).await?;
+                            send_and_record_message(&uuid, msg, i+1, model, sender.clone(), false).await?;
                             max_update_plan += 1;
                         }
                         break
                     },
                 }
             }
-        } else {
-            event!(Level::ERROR, "if not all steps completed, must contains \"in_progress\" or \"update_plan\"");
-            return Err(MyError::PlanModeError{info: format!("if not all steps completed, must contains \"in_progress\" or \"update_plan\"\n{}", plan_string)})
         }
     }
     Ok(())
@@ -859,102 +1057,121 @@ async fn make_decision(uuid: String, client: Client, para_builder: ChatCompletio
 
 /// function calling
 async fn function_calling(
-    step_num: usize,
     step_tools: Vec<ChatCompletionTool>,
-    mut step_messages: Vec<ChatMessage>,
+    step_messages: Vec<ChatMessage>,
     uuid: &str,
     client: Client,
     mut para_builder: ChatCompletionParametersBuilder,
-    //sender: Sender<Vec<u8>>,
+    sender: Sender<Vec<u8>>,
+    step_ask_approval: bool,
     //model: &str
-) -> Result<String, MyError> {
+) -> Result<Result<String, MyError>, MyError> {
     let mut final_result = "".to_string();
-    let mut count = 0; // limit loop
+    // send query to LLM
     para_builder.tools(step_tools);
-    loop {
-        // send query to LLM
-        para_builder.messages(step_messages.clone());
-        let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
-        let answer = call_tool_not_use_stream(uuid, client.clone(), parameters).await?;
-        // if answer is call tool result, continue; else break
-        match answer {
-            CallToolResult::CallTool((raw_message, call_tool_result)) => { // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
-                for i in call_tool_result {
-                    // call tool
-                    let name_id: Vec<&str> = i.0.split("__").collect();
-                    let (result, _tool_name) = if PARAS.tools.contain_tool_id(name_id[1]) {
-                        (PARAS.tools.run(name_id[1], &i.1)?, name_id[0].to_string())
-                    } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {
-                        (PARAS.mcp_servers.run(&name_id, &i.1).await?, name_id[0].to_string())
-                    } else {
-                        return Err(MyError::ToolNotExistError{id: name_id[1].to_string(), info: "run_tools".to_string()})
-                    };
-
-                    /*
-                    // 1. send call tool result to user page
-                    let messages_num = get_messages_num(uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
-                    // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
-                    let test_result = if let Some(content) = &i.3 {
-                        if content.is_empty() {
-                            format!("## ⏳ step {} call tool\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", step_num, tool_name, &i.1, result)
+    para_builder.messages(step_messages.clone());
+    let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
+    let answer = call_tool_not_use_stream(uuid, client.clone(), parameters).await?;
+    match answer {
+        CallToolResult::CallTool((_raw_message, call_tool_result)) => { // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
+            for i in call_tool_result {
+                // call tool
+                let name_id: Vec<&str> = i.0.split("__").collect();
+                let result = if PARAS.tools.contain_tool_id(name_id[1]) {
+                    if PARAS.approval_all {
+                        match PARAS.tools.run(name_id[1], &i.1) {
+                            Ok(r) => r,
+                            Err(e) => return Ok(Err(e)),
+                        }
+                    } else if let Some(approval_msg) = PARAS.tools.get_approval(name_id[1], &i.1, i.3.clone(), PARAS.english)? {
+                        let approval_msg = if name_id[0] == "edit_file" {
+                            let mut params: Params = match serde_json::from_str(&i.1) {
+                                Ok(p) => p,
+                                Err(e) => return Ok(Err(MyError::SerdeJsonFromStrError{error: e})),
+                            };
+                            params.dry_run = Some(true);
+                            let dry_run_para = match serde_json::to_string(&params) {
+                                Ok(d) => d,
+                                Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
+                            };
+                            match PARAS.tools.run(name_id[1], &dry_run_para) {
+                                Ok(r) => r,
+                                Err(e) => return Ok(Err(e)),
+                            }
                         } else {
-                            format!("## ⏳ step {} call tool\n\n---\n\n{}\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", step_num, content, tool_name, &i.1, result)
+                            approval_msg
+                        };
+                        if ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await? {
+                            match PARAS.tools.run(name_id[1], &i.1) {
+                                Ok(r) => r,
+                                Err(e) => return Ok(Err(e)),
+                            }
+                        } else {
+                            return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
                         }
                     } else {
-                        format!("## ⏳ step {} call tool\n\n---\n\n### 🛠 run tool\n{}({})\n\n### 💡 result\n{}", step_num, tool_name, &i.1, result)
-                    };
-                    if let Err(e) = sender.send(MainData::prepare_sse(uuid, messages_num, test_result.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        event!(Level::WARN, "step {} channel send error: {:?}", step_num, e);
-                        break
+                        if step_ask_approval {
+                            let approval_msg = if PARAS.english {
+                                format!("Do you allow calling the {} tool?{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
+                            } else {
+                                format!("是否允许调用 {} 工具？{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
+                            };
+                            if ask_approval(uuid, approval_msg, false, sender.clone()).await? {
+                                match PARAS.tools.run(name_id[1], &i.1) {
+                                    Ok(r) => r,
+                                    Err(e) => return Ok(Err(e)),
+                                }
+                            } else {
+                                return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                            }
+                        } else {
+                            match PARAS.tools.run(name_id[1], &i.1) {
+                                Ok(r) => r,
+                                Err(e) => return Ok(Err(e)),
+                            }
+                        }
                     }
-
-                    // 2. add result to main message history
-                    let message = ChatMessage::Assistant{
-                        content: Some(ChatMessageContent::Text(test_result)),
-                        reasoning_content: None,
-                        refusal: None,
-                        name: None,
-                        audio: None,
-                        tool_calls: None,
-                    };
-                    let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                    insert_message(uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
-                    */
-
-                    /*
-                    let mut meta_data = MetaData::new(uuid.to_string(), None);
-                    meta_data.update_token(*total_in_out_tokens);
-                    if let Err(e) = sender.send(meta_data.prepare_sse(uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        event!(Level::WARN, "step {} channel send error: {:?}", step_num, e);
-                        break
+                } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {
+                    if !PARAS.approval_all && step_ask_approval {
+                        let approval_msg = if PARAS.english {
+                            format!("Do you allow calling the {} tool?{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
+                        } else {
+                            format!("是否允许调用 {} 工具？{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
+                        };
+                        if ask_approval(uuid, approval_msg, false, sender.clone()).await? {
+                            match PARAS.mcp_servers.run(&name_id, &i.1).await {
+                                Ok(r) => r,
+                                Err(e) => return Ok(Err(e)),
+                            }
+                        } else {
+                            return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                        }
+                    } else {
+                        match PARAS.mcp_servers.run(&name_id, &i.1).await {
+                            Ok(r) => r,
+                            Err(e) => return Ok(Err(e)),
+                        }
                     }
-                    */
-
-                    // add each tool call result to current message history
-                    step_messages.push(raw_message.clone());
-                    step_messages.push(ChatMessage::Tool{content: result, tool_call_id: i.2});
-                }
-            },
-            CallToolResult::Text(test_result) => { // normal text result, not call tool
-                final_result = test_result;
+                } else {
+                    return Err(MyError::ToolNotExistError{id: name_id[1].to_string(), info: "run_tools".to_string()})
+                };
+                final_result = result;
                 break
-            },
-        }
-        count += 1;
-        if count > 10 {
-            event!(Level::WARN, "{} step {} already call tool {} times, stop this loop", step_num, uuid, count);
-            break
-        }
+            }
+        },
+        CallToolResult::Text(test_result) => { // normal text result, not call tool
+            final_result = test_result;
+        },
     }
-    Ok(final_result)
+    Ok(Ok(final_result))
 }
 
 /// send message to page, insert to main message history
-async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model: &str, sender: Sender<Vec<u8>>) -> Result<(), MyError> {
+async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model: &str, sender: Sender<Vec<u8>>, is_diff: bool) -> Result<(), MyError> {
     // 1. send to user page
     let messages_num = get_messages_num(uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
     // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
-    if let Err(e) = sender.send(MainData::prepare_sse(uuid, messages_num, msg.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0))?).await { // 传递数据以`data: `起始，以`\n\n`终止
+    if let Err(e) = sender.send(MainData::prepare_sse(uuid, messages_num, msg.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, is_diff)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "step {} channel send error: {:?}", step_num, e);
         return Err(MyError::PlanModeError{info: format!("step {} channel send error: {:?}", step_num, e)})
     }
@@ -977,4 +1194,27 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
         return Err(MyError::PlanModeError{info: format!("step {} channel send error: {:?}", step_num, e)})
     }
     Ok(())
+}
+
+/// ask approval
+async fn ask_approval(uuid: &str, msg: String, is_diff: bool, sender: Sender<Vec<u8>>) -> Result<bool, MyError> {
+    let messages_num = get_messages_num(uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
+    if let Err(e) = sender.send(MainData::prepare_sse(uuid, messages_num, "".to_string(), true, false, false, false, false, None, Some(0), Some(msg.replace("\n", "srxtzn")), is_diff)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+        event!(Level::WARN, "ask approval error: {:?}", e);
+        return Err(MyError::PlanModeError{info: format!("ask approval error: {:?}", e)})
+    }
+    let mut tmp_approved = false;
+    update_approval(uuid, None);
+    loop {
+        if let Some(apv) = approved(uuid) {
+            if apv {
+                tmp_approved = true;
+            }
+            update_approval(uuid, None);
+            break
+        }
+        // sleep 2 seconds
+        sleep(Duration::from_secs(2)).await;
+    }
+    Ok(tmp_approved)
 }

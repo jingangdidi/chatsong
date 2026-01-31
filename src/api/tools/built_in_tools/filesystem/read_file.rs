@@ -54,6 +54,12 @@ impl BuiltIn for ReadFile {
     fn run(&self, args: &str) -> Result<String, MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         let content = read_file_helper(&params.file_path)?;
-        Ok(format!("Successfully read file:\n{}", content))
+        //Ok(format!("Successfully read file:\n{}", content))
+        Ok(content)
+    }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
     }
 }

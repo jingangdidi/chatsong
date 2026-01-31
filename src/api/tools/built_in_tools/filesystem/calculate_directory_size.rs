@@ -111,4 +111,9 @@ impl BuiltIn for CalculateDirectorySize {
         };
         Ok(format!("successfully calculate directory \"{}\" size: {}", &params.root_path, total_size))
     }
+
+    /// get approval message
+    fn get_approval(&self, _args: &str, _info: Option<String>, _is_en: bool) -> Result<Option<String>, MyError> {
+        Ok(None)
+    }
 }

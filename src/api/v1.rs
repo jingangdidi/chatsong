@@ -27,6 +27,7 @@ use crate::api::handlers::{
     fallback::fallback,
     delete_message::del_msg,
     incognito::incognito,
+    approval::approval,
 };
 
 /// 创建version1的路由
@@ -55,6 +56,7 @@ pub fn configure() -> Router {
         .route("/save/:id", get(save)) // GET /v1/save/:id，下载生成图片或音频文件
         .route("/delmsg/:id", get(del_msg)) // GET /v1/delmsg/:id，url指定要删除的信息id，从服务端删除
         .route("/incognito", get(incognito)) // GET /v1/incognito，更新is_incognito
+        .route("/approval", get(approval)) // GET /v1/approval，更新approval
         .route("/upload", post(upload)) // POST /v1/upload，上传文件
         .route("/usage", get(usage)) // GET /v1/usage，查看使用说明
         .layer(DefaultBodyLimit::max(1024*1024*100)) // 设置上传文件大小限制为1024*1024*100=104857600=100M

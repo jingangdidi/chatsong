@@ -20,6 +20,8 @@ pub struct SingleExternalTool {
     pub args:        Vec<String>,
     pub description: String,
     pub schema:      Value, // for LLM api function calling
+    #[serde(default)]
+    pub approval:    bool, // ask for approval
 }
 
 impl SingleExternalTool {
@@ -141,5 +143,21 @@ impl MyTools for ExternalTools {
             selected_tools.push(id.clone());
         }
         selected_tools
+    }
+
+    /// get approval message
+    fn get_approval(&self, id: &str, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        match self.id_map.get(id) {
+            Some(tool) => if tool.approval {
+                if is_en {
+                   Ok(Some(format!("Do you allow calling the {} ({}) tool?{}", tool.name, args, info.unwrap_or_default())))
+                } else {
+                   Ok(Some(format!("是否允许调用 {} ({}) 工具？{}", tool.name, args, info.unwrap_or_default())))
+                }
+            } else {
+                Ok(None)
+            },
+            None => Err(MyError::ToolNotExistError{id: id.to_string(), info: "ExternalTools::get_approval()".to_string()}),
+        }
     }
 }

@@ -177,6 +177,7 @@ pub struct Info {
     pub save:          bool,                 // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
     pub pop:           usize,                // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
     pub is_incognito:  bool,                 // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
+    pub approved:      Option<bool>,         // call tool approval
 }
 
 /// 实现Info的方法
@@ -213,6 +214,7 @@ impl Info {
             save:          false,                          // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
             pop:           0,                              // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
             is_incognito:  false,                          // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
+            approved:      None,                           // call tool approval
         }
     }
 
@@ -682,6 +684,28 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
     info.messages.push(chat_data);
 }
 
+/// update approval for call tools
+pub fn update_approval(uuid: &str, approval: Option<bool>) {
+    let mut data = DATA.lock().unwrap();
+    if let Some(info) = data.get_mut(uuid) {
+        info.approved = approval;
+    }
+}
+
+/// check approved
+pub fn approved(uuid: &str) -> Option<bool> {
+    let data = DATA.lock().unwrap();
+    if let Some(info) = data.get(uuid) {
+        if let Some(tf) = &info.approved {
+            Some(*tf)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 /// update input total token, output total token, context token
 pub fn update_token(uuid: &str, usage: (u32, u32, u32)) {
     let mut data = DATA.lock().unwrap();
@@ -896,6 +920,9 @@ pub fn save_all_chat() {
     let mut data = DATA.lock().unwrap();
     for (k, v) in data.iter_mut() {
         if v.save && !v.is_incognito { // 如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才是true
+            if let Err(e) = create_uuid_dir(k) {
+                event!(Level::ERROR, "{}", e);
+            }
             if let Err(e) = v.save() {
                 event!(Level::ERROR, "{} save chat log error: {}", k, e);
             }
@@ -905,9 +932,6 @@ pub fn save_all_chat() {
     drop(data); // 下面获取html字符串的`create_download_page`函数内部需要进行lock，这里需要手动释放之前的lock
     // 保存html文件
     for (uuid, log_file) in uuid_vec {
-        if let Err(e) = create_uuid_dir(&uuid) {
-            event!(Level::ERROR, "{}", e);
-        }
         let html_str = create_download_page(&uuid, None);
         // 由于在不同电脑间同步，保存路径可能不一致，因此在这里才加上路径前缀
         let file_with_path = format!("{}/{}", PARAS.outpath, log_file);
