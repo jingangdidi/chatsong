@@ -132,6 +132,7 @@
             name: "complement_DNA_or_RNA",
             command: "./complement-linux-x86_x64-musl",
             description: "Calculate complement of given DNA or RNA",
+            approval: false,
             schema: r#"
 {
     "properties": {
