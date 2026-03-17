@@ -404,7 +404,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2026.03.14] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
+- [2026.03.17] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
   - 🛠Fix: built-in tool `tail_file` and `read_file`.
   - 🛠Fix: When calling tools, the ID number is always 1.
   - ⭐️Add: Before calling built-in tools `create_directory`, `edit_file`, `move_file`, `unzip_file`, `write_file`, `zip_directory`, `zip_files`, a pop-up window will appear asking the user to confirm whether to continue.
