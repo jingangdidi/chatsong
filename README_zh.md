@@ -393,7 +393,7 @@ Options:
 ```
 
 ## ⏰ 更新记录
-- [2026.01.?] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
+- [2026.03.17] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
   - 🛠修复：内置工具`tail_file`和`read_file`。
   - 🛠修复：调用工具时序号始终为1。
   - ⭐️增加：调用内置工具`create_directory`、`edit_file`、`move_file`、`unzip_file`、`write_file`、`zip_directory`、`zip_files`前，会先弹窗要求用户确认是否继续。
