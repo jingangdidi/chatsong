@@ -423,7 +423,6 @@ async fn delay_action(ctx: &Context, msg: &Message) {
 pub async fn run_discord_bot(token: &str) {
     // Configure the client with your Discord bot token in the environment.
     // let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    // let token = "MTQ4MjM3MzIwNDM4MjE5MTg1MA.G6RyQv.LO9Y94eICOjnr0smwZFLZ9TdgmhfBquNminmyY".to_string();
 
     let http = Http::new(token);
 
