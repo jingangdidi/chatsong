@@ -255,7 +255,8 @@ impl StdIoServers {
             let (server_version, server_name) = transport.initialize(&server.command).await?;
             server.name = server_name.clone(); // name from server initialization
             server.protocol_version = server_version; // protocol version from server initialization
-            let id = Uuid::new_v4().to_string();
+            let tmp_uuid = Uuid::new_v4().to_string();
+            let id = tmp_uuid[0..8].to_string();
             tools.extend(transport.list_tools(&server.command).await?.into_iter().map(|t| ToolInfo {
                 name_id:     format!("{}__{}", t.0, id), // name__id
                 name:        t.0, // tool name
@@ -283,11 +284,11 @@ impl StdIoServers {
 
 impl MyMcp for StdIoServers {
     /// run command
-    async fn run(&self, id: &str, tool_name: &str, args: &str) -> Result<String, MyError> {
+    async fn run(&self, id: &str, tool_name: &str, args: &str) -> Result<(String, Option<String>), MyError> {
         match self.id_map.get(id) {
             Some(server) => {
                 let json_args: Value = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-                server.0.call_tool(tool_name, json_args, &server.1.name, &server.1.protocol_version).await
+                Ok((server.0.call_tool(tool_name, json_args, &server.1.name, &server.1.protocol_version).await?, None))
             },
             None => Err(MyError::ToolNotExistError{id: id.to_string(), info: "StdIoServers::run()".to_string()}),
         }

@@ -61,11 +61,12 @@ impl BuiltIn for UnzipFile {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
 
-        let zip_file = validate_path(&PARAS.allowed_path, Path::new(&params.zip_file), true)?;
-        let target_dir_path = Path::new(&params.target_dir);
+        let zip_file = validate_path(&PARAS.allowed_path, Path::new(&params.zip_file.replace("\\", "/")), true)?;
+        let correct_path = params.target_dir.replace("\\", "/");
+        let target_dir_path = Path::new(&correct_path);
         let target_dir_abs_path = validate_path(&PARAS.allowed_path, target_dir_path, false)?;
 
         if target_dir_abs_path.exists() {
@@ -109,7 +110,7 @@ impl BuiltIn for UnzipFile {
             }
         }
 
-        Ok(format!("Successfully extracted {} {} into '{}':\n{}", file_count, if file_count == 1 { "file" } else { "files" }, target_dir_path.display(), result_files.join("\n")))
+        Ok((format!("Successfully extracted {} {} into '{}':\n{}", file_count, if file_count == 1 { "file" } else { "files" }, target_dir_path.display(), result_files.join("\n")), None))
     }
 
     /// get approval message

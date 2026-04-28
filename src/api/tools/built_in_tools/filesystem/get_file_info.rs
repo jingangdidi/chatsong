@@ -58,9 +58,9 @@ impl BuiltIn for GetFileInfo {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let valid_path = validate_path(&PARAS.allowed_path, Path::new(&params.path), true)?;
+        let valid_path = validate_path(&PARAS.allowed_path, Path::new(&params.path.replace("\\", "/")), true)?;
         let metadata = fs::metadata(valid_path)?;
 
         let size = metadata.len();
@@ -80,7 +80,7 @@ impl BuiltIn for GetFileInfo {
             metadata,
         };
 
-        Ok(format!("successfully get file info: {:?}", file_info))
+        Ok((format!("successfully get file info: {:?}", file_info), None))
     }
 
     /// get approval message

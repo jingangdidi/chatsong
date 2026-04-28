@@ -280,9 +280,9 @@ impl BuiltIn for SearchFilesContent {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let files_iter = search_files_helper(&params.root_path, params.pattern.clone(), params.exclude_patterns.clone())?;
+        let files_iter = search_files_helper(&params.root_path.replace("\\", "/"), params.pattern.clone(), params.exclude_patterns.clone())?;
 
         let results: Vec<FileSearchResult> = files_iter
             .iter()
@@ -294,10 +294,10 @@ impl BuiltIn for SearchFilesContent {
             .collect();
 
         if results.is_empty() {
-            Ok(format!("No matches found in the files content. path: {}, pattern: {}, exclude_patterns: {:?}", params.root_path, params.pattern, params.exclude_patterns))
+            Ok((format!("No matches found in the files content. path: {}, pattern: {}, exclude_patterns: {:?}", params.root_path, params.pattern, params.exclude_patterns), None))
         } else {
             let formated_result = self.format_result(results);
-            Ok(format!("Successfully found matches:\n{}", formated_result))
+            Ok((format!("Successfully found matches:\n{}", formated_result), None))
         }
     }
 

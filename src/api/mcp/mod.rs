@@ -97,7 +97,7 @@ pub struct ToolInfo {
 /// trait for MCP stdio servers & http servers
 pub trait MyMcp {
     /// run tool
-    fn run(&self, id: &str, tool_name: &str, args: &str) -> impl std::future::Future<Output = Result<String, MyError>> + Send;
+    fn run(&self, id: &str, tool_name: &str, args: &str) -> impl std::future::Future<Output = Result<(String, Option<String>), MyError>> + Send;
 
     /// get all selected tools name (name format: `name__id`, max name length is 26), description and schema
     fn get_desc_and_schema(&self, selected_tools: Vec<String>) -> Vec<ToolInfo>;
@@ -162,7 +162,7 @@ impl McpServers {
     }
 
     /// run tool
-    pub async fn run(&self, name_id: &[&str], args: &str) -> Result<String, MyError> {
+    pub async fn run(&self, name_id: &[&str], args: &str) -> Result<(String, Option<String>), MyError> {
         if self.stdio.id_map.contains_key(name_id[1]) {
             self.stdio.run(name_id[1], name_id[0], args).await
         } else {

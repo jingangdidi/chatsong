@@ -10,11 +10,12 @@ use crate::{
 };
 
 //mod sum;
-//mod subtract;
 pub mod filesystem;
+pub mod codebase;
+pub mod web;
+pub mod run_x;
 
 //use sum::Sum;
-//use subtract::Subtract;
 use filesystem::{
     CalculateDirectorySize,
     CreateDirectory,
@@ -36,6 +37,19 @@ use filesystem::{
     ZipDirectory,
     ZipFiles,
 };
+use codebase::{
+    GetCodebaseFileTree,
+    SearchCodeSignature,
+    GrepCodeSignature,
+    GetAllCallers,
+    GetMethods,
+    GetCodeSignature,
+};
+use web::GetWebPageContent;
+use run_x::{
+    RunCommand,
+    RunScript,
+};
 
 /// trait for built-in tools
 pub trait BuiltIn: Send + Sync {
@@ -49,7 +63,7 @@ pub trait BuiltIn: Send + Sync {
     fn schema(&self) -> Value;
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError>;
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError>;
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError>;
@@ -58,22 +72,28 @@ pub trait BuiltIn: Send + Sync {
 /// tool group
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub enum Group {
-    //Calculate,
     FileSystem,
+    Codebase,
+    Web,
+    RunX,
 }
 
 impl Group {
     pub fn to_string(&self) -> String {
         match self {
-            //Group::Calculate => "calculate".to_string(),
             Group::FileSystem => "file system".to_string(),
+            Group::Codebase => "codebase".to_string(),
+            Group::Web => "web".to_string(),
+            Group::RunX => "run_x".to_string(),
         }
     }
 
     fn from_str(g: &str) -> Result<Self, MyError> {
         match g {
-            //"calculate" => Ok(Group::Calculate),
             "file system" => Ok(Group::FileSystem),
+            "codebase" => Ok(Group::Codebase),
+            "web" => Ok(Group::Web),
+            "run_x" => Ok(Group::RunX),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
         }
     }
@@ -117,6 +137,18 @@ impl BuiltInTools {
             (Arc::new(WriteFile::new()), Group::FileSystem),
             (Arc::new(ZipDirectory::new()), Group::FileSystem),
             (Arc::new(ZipFiles::new()), Group::FileSystem),
+            // codebase
+            (Arc::new(GetCodebaseFileTree::new()), Group::Codebase),
+            (Arc::new(SearchCodeSignature::new()), Group::Codebase),
+            (Arc::new(GrepCodeSignature::new()), Group::Codebase),
+            (Arc::new(GetAllCallers::new()), Group::Codebase),
+            (Arc::new(GetMethods::new()), Group::Codebase),
+            (Arc::new(GetCodeSignature::new()), Group::Codebase),
+            // web
+            (Arc::new(GetWebPageContent::new()), Group::Web),
+            // run_x
+            (Arc::new(RunCommand::new()), Group::RunX),
+            (Arc::new(RunScript::new()), Group::RunX),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool
         let mut groups: HashSet<Group> = HashSet::new(); // tool groups
@@ -125,7 +157,8 @@ impl BuiltInTools {
             if tool.name().chars().count() > 26 {
                 return Err(MyError::OtherError{info: format!("tool name \"{}\" length must <= 26", tool.name())})
             }
-            id_map.insert(Uuid::new_v4().to_string(), SingleBuiltInTool{tool, group: group.clone()});
+            let tmp_uuid = Uuid::new_v4().to_string();
+            id_map.insert(tmp_uuid[0..8].to_string(), SingleBuiltInTool{tool, group: group.clone()});
             groups.insert(group);
         }
         Ok(Self{id_map, groups})
@@ -146,7 +179,7 @@ impl BuiltInTools {
 
 impl MyTools for BuiltInTools {
     /// run function
-    fn run(&self, id: &str, args: &str) -> Result<String, MyError> {
+    fn run(&self, id: &str, args: &str) -> Result<(String, Option<String>), MyError> {
         match self.id_map.get(id) {
             Some(t) => t.tool.run(args),
             None => Err(MyError::ToolNotExistError{id: id.to_string(), info: "BuiltInTools::run()".to_string()}),

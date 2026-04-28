@@ -91,10 +91,10 @@ impl BuiltIn for HeadFile {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let result = self.head_file(&params.path, params.lines as usize)?;
-        Ok(format!("Successfully get the first {} lines:\n```\n{}\n```", params.lines, if result.contains("```") { result.replace("```", "\\`\\`\\`") } else { result }))
+        let result = self.head_file(&params.path.replace("\\", "/"), params.lines as usize)?;
+        Ok((format!("Successfully get the first {} lines:\n```\n{}\n```", params.lines, if result.contains("```") { result.replace("```", "\\`\\`\\`") } else { result }), Some(params.path)))
     }
 
     /// get approval message

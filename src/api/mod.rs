@@ -13,6 +13,8 @@ pub mod graph;
 pub mod ctrlc;
 pub mod tools;
 pub mod mcp;
+pub mod channel;
+pub mod skills;
 
 mod handlers;
 mod v1;

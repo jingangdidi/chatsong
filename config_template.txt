@@ -6,6 +6,8 @@
     allowed_path: "./",      // optional, allowed path for tools, multiple paths separated by commas, default: ./
     maxage: "1DAY",          // required, cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
     show_english: true,      // required, true: show english page，false: show chinese page
+    skills_path: "./skills", // skills path
+    bgc: "1",                // background color, support hex color (e.g. #F5F5DC, #fff, #000), or built-in color: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
     outpath: "./chat-log",   // required, where to save chat log files
     model_config: [
         Config(

@@ -26,7 +26,7 @@ pub struct SingleExternalTool {
 
 impl SingleExternalTool {
     /// run command
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         //println!("\n\n{}\n{:?}\n{}\n\n", self.command, self.args, args);
         // prepare command
         let mut tool_cmd = Command::new(&self.command);
@@ -103,10 +103,10 @@ impl SingleExternalTool {
         };
         // result
         Ok(match (stderr, stdout) {
-            (Some(e), Some(o)) => format!("{e}\n{o}"),
-            (Some(e), None)    => e,
-            (None, Some(o))    => o,
-            (None, None)       => "".to_string(),
+            (Some(e), Some(o)) => (format!("{e}\n{o}"), None),
+            (Some(e), None)    => (e, None),
+            (None, Some(o))    => (o, None),
+            (None, None)       => ("".to_string(), None),
         })
     }
 }
@@ -118,13 +118,14 @@ pub struct ExternalTools {
 
 impl ExternalTools {
     pub fn new(external_tools: Vec<SingleExternalTool>) -> Self {
-        Self {id_map: external_tools.into_iter().map(|t| (Uuid::new_v4().to_string(), t)).collect::<HashMap<String, SingleExternalTool>>()}
+        let tmp_uuid = Uuid::new_v4().to_string();
+        Self {id_map: external_tools.into_iter().map(|t| (tmp_uuid[0..8].to_string(), t)).collect::<HashMap<String, SingleExternalTool>>()}
     }
 }
 
 impl MyTools for ExternalTools {
     /// run command
-    fn run(&self, id: &str, args: &str) -> Result<String, MyError> {
+    fn run(&self, id: &str, args: &str) -> Result<(String, Option<String>), MyError> {
         match self.id_map.get(id) {
             Some(tool) => tool.run(args),
             None => Err(MyError::ToolNotExistError{id: id.to_string(), info: "ExternalTools::run()".to_string()}),

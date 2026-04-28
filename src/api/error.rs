@@ -27,8 +27,10 @@ use openai_dive::v1::{
 };
 use pdf_extract::OutputError;
 use reqwest::Error as reqwest_error;
+use regex::Error as regex_error;
 use serde_json::Error as json_error;
 use thiserror::Error;
+use tree_sitter::QueryError;
 use zip::result::ZipError;
 
 /// srx添加，自定义的错误类型，方便传递错误
@@ -210,6 +212,18 @@ pub enum MyError {
     // MCP error
     #[error("Error - {info}")]
     McpError{info: String},
+
+    // language error
+    #[error("Error - trying to assign an incompatible Language {language} to a Parser")]
+    ParseLanguageError{language: String},
+
+    // An error that occurred when trying to create a Query
+    #[error("Error - query error: {error}")]
+    TreeSitterQueryError{error: QueryError},
+
+    // regex error
+    #[error("Error - An error that occurred during parsing or compiling a regular expression: {error}")]
+    RegexError{error: regex_error},
 
     // other error
     #[error("Error - {info}")]

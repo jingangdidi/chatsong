@@ -37,15 +37,18 @@ impl BuiltIn for ListAllowedDirectories {
     }
 
     /// run tool
-    fn run(&self, _args: &str) -> Result<String, MyError> {
-        Ok(format!(
-            "allowed directories:\n{}",
-            &PARAS
-                .allowed_path
-                .iter()
-                .map(|entry| entry.1.display().to_string())
-                .collect::<Vec<_>>()
-                .join("\n")
+    fn run(&self, _args: &str) -> Result<(String, Option<String>), MyError> {
+        Ok((
+            format!(
+                "allowed directories:\n{}",
+                &PARAS
+                    .allowed_path
+                    .iter()
+                    .map(|entry| entry.1.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
+            None,
         ))
     }
 

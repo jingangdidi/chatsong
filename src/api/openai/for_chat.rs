@@ -30,6 +30,10 @@ use crate::{
     error::MyError,
 };
 
+const THOUGHT_START: &[&str] = &["<think>", "<thought>", "<thinking>", "<reasoning>"];
+const THOUGHT_END: &[&str] = &["</think>", "</thought>", "</thinking>", "</reasoning>"];
+
+
 /// stream接收答案，通过管道将接受的答案传输出去，并将完整答案记录到该uuid中
 /// uuid: 当前对话的uuid
 /// sender: 管道发送stream答案
@@ -47,7 +51,8 @@ pub async fn use_stream(
     let mut whole_answer = "".to_string(); // 存储完整答案
     let mut msg_token = None;
     let mut role: u8 = 3; // 1表示User，2表示System，3表示Assistant，4表示Developer
-    let mut think = true; // 是否属于think思维链部分
+    let mut think = false; // 是否属于think思维链部分
+    let mut start_stop_think: u8 = 0; // 显示思维链
     let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
     let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
     // 创建stream
@@ -108,24 +113,69 @@ pub async fn use_stream(
                 */
                 DeltaChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
                     let c = match (tmp_content, tmp_reasoning_content) {
-                        (Some(ChatMessageContent::Text(c)), None) => c, // 答案
-                        (None, Some(c)) => c, // 思考过程
+                        (Some(ChatMessageContent::Text(c)), None) => { // 答案
+                            if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
+                                think = true;
+                                start_stop_think = 1; // 开始思维链
+                                None
+                            } else if start_stop_think == 7 {
+                                start_stop_think = 4; // 结束思维链
+                                whole_answer += &c;
+                                Some(c)
+                            } else if start_stop_think == 8 && THOUGHT_END.contains(&c.as_ref()) {
+                                start_stop_think = 4; // 结束思维链
+                                None
+                            } else if start_stop_think == 1 {
+                                start_stop_think = 8;
+                                whole_answer += &c;
+                                Some(c)
+                            } else {
+                                whole_answer += &c;
+                                Some(c)
+                            }
+                        },
+                        (None, Some(c)) => { // 思考过程
+                            if start_stop_think == 0 {
+                                think = true;
+                                start_stop_think = 2; // 开始思维链
+                            } else if start_stop_think == 2 {
+                                start_stop_think = 7;
+                            }
+                            Some(c)
+                        },
                         _ => continue,
                     };
-                    whole_answer += &c;
-                    if !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
+                    if think && !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
                         continue
                     }
-                    role = 3;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                    if think {
+                        if start_stop_think == 1 || start_stop_think == 2 {
+                            //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                event!(Level::WARN, "channel send error: {:?}", e);
+                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                            }
+                        } else if start_stop_think == 4 {
+                            //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                event!(Level::WARN, "channel send error: {:?}", e);
+                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                            }
+                            think = false;
+                        }
                     }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    role = 3;
+                    if let Some(c_str) = c {
+                        //print!("{}", c);
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //println!("channel send error: {:?}", e);
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                        }
+                        //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    }
                 },
                 DeltaChatMessage::Developer{content: ChatMessageContent::Text(c), ..} => {
                     whole_answer += &c;
@@ -175,41 +225,68 @@ pub async fn use_stream(
                 */
                 DeltaChatMessage::Untagged{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => { // llama.cpp的llama-server的api传输的答案会在这里
                     let c = match (tmp_content, tmp_reasoning_content) {
-                        (Some(ChatMessageContent::Text(c)), None) => c, // 答案
-                        (None, Some(c)) => c, // 思考过程
+                        (Some(ChatMessageContent::Text(c)), None) => { // 答案
+                            if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
+                                think = true;
+                                start_stop_think = 1; // 开始思维链
+                                None
+                            } else if start_stop_think == 7 {
+                                start_stop_think = 4; // 结束思维链
+                                whole_answer += &c;
+                                Some(c)
+                            } else if start_stop_think == 8 && THOUGHT_END.contains(&c.as_ref()) {
+                                start_stop_think = 4; // 结束思维链
+                                None
+                            } else if start_stop_think == 1 {
+                                start_stop_think = 8;
+                                whole_answer += &c;
+                                Some(c)
+                            } else {
+                                whole_answer += &c;
+                                Some(c)
+                            }
+                        },
+                        (None, Some(c)) => { // 思考过程
+                            if start_stop_think == 0 {
+                                think = true;
+                                start_stop_think = 2; // 开始思维链
+                            } else if start_stop_think == 2 {
+                                start_stop_think = 7;
+                            }
+                            Some(c)
+                        },
                         _ => continue,
                     };
-                    whole_answer += &c;
-                    if !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
+                    if think && !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
                         continue
                     }
-                    role = 3;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                    }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                     if think {
-                        if whole_answer == "<think>" {
-                            whole_answer += "thinking ...<br>"; // 开始think时在最开始显示“thinking ...”
+                        if start_stop_think == 1 || start_stop_think == 2 {
                             //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", e);
                                 break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
-                        } else if c == "</think>" {
-                            whole_answer += "<br>"; // think结束后换行
+                        } else if start_stop_think == 4 {
                             //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 event!(Level::WARN, "channel send error: {:?}", e);
                                 break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
                             think = false;
                         }
+                    }
+                    role = 3;
+                    if let Some(c_str) = c {
+                        //print!("{}", c);
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //println!("channel send error: {:?}", e);
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                        }
+                        //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                     }
                 },
                 _ => (),
@@ -261,7 +338,7 @@ pub async fn use_stream(
     Ok(())
 }
 
-/// 非stream，接收openai的完整答案，并将完整答案记录到该uuid中，最后返回完整答案
+/// 非stream，接收openai的完整答案，并将完整答案记录到该uuid中，最后返回完整答案以及思考内容
 /// uuid: 当前对话的uuid
 /// client: 创建的openai客户端
 /// parameters: 提问的参数
@@ -271,11 +348,11 @@ pub async fn not_use_stream(
     client: Client,
     parameters: ChatCompletionParameters,
     model: &str,
-    show_thought: bool,
     insert_this_message: bool, // insert result to history messages
-) -> Result<String, MyError> {
+) -> Result<(String, Option<String>), MyError> {
     //let result = client.chat().create(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
     let mut whole_answer = "".to_string(); // 存储完整答案
+    let mut thinking = "".to_string(); // 思考部分
     let mut msg_token = None;
     let mut role: u8 = 3; // 1表示User，2表示System，3表示Assistant，4表示Developer
     match client.chat().create(parameters).await { // 这里遇到错误不能直接返回，否则服务端与前端id差一个，后面代码insert_message没有执行，下个问题会显示在这个未回答完的答案末尾
@@ -324,16 +401,29 @@ pub async fn not_use_stream(
                 */
                 ChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
                     role = 3;
-                    if show_thought {
-                        if let Some(c) = tmp_reasoning_content {
-                            whole_answer = c.to_string();
-                        }
+                    if let Some(c) = tmp_reasoning_content {
+                        thinking = format!("<div class='think'>thinking ...<br>{}srxtzn</div>srxtznsrxtzn---srxtznsrxtzn", c);
                     }
                     match tmp_content {
                         Some(c) => {
                             match c {
                                 ChatMessageContent::Text(res) => {
-                                    whole_answer += res;
+                                    // 如果思考部分没有单独方在`reasoning_content`，则尝试从答案主体中获取
+                                    if thinking.is_empty() {
+                                        for (start, end) in THOUGHT_START.iter().zip(THOUGHT_END.iter()) {
+                                            if res.starts_with(start) && res.contains(end) {
+                                                let (first, second) = res.split_once(end).unwrap();
+                                                thinking = format!("<div class='think'>thinking ...<br>{}srxtzn</div>srxtznsrxtzn---srxtznsrxtzn", first);
+                                                whole_answer = second.to_string();
+                                                break
+                                            }
+                                        }
+                                        if thinking.is_empty() {
+                                            whole_answer = res.to_string();
+                                        }
+                                    } else {
+                                        whole_answer = res.to_string();
+                                    }
                                     //println!("{}", res);
                                 },
                                 ChatMessageContent::ContentPart(res_vec) => event!(Level::INFO, "System ChatMessageContent::ContentPart {:?}", res_vec),
@@ -397,22 +487,32 @@ pub async fn not_use_stream(
     } else if let Some(tokens) = msg_token {
         update_token(&uuid, tokens);
     }
-    Ok(whole_answer)
+    Ok((whole_answer, if thinking.is_empty() { None } else { Some(thinking) }))
 }
 
 // print and update total token usage
-fn get_print_token(usage: Usage, uuid: &str) -> Option<(u32, u32, u32)> { 
+fn get_print_token(usage: Usage, uuid: &str) -> Option<(u32, u32, u32)> {
+    // 缓存命中的token数
+    let cached_tokens = match usage.prompt_tokens_details {
+        Some(details) => details.cached_tokens.unwrap_or(0),
+        None => 0,
+    };
+    // 推理部分的token数
+    let reasoning_tokens = match usage.completion_tokens_details {
+        Some(details) => details.reasoning_tokens.unwrap_or(0),
+        None => 0,
+    };
     match (usage.prompt_tokens, usage.completion_tokens) {
         (Some(prompt_tokens), Some(completion_tokens)) => {
-            event!(Level::INFO, "{} {{prompt_tokens: {}, completion_tokens: {}, total_tokens: {}}}", uuid, prompt_tokens, completion_tokens, usage.total_tokens);
+            event!(Level::INFO, "{} {{prompt_tokens: {} (cached_tokens: {}), completion_tokens: {} (reasoning_tokens: {}), total_tokens: {}}}", uuid, prompt_tokens, cached_tokens, completion_tokens, reasoning_tokens, usage.total_tokens);
             Some((prompt_tokens, completion_tokens, usage.total_tokens))
         },
         (Some(prompt_tokens), None) => {
-            event!(Level::INFO, "{} {{prompt_tokens: {}, completion_tokens: None, total_tokens: {}}}", uuid, prompt_tokens, usage.total_tokens);
+            event!(Level::INFO, "{} {{prompt_tokens: {} (cached_tokens: {}), completion_tokens: None, total_tokens: {}}}", uuid, cached_tokens, prompt_tokens, usage.total_tokens);
             Some((prompt_tokens, 0, usage.total_tokens))
         },
         (None, Some(completion_tokens)) => {
-            event!(Level::INFO, "{} {{prompt_tokens: None, completion_tokens: {}, total_tokens: {}}}", uuid, completion_tokens, usage.total_tokens);
+            event!(Level::INFO, "{} {{prompt_tokens: None, completion_tokens: {} (reasoning_tokens: {}), total_tokens: {}}}", uuid, completion_tokens, reasoning_tokens, usage.total_tokens);
             Some((0, completion_tokens, usage.total_tokens))
         },
         (None, None) => {

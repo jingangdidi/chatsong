@@ -142,14 +142,14 @@ impl BuiltIn for DirectoryTree {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         let mut current_count = 0;
-        let (entries, _reached_max_depth) = self.directory_tree_helper(Path::new(&params.root_path), params.max_depth, None, &mut current_count)?;
+        let (entries, _reached_max_depth) = self.directory_tree_helper(Path::new(&params.root_path.replace("\\", "/")), params.max_depth, None, &mut current_count)?;
         if current_count == 0 {
             return Err(MyError::OtherError{info: format!("Could not find any entries: {}", params.root_path)})
         }
-        Ok(format!("successfully get directory \"{}\" tree: {:?}", &params.root_path, entries))
+        Ok((format!("successfully get directory \"{}\" tree: {:?}", &params.root_path, entries), None))
     }
 
     /// get approval message

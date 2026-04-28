@@ -62,9 +62,9 @@ impl BuiltIn for SearchFiles {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let list = search_files_helper(&params.root_path, params.include_pattern, params.exclude_patterns)?;
+        let list = search_files_helper(&params.root_path.replace("\\", "/"), params.include_pattern, params.exclude_patterns)?;
         let result = if !list.is_empty() {
             list.iter()
                 .map(|entry| entry.path().display().to_string())
@@ -73,7 +73,7 @@ impl BuiltIn for SearchFiles {
         } else {
             "No matches found".to_string()
         };
-        Ok(result)
+        Ok((result, None))
     }
 
     /// get approval message

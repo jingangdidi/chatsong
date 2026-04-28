@@ -1,7 +1,8 @@
     :root {
         --font-family: monospace, KaiTi, fangsong; /* 字体 */
         --font-color: #0f0f0f; /* 字体颜色，黑色 */
-        --background-color: #f6f6f6; /* 背景颜色，白色 */
+        --background-color: #E6E6E6; /* 背景颜色，浅黄F5F5DC、FFFFE0，浅灰DCDCDC、E6E6E6，浅紫E6E6FA(Edge显示为浅粉) */
+        --inner-clor: #f6f6f6; /* 消息框、输入框、下拉框、头像背景颜色，白色 */
         --shadow-color: #e8e8e8; /* 阴影颜色，灰色 */
         --textarea-border-color: #719ece; /* 输入框输入问题时的颜色，蓝色 */
         --sub-bar-hover-color: rgb(247,151,29); /* 下拉项hover时颜色 */
@@ -241,7 +242,7 @@
     /* input输入框 */
     input {
         transition: all 0.3s ease;
-        background: var(--background-color);
+        background: var(--inner-clor);
         box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
     }
 
@@ -255,7 +256,7 @@
     /* 选择框 */
     select {
         transition: all 0.3s ease;
-        background: var(--background-color);
+        background: var(--inner-clor);
         color: var(--font-color);
         box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
     }
@@ -292,6 +293,7 @@
         display: block;
         width: 90%;
         height: 3.5vmin; /* 输入框高度 */
+        background: var(--inner-clor);
         border-radius: 8px;
         cursor: pointer;
         /*box-shadow: inset -8px -8px 15px rgba(255,255,255,.6), inset 10px 10px 10px rgba(0,0,0, .25);*/
@@ -440,7 +442,7 @@
     .chat-inputs-inner textarea {
         width: 80%;
         padding: 10px;
-        background-color: var(--background-color);
+        background-color: var(--inner-clor);
         border-radius: 8px;
         outline: none;
         /*border: none;*/
@@ -488,7 +490,7 @@
     }
 
     /* think思维链颜色 */
-    think {
+    .think {
         color: #87CEFA; /* 淡蓝色 */
     }
 
@@ -499,6 +501,7 @@
     */
     .chatgpt-icon {
         width: 40px;
+        background-color: var(--inner-clor);
         transition: transform 0.2s ease, opacity 0.2s ease; /* 点击头像复制内容的动态效果 */
         /*box-shadow: -7px -7px 20px 0px #fff9,
             -4px -4px 5px 0px #fff9,
@@ -586,7 +589,7 @@
         margin: 0;
         padding: 0;
         /*border: 1px solid yellow;*/
-        background-color: var(--background-color);
+        background-color: var(--inner-clor);
         box-shadow: inset 4px 4px 4px #cbced1, inset -4px -4px 4px white; /* 凹进去 */
         /*box-shadow: -7px -7px 20px 0px #fff9,
             -4px -4px 5px 0px #fff9,
@@ -606,6 +609,11 @@
         /*border: 1px solid var(--textarea-border-color);*/
         outline: none !important;
         box-shadow: 0 0 10px var(--textarea-border-color), inset 4px 4px 4px #cbced1, inset -4px -4px 4px white;
+    }
+
+    .is-tool {
+        max-height: 300px;
+        overflow-y: auto; /* 当调用工具时result内容超出高度时，显示垂直滚动条 */
     }
 
     /* 限制语音图标大小 */
@@ -862,3 +870,10 @@
         background-color: #dc3545;
         color: white;
     }
+
+    /* 差异代码滚动条 */
+    .diff-scroll {
+        max-height: 500px;
+        overflow: auto;
+        position: relative;
+}

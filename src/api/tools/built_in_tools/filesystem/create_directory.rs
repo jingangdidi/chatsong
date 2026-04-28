@@ -55,11 +55,11 @@ impl BuiltIn for CreateDirectory {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let valid_path = validate_path(&PARAS.allowed_path, Path::new(&params.path), false)?;
+        let valid_path = validate_path(&PARAS.allowed_path, Path::new(&params.path.replace("\\", "/")), false)?;
         create_dir_all(&valid_path)?;
-        Ok(format!("successfully created directory {}", params.path))
+        Ok((format!("successfully created directory {}", params.path), None))
     }
 
     /// get approval message

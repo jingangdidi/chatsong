@@ -36,6 +36,8 @@ use crate::{
             StdIoServers,
         },
     },
+    skills::{Skills, SkillManager},
+    channel::Channel,
 };
 
 /// 全局变量，可以修改，存储解析的命令行参数，在解析命令行参数时初始化
@@ -73,6 +75,10 @@ struct Paras {
     #[argh(option, short = 's')]
     search_key: Option<String>,
 
+    /// channel, multiple channels separated by `::`, currently only supports discord: `-C discord:token:guild_id`
+    #[argh(option, short = 'C')]
+    channels: Option<String>,
+
     /// allowed path, used for call tools, multiple paths separated by commas, default: ./
     #[argh(option, short = 'w')]
     allowed_path: Option<String>,
@@ -97,6 +103,14 @@ struct Paras {
     #[argh(switch, short = 'A')]
     approval_all: bool,
 
+    /// skills path, default: ./skills
+    #[argh(option, short = 'S')]
+    skills: Option<String>,
+
+    /// background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
+    #[argh(option, short = 'b')]
+    bgc: Option<String>,
+
     /// output path, default: ./chat-log
     #[argh(option, short = 'o')]
     outpath: Option<String>,
@@ -111,6 +125,7 @@ pub struct ParsedParas {
     pub port:         u16,                         // 要监听的端口，默认8080
     pub engine_key:   String,                      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     pub search_key:   String,                      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    pub channels:     Vec<Channel>,                // 要连接的机器人，当前只支持discord，需要bot的token和guild-id，多个channel`::`间隔，示例：`-C discord:token:guild_id`
     pub allowed_path: Vec<(PathBuf, PathBuf)>,     // allowed path (absolute path (may be not exist), normalized path) for tools, multiple paths separated by commas, default: ./
     pub prompt:       HashMap<usize, [String; 2]>, // 存储prompt
     pub graph:        String,                      // 图文件，默认在指定输出路径下搜索最新的“时间戳.graph”，指定的文件不存在或没有搜索到则创建空图结构，每次使用`ctrl-c`停止服务时程序会自动保存图文件
@@ -121,6 +136,8 @@ pub struct ParsedParas {
     pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
     pub tools:        Tools,                       // all tools
     pub mcp_servers:  McpServers,                  // mcp servers
+    pub bgc:          String,                      // 页面背景色
+    pub skills:       Skills,                      // skills
 }
 
 /// 解析参数
@@ -176,6 +193,16 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
             Some(s) => s,
             None => other_para.google_search_key,
         },
+        channels: match para.channels { // 要连接的机器人，当前只支持discord，需要bot的token和guild-id，多个channel`::`间隔，示例：`-C discord:bot-token:guild-id`
+            Some(c) => {
+                let mut channels: Vec<Channel> = Vec::new();
+                for channel in c.split("::") {
+                    channels.push(Channel::new_from_str(channel)?);
+                }
+                channels
+            },
+            None => Vec::new(),
+        },
         allowed_path: match para.allowed_path { // allowed path (absolute path (may be not exist), normalized path) for tools, multiple paths separated by commas, default: ./
             Some(w) => get_allowed_path(&w)?,
             None => {
@@ -226,6 +253,29 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         },
         tools: Tools::new(other_para.external_tools, english)?, // all tools
         mcp_servers: McpServers::new(other_para.mcp_servers, english), // mcp servers
+        skills: {
+            let skills_path = match para.skills {
+                Some(s) => PathBuf::from(&s),
+                None => PathBuf::from(&other_para.skills_path),
+            };
+            let skill_manager = SkillManager::from_skills_dir(skills_path.clone());
+            let (available, unavailable, html) = if skills_path.exists() && skills_path.is_dir() {
+                let (available, unavailable) = skill_manager.discover_skills();
+                let html = skill_manager.html_dropdown(&available, &unavailable, english);
+                (available, unavailable, html)
+            } else {
+                (Vec::new(), Vec::new(), String::new())
+            };
+            Skills{skill_manager, available, unavailable, html}
+        },
+        bgc: match para.bgc { // 页面背景色
+            Some(b) => get_bg_color(&b),
+            None => if other_para.bgc.is_empty() {
+                get_bg_color("1")
+            } else {
+                get_bg_color(&other_para.bgc)
+            },
+        },
     };
     // 输出路径不存在则创建，已存在则删除其中的空uuid文件夹
     let tmp_outpath = Path::new(&out.outpath);
@@ -328,6 +378,40 @@ fn get_allowed_path(p: &str) -> Result<Vec<(PathBuf, PathBuf)>, MyError> {
         allowed_path.push((absolute_path, normalized_path));
     }
     Ok(allowed_path)
+}
+
+/// 检查指定字符串是否是hex颜色，例如：#F5F5DC、#fff、#000
+fn is_valid_hex_color(color: &str) -> bool {
+    // 必须不为空，且以`#`开头
+    if color.is_empty() || !color.starts_with('#') {
+        return false
+    }
+
+    // 获取`#`之后的部分
+    let hex_part = &color[1..];
+    let len = hex_part.len();
+
+    // 支持 3、6、8 位十六进制
+    if len != 3 && len != 6 && len != 8 {
+        return false
+    }
+
+    // 验证每个字符是否为十六进制字符
+    hex_part.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// 获取页面背景色
+fn get_bg_color(c: &str) -> String {
+    match c.as_ref() {
+        "2" => "--background-color: #F5F5DC;".to_string(),
+        "3" => "--background-color: #FFFFE0;".to_string(),
+        "4" => "--background-color: #E6E6FA;".to_string(),
+        _ => if is_valid_hex_color(c) {
+            format!("--background-color: {};", c)
+        } else {
+            "".to_string() // 默认是`style.css`中当前的颜色，不需要替换
+        },
+    }
 }
 
 /// 去除输出路径的后缀“/”或“\”
@@ -452,6 +536,8 @@ struct Para {
     allowed_path:      String,                  // allowed path for tools, multiple paths separated by commas, default: ./
     maxage:            String,                  // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                    // true展示英文界面，false展示中文界面
+    skills_path:       String,                  // skills路径
+    bgc:               String,                  // 页面背景色
     outpath:           String,                  // 问答结果输出路径
     model_config:      Vec<Config>,             // 模型参数
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -471,6 +557,8 @@ struct OptherPara {
     allowed_path:      String,                      // allowed path for tools, multiple paths separated by commas, default: ./
     maxage:            String,                      // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                        // true展示英文界面，false展示中文界面
+    skills_path:       String,                      // skills路径
+    bgc:               String,                      // 页面背景色
     outpath:           String,                      // 问答结果输出路径
     prompt:            HashMap<usize, [String; 2]>, // key: 序号，value: [prompt名称, prompt内容]
     external_tools:    ExternalTools,               // external tools
@@ -606,6 +694,8 @@ impl Api {
                     google_engine_key: all_para.google_engine_key,                  // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
                     google_search_key: all_para.google_search_key,                  // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
                     allowed_path:      all_para.allowed_path,                       // allowed path for tools, multiple paths separated by commas, default: ./
+                    skills_path:       all_para.skills_path,                        // skills路径
+                    bgc:               all_para.bgc,                                // 页面背景色
                     outpath:           all_para.outpath,                            // 问答结果输出路径
                     maxage:            all_para.maxage,                             // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
                     show_english:      all_para.show_english,                       // true展示英文界面，false展示中文界面

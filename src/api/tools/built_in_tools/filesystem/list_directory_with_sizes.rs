@@ -56,9 +56,9 @@ impl BuiltIn for ListDirectoryWithSizes {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let mut entries = list_directory_helper(&params.dir_path)?;
+        let mut entries = list_directory_helper(&params.dir_path.replace("\\", "/"))?;
 
         let mut file_count = 0;
         let mut dir_count = 0;
@@ -97,7 +97,7 @@ impl BuiltIn for ListDirectoryWithSizes {
         writeln!(output, "\nTotal: {file_count} files, {dir_count} directories").unwrap();
         writeln!(output, "Total file size: {}", format_bytes(total_size)).unwrap();
 
-        Ok(output)
+        Ok((output, None))
     }
 
     /// get approval message

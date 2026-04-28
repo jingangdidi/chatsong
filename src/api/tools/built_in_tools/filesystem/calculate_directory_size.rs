@@ -102,14 +102,14 @@ impl BuiltIn for CalculateDirectorySize {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let total_bytes = self.calculate_directory_size(&params.root_path)?;
+        let total_bytes = self.calculate_directory_size(&params.root_path.replace("\\", "/"))?;
         let total_size = match params.output_format.unwrap_or(FileSizeOutputFormat::HumanReadable) {
             FileSizeOutputFormat::HumanReadable => format_bytes(total_bytes),
             FileSizeOutputFormat::Bytes => format!("{total_bytes} bytes"),
         };
-        Ok(format!("successfully calculate directory \"{}\" size: {}", &params.root_path, total_size))
+        Ok((format!("successfully calculate directory \"{}\" size: {}", &params.root_path, total_size), None))
     }
 
     /// get approval message

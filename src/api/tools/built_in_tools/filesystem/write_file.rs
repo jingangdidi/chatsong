@@ -60,11 +60,11 @@ impl BuiltIn for WriteFile {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let valid_path = validate_path(&PARAS.allowed_path, Path::new(&params.file_path), false)?;
+        let valid_path = validate_path(&PARAS.allowed_path, Path::new(&params.file_path.replace("\\", "/")), false)?;
         write(valid_path, params.content)?;
-        Ok(format!("Successfully wrote to {}", params.file_path))
+        Ok((format!("Successfully wrote to {}", params.file_path), None))
     }
 
     /// get approval message

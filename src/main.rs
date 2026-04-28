@@ -3,7 +3,11 @@ use std::process::exit;
 
 use tokio::net::TcpListener;
 use tracing::{event, Level};
-use tracing_subscriber::{self, fmt::time::LocalTime};
+use tracing_subscriber::{
+    filter::EnvFilter,
+    self,
+    fmt::time::LocalTime,
+};
 /*
 use tracing_subscriber::{
     layer::SubscriberExt,
@@ -29,12 +33,28 @@ async fn main() {
         exit(1);
     });
 
+    // 限制serenity自身的tracing，注意不能与with_max_level共用，会被覆盖
+    let _filter = EnvFilter::new("info")
+        .add_directive("serenity=off".parse().unwrap()); // 关闭serenity自身的tracing
+        //.add_directive("serenity=info".parse().unwrap()); // 限制serenity自身的tracing信息，可以设置不同Level（TRACE、DEBUG、INFO、WARN、ERROR），这里限制为INFO，即INFO、WARN、ERROR的信息才输出
+
     // Start tracing
     //tracing_subscriber::registry().with(tracing_subscriber::fmt::layer()).init();
     tracing_subscriber::fmt() // 限制输入级别，如果是TRACE则全部输出，会有很多信息，尤其联网搜索时特别多，这里限制为INFO，即INFO、WARN、ERROR的信息才输出，https://github.com/tokio-rs/tracing/blob/master/examples/examples/hyper-echo.rs
         .with_max_level(Level::INFO)
         .with_timer(LocalTime::rfc_3339()) // 使用本地时间，格式为 RFC 3339，需要在Cargo.toml的features中添加"local-time"
         .init();
+
+    // start channel bot
+    let mut handles = vec![];
+    if !PARAS.channels.is_empty() {
+        for channel in &PARAS.channels {
+            let handle = tokio::task::spawn(async move {
+                channel.start_bot().await;
+            });
+            handles.push(handle);
+        }
+    }
 
     // 测试不同Level（TRACE、DEBUG、INFO、WARN、ERROR），可以比较，TRACE最高，ERROR最低，越高则有越多的verbose
     //event!(Level::TRACE, "Running on http://{}:{}", PARAS.addr_str, PARAS.port); // 紫色，very low priority, often extremely verbose, information. The most fine-grained information, useful for detailed debugging.

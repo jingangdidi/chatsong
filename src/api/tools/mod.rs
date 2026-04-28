@@ -1,3 +1,7 @@
+//use std::io::Read;
+use std::path::Path;
+//use std::process::{Command, Stdio};
+
 use chrono::Local;
 use openai_dive::v1::{
     api::Client,
@@ -11,13 +15,14 @@ use openai_dive::v1::{
     },
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::{
     sync::mpsc::Sender,
     time::{
         sleep,
         Duration,
     },
+    //process::Command,
 };
 use tracing::{event, Level};
 
@@ -43,6 +48,7 @@ use crate::{
         MainData,
         MetaData,
     },
+    skills::SelectedSkills,
 };
 
 pub mod built_in_tools;
@@ -66,7 +72,7 @@ pub enum SelectedTools {
 /// trait for built-in tools & external tools
 pub trait MyTools {
     /// run tool
-    fn run(&self, id: &str, args: &str) -> Result<String, MyError>;
+    fn run(&self, id: &str, args: &str) -> Result<(String, Option<String>), MyError>;
 
     /// get all selected tools name (name format: `name__id`, max name length is 26), description and schema
     fn get_desc_and_schema(&self, selected_tools: Vec<String>) -> Vec<(String, String, Value)>;
@@ -137,7 +143,7 @@ impl Tools {
     }
 
     /// run tool
-    pub fn run(&self, id: &str, args: &str) -> Result<String, MyError> {
+    pub fn run(&self, id: &str, args: &str) -> Result<(String, Option<String>), MyError> {
         if self.built_in.id_map.contains_key(id) {
             self.built_in.run(id, args)
         } else if self.external.id_map.contains_key(id) {
@@ -253,15 +259,92 @@ impl Tools {
 /// https://api-docs.deepseek.com/zh-cn/guides/function_calling
 /// https://docs.bigmodel.cn/cn/guide/capabilities/function-calling
 /// https://platform.moonshot.cn/docs/api/tool-use
-pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, sender: Sender<Vec<u8>>, client: Client, mut para_builder: ChatCompletionParametersBuilder, model: &str) -> Result<(), MyError> {
+pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: Option<SelectedSkills>, uuid: String, sender: Sender<Vec<u8>>, client: Client, mut para_builder: ChatCompletionParametersBuilder, model: &str) -> Result<(), MyError> {
     // get built-in and external tools schame
     let mut tool_schema = PARAS.tools.get_desc_and_schema(&selected_tools)?;
     // get mcp tools schema
     let mcp_schema = PARAS.mcp_servers.get_desc_and_schema(&selected_tools).await?;
+    // 如果指定了skills，则加入一个激活指定skill的tool
+    if selected_skills.is_some() {
+        tool_schema.push(
+            ChatCompletionTool {
+                r#type: ChatCompletionToolType::Function,
+                function: ChatCompletionFunction {
+                    name: "activate_skill".to_string(),
+                    description: Some("Activate an agent skill to load its full instructions. IMPORTANT: You must CALL this tool (not write it as text) to activate a skill. Use this when you see a relevant skill in the available skills list and need its detailed instructions to complete a task.".to_string()),
+                    parameters: json!({
+                        "properties": {
+                            "skill_name": {
+                                "type": "string",
+                                "description": "The name of the skill to activate.",
+                            },
+                        },
+                        "required": ["skill_name"],
+                        "type": "object",
+                    }),
+                },
+            }
+        );
+        // 如果没有选择`run_command`，则自动添加这个工具
+        if tool_schema.iter().any(|t| !t.function.name.starts_with("run_command")) {
+            let run_command_schema: Vec<_> = PARAS
+                .tools
+                .built_in
+                .id_map
+                .iter()
+                .filter(|(_, v)| v.tool.name() == "run_command")
+                .map(|(k, v)| (format!("{}__{}", v.tool.name(), k), v.tool.description(), v.tool.schema()))
+                .collect();
+            tool_schema.push(
+                ChatCompletionTool {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionFunction {
+                        name: run_command_schema[0].0.clone(),
+                        description: Some(run_command_schema[0].1.clone()),
+                        parameters: run_command_schema[0].2.clone(),
+                    },
+                }
+            );
+        }
+        // 如果没有选择`run_script`，则自动添加这个工具
+        if tool_schema.iter().any(|t| !t.function.name.starts_with("run_script")) {
+            let run_command_schema: Vec<_> = PARAS
+                .tools
+                .built_in
+                .id_map
+                .iter()
+                .filter(|(_, v)| v.tool.name() == "run_script")
+                .map(|(k, v)| (format!("{}__{}", v.tool.name(), k), v.tool.description(), v.tool.schema()))
+                .collect();
+            tool_schema.push(
+                ChatCompletionTool {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionFunction {
+                        name: run_command_schema[0].0.clone(),
+                        description: Some(run_command_schema[0].1.clone()),
+                        parameters: run_command_schema[0].2.clone(),
+                    },
+                }
+            );
+        }
+    }
     // prepare buider for call tool
     tool_schema.extend(mcp_schema);
     para_builder.tools(tool_schema);
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
+    if let Some(sele_skills) = selected_skills {
+        let skill_prompt = match sele_skills {
+            SelectedSkills::All => PARAS.skills.get_all_available_skills_prompt(),
+            SelectedSkills::Group(group) => PARAS.skills.get_group_available_skills_prompt(group),
+            SelectedSkills::Single(idx) => PARAS.skills.get_single_available_skill_prompt(idx),
+        };
+        history_messages.push(
+            ChatMessage::User{
+                content: ChatMessageContent::Text(skill_prompt),
+                name: None,
+            }
+        );
+    }
     let mut count = 0; // limit loop
     let mut call_tool_count = 0; // call tool count
     let mut try_count = 0;
@@ -278,10 +361,10 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
                     call_tool_count += 1;
                     // call tool
                     let name_id: Vec<&str> = j.0.split("__").collect();
-                    let result = match try_call_tool(&uuid, &name_id, &j.1, j.3.clone(), sender.clone()).await? {
-                        Ok(result) => {
+                    let (result, language) = match try_call_tool(&uuid, &name_id, &j.1, j.3.clone(), sender.clone()).await? {
+                        Ok((result, file_option)) => {
                             try_count = 0;
-                            result
+                            (result, get_file_language(file_option))
                         },
                         Err(e) => {
                             try_count += 1;
@@ -300,7 +383,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
                     let test_result = if result.contains("```") {
                         result.clone()
                     } else {
-                        format!("```\n{}\n```", result)
+                        format!("```{}\n{}\n```", language, result)
                     };
                     let test_result = if let Some(content) = &j.3 {
                         if content.is_empty() {
@@ -337,7 +420,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
 
                     // add each tool call result to current message history
                     history_messages.push(raw_message.clone());
-                    history_messages.push(ChatMessage::Tool{content: result, tool_call_id: j.2});
+                    history_messages.push(ChatMessage::Tool{content: ChatMessageContent::Text(result), tool_call_id: j.2});
                 }
             },
             CallToolResult::Text(test_result) => { // normal text result, not call tool
@@ -376,9 +459,20 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, uuid: String, send
     Ok(())
 }
 
+/// 调用的skill
+#[derive(Deserialize)]
+struct SkillParams {
+    skill_name: String,
+}
+
 /// try run tool, if error not from call tool, return Err(), else return Ok(Ok()) or Ok(Err())
-async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>) -> Result<Result<String, MyError>, MyError> {
-    if PARAS.tools.contain_tool_id(name_id[1]) {
+async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>) -> Result<Result<(String, Option<String>), MyError>, MyError> {
+    if name_id[0] == "activate_skill" {
+        let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        Ok(Ok((PARAS.skills.get_skill_full_content(&params.skill_name)?, None)))
+    } else if name_id.len() < 2 {
+        return Ok(Err(MyError::ToolNotExistError{id: name_id[0].to_string(), info: "run_tools".to_string()}))
+    } else if PARAS.tools.contain_tool_id(name_id[1]) {
         if PARAS.approval_all {
             Ok(PARAS.tools.run(name_id[1], paras))
         } else {
@@ -395,9 +489,11 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                             Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
                         };
                         match PARAS.tools.run(name_id[1], &dry_run_para) {
-                            Ok(r) => r,
+                            Ok(r) => r.0,
                             Err(e) => return Ok(Err(e)),
                         }
+                    } else if name_id[0] == "write_file" {
+                        approval_msg.chars().take(100).collect() // 截取显示100个字符，否则弹窗很高，无法点击同意或拒绝
                     } else {
                         approval_msg
                     };
@@ -413,7 +509,7 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
     } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {
         Ok(PARAS.mcp_servers.run(&name_id, paras).await)
     } else {
-        return Err(MyError::ToolNotExistError{id: name_id[1].to_string(), info: "run_tools".to_string()})
+        return Ok(Err(MyError::ToolNotExistError{id: name_id[1].to_string(), info: "run_tools".to_string()}))
     }
 }
 
@@ -1027,7 +1123,7 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
 async fn call_llm(messages: Vec<ChatMessage>, uuid: String, client: Client, mut para_builder: ChatCompletionParametersBuilder, model: &str) -> Result<String, MyError> {
     para_builder.messages(messages);
     let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
-    not_use_stream(uuid, client, parameters, model, false, false).await
+    Ok(not_use_stream(uuid, client, parameters, model, false).await?.0)
 }
 
 /// make a new plan or update provided plan
@@ -1080,7 +1176,7 @@ async fn function_calling(
                 let result = if PARAS.tools.contain_tool_id(name_id[1]) {
                     if PARAS.approval_all {
                         match PARAS.tools.run(name_id[1], &i.1) {
-                            Ok(r) => r,
+                            Ok(r) => r.0,
                             Err(e) => return Ok(Err(e)),
                         }
                     } else if let Some(approval_msg) = PARAS.tools.get_approval(name_id[1], &i.1, i.3.clone(), PARAS.english)? {
@@ -1095,7 +1191,7 @@ async fn function_calling(
                                 Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
                             };
                             match PARAS.tools.run(name_id[1], &dry_run_para) {
-                                Ok(r) => r,
+                                Ok(r) => r.0,
                                 Err(e) => return Ok(Err(e)),
                             }
                         } else {
@@ -1103,7 +1199,7 @@ async fn function_calling(
                         };
                         if ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await? {
                             match PARAS.tools.run(name_id[1], &i.1) {
-                                Ok(r) => r,
+                                Ok(r) => r.0,
                                 Err(e) => return Ok(Err(e)),
                             }
                         } else {
@@ -1118,7 +1214,7 @@ async fn function_calling(
                             };
                             if ask_approval(uuid, approval_msg, false, sender.clone()).await? {
                                 match PARAS.tools.run(name_id[1], &i.1) {
-                                    Ok(r) => r,
+                                    Ok(r) => r.0,
                                     Err(e) => return Ok(Err(e)),
                                 }
                             } else {
@@ -1126,7 +1222,7 @@ async fn function_calling(
                             }
                         } else {
                             match PARAS.tools.run(name_id[1], &i.1) {
-                                Ok(r) => r,
+                                Ok(r) => r.0,
                                 Err(e) => return Ok(Err(e)),
                             }
                         }
@@ -1140,7 +1236,7 @@ async fn function_calling(
                         };
                         if ask_approval(uuid, approval_msg, false, sender.clone()).await? {
                             match PARAS.mcp_servers.run(&name_id, &i.1).await {
-                                Ok(r) => r,
+                                Ok(r) => r.0,
                                 Err(e) => return Ok(Err(e)),
                             }
                         } else {
@@ -1148,7 +1244,7 @@ async fn function_calling(
                         }
                     } else {
                         match PARAS.mcp_servers.run(&name_id, &i.1).await {
-                            Ok(r) => r,
+                            Ok(r) => r.0,
                             Err(e) => return Ok(Err(e)),
                         }
                     }
@@ -1217,4 +1313,38 @@ async fn ask_approval(uuid: &str, msg: String, is_diff: bool, sender: Sender<Vec
         sleep(Duration::from_secs(2)).await;
     }
     Ok(tmp_approved)
+}
+
+/// markdown代码块标注语言，未包含的格式后缀直接转为小写即可
+const FILE_EXT_LANGUAGE: &[(&str, &str)] = &[
+    ("rs", "rust"),
+    ("py", "python"),
+    ("js", "javascript"),
+    ("ts", "typescript"),
+    ("rb", "ruby"),
+    ("cs", "csharp"),
+    ("kt", "kotlin"),
+    ("sh", "bash"),
+    ("md", "markdown"),
+    ("txt", "text"),
+];
+
+/// 根据文件后缀获取所属语言
+fn get_file_language(file: Option<String>) -> String {
+    if let Some(f) = file {
+        let path = Path::new(&f);
+        match path.extension() {
+            Some(ext) => {
+                let ext_str = ext.to_string_lossy().to_lowercase();
+                FILE_EXT_LANGUAGE
+                    .iter()
+                    .find(|(k, _)| k == &ext_str)
+                    .map(|(_, v)| v.to_string())
+                    .unwrap_or_else(|| ext_str)
+            }
+            None => "text".to_string(),
+        }
+    } else {
+        "text".to_string()
+    }
 }

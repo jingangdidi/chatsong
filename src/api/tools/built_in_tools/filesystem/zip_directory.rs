@@ -72,16 +72,16 @@ impl BuiltIn for ZipDirectory {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
 
-        let valid_dir_path = validate_path(&PARAS.allowed_path, Path::new(&params.input_dir), true)?;
+        let valid_dir_path = validate_path(&PARAS.allowed_path, Path::new(&params.input_dir.replace("\\", "/")), true)?;
         let input_dir_str = &valid_dir_path
             .as_os_str()
             .to_str()
             .ok_or(MyError::OtherError{info: format!("Invalid UTF-8 in file name: {}", valid_dir_path.display())})?;
 
-        let target_path = validate_path(&PARAS.allowed_path, Path::new(&params.target_zip_file), false)?;
+        let target_path = validate_path(&PARAS.allowed_path, Path::new(&params.target_zip_file.replace("\\", "/")), false)?;
         if target_path.exists() {
             return Err(MyError::OtherError{info: format!("'{}' already exists!", params.target_zip_file)})
         }
@@ -138,7 +138,7 @@ impl BuiltIn for ZipDirectory {
             zip_writer.write_all(&buffer)?;
         }
         zip_writer.finish().map_err(|e| MyError::ZipArchiveError{file: params.target_zip_file, error: e})?;
-        Ok(format!("Successfully compressed '{}' directory into '{}'.", params.input_dir, target_path.display()))
+        Ok((format!("Successfully compressed '{}' directory into '{}'.", params.input_dir, target_path.display()), None))
     }
 
     /// get approval message

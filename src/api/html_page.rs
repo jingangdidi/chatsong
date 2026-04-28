@@ -50,6 +50,18 @@ const CSS_CODE_DOWNLOAD: &str = include_str!("../../assets/css/style_for_downloa
 const DIFF2HTML_JS: &str = include_str!("../../assets/js/diff2html.min.js");
 const DIFF2HTML_CSS: &str = include_str!("../../assets/css/diff2html.min.css");
 
+/// KaTeX
+/// https://github.com/KaTeX/KaTeX
+/// https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js
+/// https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css
+const KATEX_JS: &str = include_str!("../../assets/js/katex.min.js");
+const KATEX_CSS: &str = include_str!("../../assets/css/katex.min.css");
+
+/// marked-katex-extension
+/// https://github.com/UziTech/marked-katex-extension
+/// https://cdn.jsdelivr.net/npm/marked-katex-extension@5.1.8/lib/index.umd.js
+const KATEX_EXT_JS: &str = include_str!("../../assets/js/marked-katex-extension.js");
+
 /// 页面显示的信息，true是英文，false是中文，创建页面时填充进去
 static PAGE: Lazy<RwLock<HashMap<bool, PageInfo>>> = Lazy::new(|| RwLock::new(HashMap::from([(true, PageInfo::new(true)), (false, PageInfo::new(false))])));
 
@@ -68,6 +80,7 @@ struct PageInfo {
     name:         LeftInfo,    // 可选填的新对话名称
     tool:         LeftInfo,    // call tools
     plan_mode:    LeftInfo,    // plan mode
+    skills:       LeftInfo,    // skills
     model:        LeftInfo,    // 选择要用的模型
     message:      LeftInfo,    // 上下文消息数
     web:          LeftInfo,    // 网络搜索
@@ -121,6 +134,13 @@ impl PageInfo {
                 plan_mode: LeftInfo{ // plan mode
                     label:       "plan mode".to_string(),
                     title:       "Effective when invoking &quot;call tools&quot;, the planning mode is activated to first devise a strategy, breaking down the problem into multiple sub-tasks, which are then addressed sequentially—ideal for handling complex tasks.".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
+                },
+                skills: LeftInfo{ // skills
+                    label:       "skills".to_string(),
+                    title:       "Choose one skill to solve complex.".to_string(),
                     disabled:    None,
                     option:      None,
                     placeholder: None,
@@ -192,6 +212,7 @@ impl PageInfo {
                         ("Hide the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())),
                         ("Display the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
                         ("Hide the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
+                        ("Disable thinking".to_string(), Some("Some models do not support disabling thinking".to_string())),
                     ]),
                     placeholder: None,
                 },
@@ -276,6 +297,13 @@ impl PageInfo {
                     option:      None,
                     placeholder: None,
                 },
+                skills: LeftInfo{ // skills
+                    label:       "skills".to_string(),
+                    title:       "选择要用的skill".to_string(),
+                    disabled:    None,
+                    option:      None,
+                    placeholder: None,
+                },
                 model: LeftInfo{ // 选择要用的模型
                     label:       "模型".to_string(),
                     title:       "当前支持的模型，同一个对话可以使用不同模型进行提问".to_string(),
@@ -343,6 +371,7 @@ impl PageInfo {
                         ("不显示思考过程".to_string(), Some("多步骤推理，不显示思考过程".to_string())),
                         ("显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())),
                         ("不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string())),
+                        ("关闭思考".to_string(), Some("部分模型不支持关闭思考".to_string())),
                     ]),
                     placeholder: None,
                 },
@@ -439,7 +468,11 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     result += "</head>\n";
 
     result += "<style type='text/css'>\n";
-    result += CSS_CODE;
+    if PARAS.bgc.is_empty() {
+        result += CSS_CODE;
+    } else {
+        result += &CSS_CODE.replace("--background-color: #E6E6E6;", &PARAS.bgc);
+    }
     result += "</style>\n";
 
     result += "<style type='text/css'>\n";
@@ -448,6 +481,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
 
     result += "<style type='text/css'>\n";
     result += DIFF2HTML_CSS;
+    result += "</style>\n";
+
+    result += "<style type='text/css'>\n";
+    result += KATEX_CSS;
     result += "</style>\n";
 
     result += r###"<body>
@@ -488,10 +525,17 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <label for='select-plan'></label>
         </div>
 
+        <div class='top_add_space' title='{}'>
+            <label>{}</label>
+            <select id='select-skill' class='left_para for_focus' name='skill'>
+                {}
+            </select>
+        </div>
+
         <!-- select model -->
         <div class='top_add_space' title='{}'>
             <label>{}</label>
-            <select id='select-model' class='left_para for_focus' name='model'>\n", page_data.name.title, page_data.name.label, page_data.name.placeholder.as_ref().unwrap(), page_data.tool.title, page_data.tool.label, PARAS.tools.html, PARAS.mcp_servers.html, page_data.plan_mode.title, page_data.plan_mode.label, page_data.model.title, page_data.model.label);
+            <select id='select-model' class='left_para for_focus' name='model'>\n", page_data.name.title, page_data.name.label, page_data.name.placeholder.as_ref().unwrap(), page_data.tool.title, page_data.tool.label, PARAS.tools.html, PARAS.mcp_servers.html, page_data.plan_mode.title, page_data.plan_mode.label, page_data.skills.title, page_data.skills.label, PARAS.skills.html, page_data.model.title, page_data.model.label);
     result += &PARAS.api.pulldown_model;
     result += r###"            </select>
         </div>
@@ -584,6 +628,9 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     <option value='5' title='{}'>{}</option>
                     <option value='6' title='{}'>{}</option>
                 </optgroup>
+                <optgroup label='Disable'>
+                    <option value='7' title='{}'>{}</option>
+                </optgroup>
             </select>
         </div>
 
@@ -597,7 +644,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <select id='select-related-uuid' class='left_para for_focus' name='related-uuid'>
-                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
+                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
     for i in related_uuid_prompt {
         result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
     }
@@ -781,8 +828,17 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     result += &format!("{}\n", PRISM_MIN_JS);
     result += &format!("{}\n", MARKED_MIN_JS);
     result += &format!("{}\n", DIFF2HTML_JS);
+    result += &format!("{}\n", KATEX_JS);
+    result += &format!("{}\n", KATEX_EXT_JS);
     result += r###"    </script>
     <script>
+        // 数学公式: https://github.com/UziTech/marked-katex-extension
+        const options = {
+            throwOnError: false,
+            nonStandard: true
+        };
+        marked.use(markedKatex(options));
+
         // markdown转html
         function markhigh() {
 "###;
@@ -819,6 +875,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     msg.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', '');
                     let diff_code = document.createElement('div');
                     diff_code.setAttribute('id', 'm{}diff');
+                    diff_code.setAttribute('class', 'diff-scroll');
                     const diffCode = Diff2Html.html('```'+text_diff[1], {{
                         drawFileList: false,
                         matching: 'lines',
@@ -828,7 +885,25 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     diff_code.innerHTML = diffCode;
                     msg.appendChild(diff_code);
                 }} else {{
-                    msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                    if (tmp.startsWith('## 📌')) {{
+                        const parts = tmp.split('### 💡 result');
+                        if (parts.length === 2) {{
+                            msg.innerHTML = marked.parse(parts[0] + '### 💡 result').replaceAll('<p>', '').replaceAll('</p>', '');
+                            // 加入调用工具的result部分
+                            let tmp_div = document.createElement('div');
+                            tmp_div.setAttribute('class', 'is-tool');
+                            tmp_div.innerHTML = marked.parse(parts[1]).replaceAll('<p>', '').replaceAll('</p>', '');
+                            msg.appendChild(tmp_div);
+                        }} else {{
+                            msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                        }}
+                    }} else {{
+                        msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                    }}
+                    // 对每个代码块进行高亮
+                    msg.querySelectorAll('pre code').forEach((block) => {{
+                        Prism.highlightElement(block);
+                    }});
                 }}
             }}", log.id);
         }
@@ -854,6 +929,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     var del_id = ''; // 要删除的信息的id
     var compress = 'false'; // summary/compress current chat history
     var submit_send_stop;
+    var tool_result = ''; // 调用工具的result部分
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
         select.addEventListener('change', function() {
@@ -1305,12 +1381,21 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 if (is_left) { // 文本答案
                     for_markdown = message_content.replaceAll('srxtzn', '\n');
                     msg_lr.setAttribute("class", "chat-txt left");
+                    tool_result = '';
+                    if (!is_diff && for_markdown.startsWith('## 📌')) {
+                        const parts = for_markdown.split('### 💡 result');
+                        if (parts.length === 2) {
+                            for_markdown = parts[0] + '### 💡 result';
+                            tool_result = parts[1];
+                        }
+                    }
                     if (is_diff) {
                         var text_diff = for_markdown.split(' result\n\`\`\`');
                         // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
                         msg_lr.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
                         let diff_code = document.createElement("div");
                         diff_code.setAttribute("id", new_id+'diff');
+                        diff_code.setAttribute('class', 'diff-scroll');
                         const diffCode = Diff2Html.html('\`\`\`'+text_diff[1], {
                             drawFileList: false,
                             matching: 'lines',
@@ -1322,6 +1407,13 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     } else {
                         // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
                         msg_lr.innerHTML = marked.parse(for_markdown).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                        // 加入调用工具的result部分
+                        if (tool_result !== '') {
+                            let tmp_div = document.createElement('div');
+                            tmp_div.setAttribute('class', 'is-tool');
+                            tmp_div.innerHTML = marked.parse(tool_result).replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+                            msg_lr.appendChild(tmp_div);
+                        }
                         // 对每个代码块进行高亮
                         msg_lr.querySelectorAll('pre code').forEach((block) => {
                             Prism.highlightElement(block);
@@ -1433,6 +1525,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
                 msg_lr.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
                 let diff_code = document.getElementById(new_id+'diff');
+                diff_code.setAttribute('class', 'diff-scroll');
                 const diffCode = Diff2Html.html('\`\`\`'+text_diff[1], {
                     drawFileList: false,
                     matching: 'lines',
@@ -1508,6 +1601,7 @@ print(b)
 -print(c/0)
 +print(c)
 `;*/
+            messageEl.setAttribute('class', 'diff-scroll');
             const diffCode = Diff2Html.html(msg, {{
                 drawFileList: false,
                 matching: 'lines',
@@ -1554,6 +1648,8 @@ print(b)
         var para_tool = document.getElementById("select-tool").value;
         // plan mode
         var para_plan = document.getElementById("select-plan").checked;
+        // get selected skill
+        var para_skill = document.getElementById("select-skill").value;
         // 获取选择的思考深度
         var para_effort = document.getElementById("select-effort").value;
         // 获取输入的对话名称
@@ -1595,7 +1691,7 @@ print(b)
     result += r###"
         document.getElementById('input_query').disabled = true; // 完成回复之前禁止继续提问
         // 将参数加到问题后面
-        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature+"&topp="+para_top_p+"&tools="+para_tool+"&compress="+compress+"&plan="+para_plan;
+        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature+"&topp="+para_top_p+"&tools="+para_tool+"&compress="+compress+"&plan="+para_plan+"&skills="+para_skill;
         compress = 'false';
         return [req, req2];
     }
@@ -1876,6 +1972,10 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
     result += DIFF2HTML_CSS;
     result += "</style>\n";
 
+    result += "<style type='text/css'>\n";
+    result += KATEX_CSS;
+    result += "</style>\n";
+
     result += r###"<body>
     <div id="right-part" class="content">
         <!-- chat content region -->
@@ -1961,8 +2061,17 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
     result += &format!("{}\n", PRISM_MIN_JS);
     result += &format!("{}\n", MARKED_MIN_JS);
     result += &format!("{}\n", DIFF2HTML_JS);
+    result += &format!("{}\n", KATEX_JS);
+    result += &format!("{}\n", KATEX_EXT_JS);
     result += r###"    </script>
     <script>
+        // 数学公式: https://github.com/UziTech/marked-katex-extension
+        const options = {
+            throwOnError: false,
+            nonStandard: true
+        };
+        marked.use(markedKatex(options));
+
         // markdown转html
         function markhigh() {
 "###;
@@ -1992,7 +2101,25 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
                     diff_code.innerHTML = diffCode;
                     msg.appendChild(diff_code);
                 }} else {{
-                    msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                    if (tmp.startsWith('## 📌')) {{
+                        const parts = tmp.split('### 💡 result');
+                        if (parts.length === 2) {{
+                            msg.innerHTML = marked.parse(parts[0] + '### 💡 result').replaceAll('<p>', '').replaceAll('</p>', '');
+                            // 加入调用工具的result部分
+                            let tmp_div = document.createElement('div');
+                            tmp_div.setAttribute('class', 'is-tool');
+                            tmp_div.innerHTML = marked.parse(parts[1]).replaceAll('<p>', '').replaceAll('</p>', '');
+                            msg.appendChild(tmp_div);
+                        }} else {{
+                            msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                        }}
+                    }} else {{
+                        msg.innerHTML = marked.parse(tmp).replaceAll('<p>', '').replaceAll('</p>', '');
+                    }}
+                    // 对每个代码块进行高亮
+                    msg.querySelectorAll('pre code').forEach((block) => {{
+                        Prism.highlightElement(block);
+                    }});
                 }}
             }}", log.id);
         }

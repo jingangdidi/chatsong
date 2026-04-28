@@ -135,10 +135,10 @@ impl BuiltIn for EditFile {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         println!("\n{}\n", args);
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let valid_path = validate_path(&PARAS.allowed_path, &Path::new(&params.file_path), false)?;
+        let valid_path = validate_path(&PARAS.allowed_path, &Path::new(&params.file_path.replace("\\", "/")), false)?;
 
         // Read file content and normalize line endings
         let content_str = fs::read_to_string(&valid_path)?;
@@ -280,7 +280,7 @@ impl BuiltIn for EditFile {
         }
 
         //Ok(format!("successfully edit file:\n{:?}", formatted_diff))
-        Ok(diff)
+        Ok((diff, None))
     }
 
     /// get approval message

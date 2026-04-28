@@ -60,12 +60,12 @@ impl BuiltIn for MoveFile {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let valid_src_path = validate_path(&PARAS.allowed_path, Path::new(&params.src_path), true)?;
-        let valid_dest_path = validate_path(&PARAS.allowed_path, Path::new(&params.dest_path), false)?;
+        let valid_src_path = validate_path(&PARAS.allowed_path, Path::new(&params.src_path.replace("\\", "/")), true)?;
+        let valid_dest_path = validate_path(&PARAS.allowed_path, Path::new(&params.dest_path.replace("\\", "/")), false)?;
         rename(valid_src_path, valid_dest_path)?;
-        Ok(format!("Successfully move {} to {}", &params.src_path, &params.dest_path))
+        Ok((format!("Successfully move {} to {}", &params.src_path, &params.dest_path), None))
     }
 
     /// get approval message

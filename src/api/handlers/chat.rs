@@ -26,6 +26,7 @@ use openai_dive::v1::{
     },
 };
 use serde::Serialize;
+use serde_json::json;
 use tokio::sync::mpsc::channel;
 use tracing::{event, Level};
 use uuid::Uuid;
@@ -85,6 +86,7 @@ use crate::{
         run_tools,
         run_tools_with_plan,
     },
+    skills::SelectedSkills,
 };
 
 /// https://github.com/plandex-ai/plandex/blob/main/app/server/model/prompts/summary.go
@@ -288,7 +290,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     }
                 } else {
                     // 从openai接收完整答案字符串
-                    let whole_answer = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, client_para.show_thought, true).await?;
+                    let (whole_answer, _) = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, true).await?;
                     // 创建stream对象，接收管道传递的数据
                     let tmp_uuid = client_para.uuid.clone();
                     let tmp_stream = async_stream::stream! {
@@ -456,8 +458,45 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 para_builder.model(client_para.model.clone()); // 指定模型，例如：Gpt4Engine::Gpt4O.to_string()
                 para_builder.response_format(ChatCompletionResponseFormat::Text);
                 //para_builder.stream(stream); // 这里不需要设置，调用`create_stream`时会设置
+                let lowercase_model = client_para.model.to_lowercase();
                 if client_para.reasoning { // 对思维链模型设置effort
                     para_builder.reasoning_effort(client_para.effort.clone()); // 设置使用思维链，Low（思考的少，简单问答）, Medium（思考适中，多步骤推理）, High（思考更多，复杂逻辑推导）
+                    // 开启思考，不同模型思考的设置不同
+                    if lowercase_model.starts_with("deepseek") {
+                        // deepseek: https://api-docs.deepseek.com/
+                        para_builder.extra_body(json!({"thinking": {"type": "enabled"}}));
+                    } else if lowercase_model.starts_with("qwen") {
+                        // Qwen: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions#05cfceb898csa
+                        para_builder.extra_body(json!({"enable_thinking": true}));
+                    } else if lowercase_model.starts_with("kimi") {
+                        // kimi: https://platform.kimi.com/docs/api/models-overview
+                        para_builder.extra_body(json!({"thinking": {"type": "enabled"}}));
+                    } else if lowercase_model.starts_with("glm") {
+                        // glm: https://docs.bigmodel.cn/cn/guide/develop/openai/introduction
+                        para_builder.extra_body(json!({"thinking": {"type": "enabled"}}));
+                    } else if lowercase_model.starts_with("minimax") {
+                        // minimax: https://platform.minimaxi.com/docs/api-reference/text-openai-api
+                        // 目前不支持关闭thinking：https://github.com/MiniMax-AI/MiniMax-M2/issues/68
+                        //para_builder.extra_body(json!({"reasoning_split": true}));
+                    }
+                } else {
+                    // 关闭思考，不同模型思考的设置不同
+                    if lowercase_model.starts_with("deepseek") {
+                        // deepseek: https://api-docs.deepseek.com/
+                        para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                    } else if lowercase_model.starts_with("qwen") {
+                        // Qwen: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions#05cfceb898csa
+                        para_builder.extra_body(json!({"enable_thinking": false}));
+                    } else if lowercase_model.starts_with("kimi") {
+                        // kimi: https://platform.kimi.com/docs/api/models-overview
+                        para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                    } else if lowercase_model.starts_with("glm") {
+                        // glm: https://docs.bigmodel.cn/cn/guide/develop/openai/introduction
+                        para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                    } else if lowercase_model.starts_with("minimax") {
+                        // minimax，目前不支持关闭thinking：https://github.com/MiniMax-AI/MiniMax-M2/issues/68
+                        //para_builder.extra_body(json!({"reasoning_split": false}));
+                    }
                 }
                 if let Some(temp) = client_para.temperature {
                     para_builder.temperature(temp);
@@ -465,15 +504,15 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 if let Some(top_p) = client_para.top_p {
                     para_builder.top_p(top_p);
                 }
-                if client_para.selected_tools.is_some() {
+                if client_para.selected_tools.is_some() || client_para.selected_skills.is_some() {
                     let tmp_uuid = client_para.uuid.clone();
                     let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
                     // 从openai接收stream答案，并返回完整答案字符串
                     tokio::spawn(async move {
-                        let tool_error = if client_para.plan_mode {
+                        let tool_error = if client_para.plan_mode && client_para.selected_skills.is_none() { // 目前计划模式不支持skills
                             run_tools_with_plan(client_para.selected_tools, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model).await
                         } else {
-                            run_tools(client_para.selected_tools, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model).await
+                            run_tools(client_para.selected_tools, client_para.selected_skills, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model).await
                         };
                         if let Err(e) = tool_error {
                             event!(Level::ERROR, "{} receive call tool result error: {}", tmp_uuid, e);
@@ -540,7 +579,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     }
                 } else {
                     // when set stream_options, it contains a null value except for the last chunk which contains the token usage statistics for the entire request.
-                    para_builder.stream_options(ChatCompletionStreamOptions{include_usage: Some(true)});
+                    if client_para.stream {
+                        para_builder.stream_options(ChatCompletionStreamOptions{include_usage: Some(true), continuous_usage_stats: None});
+                    }
                     para_builder.messages(get_messages(&client_para.uuid));
                     let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
                     // 提问
@@ -601,7 +642,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         }
                     } else {
                         // 从openai接收完整答案字符串
-                        let whole_answer = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, client_para.show_thought, true).await?;
+                        let (whole_answer, thinking_content) = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, true).await?;
                         // 创建stream对象，接收管道传递的数据
                         let tmp_uuid = client_para.uuid.clone();
                         let tmp_stream = async_stream::stream! {
@@ -622,9 +663,16 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 }
                             }
                             */
+                            // 当前对话信息数
+                            let current_msg_num = get_messages_num(&tmp_uuid);
+                            // 传输思考部分
+                            if let (true, Some(c)) = (client_para.show_thought, thinking_content) {
+                                let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, current_msg_num - 1, c.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
+                                yield tmp;
+                            }
                             // 传输答案。非流式输出传输答案时，答案已经插入到服务端记录中，因此这里获取总消息数还需要减1
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", whole_answer.replace("\n", "<br>")).into_bytes()); // 这里要声明类型，否则报错，传递数据以`data: `起始，以`\n\n`终止
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, current_msg_num - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
                             yield tmp;
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
@@ -819,25 +867,26 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
 }
 
 struct ClientPara {
-    chat_name:      Option<String>, // user can input chat name when start new chat
-    api_key:        String,
-    endpoint:       String,
-    model:          String, // model name
-    reasoning:      bool, // whether model is chain-of-thought
-    qa_msg_p:       Option<(usize, usize, bool)>, // (QA pair number, message number, wether contain prompt)
-    uuid:           String,
-    cookie_jar:     CookieJar,
-    load_uuid:      bool, // whether load previous chat log
-    temperature:    Option<f32>,
-    top_p:          Option<f32>,
-    stream:         bool,
-    web_search:     bool,
-    voice:          usize,
-    effort:         ReasoningEffort,
-    show_thought:   bool,
-    selected_tools: Option<SelectedTools>, // selected tools
-    plan_mode:      bool, // use plan mode
-    compression:    bool, // summarize chat history
+    chat_name:       Option<String>, // user can input chat name when start new chat
+    api_key:         String,
+    endpoint:        String,
+    model:           String, // model name
+    reasoning:       bool, // whether model is chain-of-thought
+    qa_msg_p:        Option<(usize, usize, bool)>, // (QA pair number, message number, wether contain prompt)
+    uuid:            String,
+    cookie_jar:      CookieJar,
+    load_uuid:       bool, // whether load previous chat log
+    temperature:     Option<f32>,
+    top_p:           Option<f32>,
+    stream:          bool,
+    web_search:      bool,
+    voice:           usize,
+    effort:          ReasoningEffort,
+    show_thought:    bool,
+    selected_tools:  Option<SelectedTools>, // selected tools
+    selected_skills: Option<SelectedSkills>, // selected skills
+    plan_mode:       bool, // use plan mode
+    compression:     bool, // summarize chat history
 }
 
 impl ClientPara {
@@ -854,7 +903,7 @@ impl ClientPara {
         // chat name
         let chat_name: Option<String> = params.get("chatname").cloned();
         // 解析要调用的模型
-        let (api_key, endpoint, model, reasoning) = match params.get("model") {
+        let (api_key, endpoint, model, mut reasoning) = match params.get("model") {
             Some(m) => PARAS.api.get_model_by_str(&m)?,
             None => PARAS.api.get_default_model()?,
         };
@@ -1100,6 +1149,10 @@ impl ClientPara {
                     "4" => (ReasoningEffort::Medium, false), // 思考适中
                     "5" => (ReasoningEffort::High, true), // 思考更多
                     "6" => (ReasoningEffort::High, false), // 思考更多
+                    "7" => { // 关闭思考，部分模型不支持关闭思考
+                        reasoning = false;
+                        (ReasoningEffort::Low, false)
+                    },
                     _ => (ReasoningEffort::Low, true),
                 }
             },
@@ -1128,6 +1181,24 @@ impl ClientPara {
             },
             None => None,
         };
+        // selected skills
+        let selected_skills: Option<SelectedSkills> = match params.get("skills") {
+            Some(t) => if t == "not_select_any_skills" {
+                None
+            } else if t == "select_all_available_skills" {
+                Some(SelectedSkills::All)
+            } else if let Some(group) = t.strip_prefix("skill_group_") { // select group skills
+                Some(SelectedSkills::Group(group.to_string()))
+            } else if let Some(skill_index) = t.strip_prefix("available-skill-") { // select single skill
+                match skill_index.parse::<usize>() {
+                    Ok(i) => Some(SelectedSkills::Single(i)),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            },
+            None => None,
+        };
         // use plan mode
         let plan_mode = match params.get("plan") {
             Some(p) => {
@@ -1140,25 +1211,26 @@ impl ClientPara {
             None => false,
         };
         Ok(Self {
-            chat_name,      // Option<String>
-            api_key,        // String
-            endpoint,       // String
-            model,          // String
-            reasoning,      // bool
-            qa_msg_p,       // Option<(usize, usize, bool)>
-            uuid,           // String
-            cookie_jar,     // CookieJar
-            load_uuid,      // bool
-            temperature,    // Option<f32>
-            top_p,          // Option<f32>
-            stream,         // bool
-            web_search,     // bool
-            voice,          // usize
-            effort,         // ReasoningEffort
-            show_thought,   // bool
-            selected_tools, // Option<SelectedTools>
-            plan_mode,      // use plan mode
-            compression,    // summarize chat history
+            chat_name,       // Option<String>
+            api_key,         // String
+            endpoint,        // String
+            model,           // String
+            reasoning,       // bool
+            qa_msg_p,        // Option<(usize, usize, bool)>
+            uuid,            // String
+            cookie_jar,      // CookieJar
+            load_uuid,       // bool
+            temperature,     // Option<f32>
+            top_p,           // Option<f32>
+            stream,          // bool
+            web_search,      // bool
+            voice,           // usize
+            effort,          // ReasoningEffort
+            show_thought,    // bool
+            selected_tools,  // Option<SelectedTools>
+            selected_skills, // Option<SelectedSkills>
+            plan_mode,       // use plan mode
+            compression,     // summarize chat history
         })
     }
 }

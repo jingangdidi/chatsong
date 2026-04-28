@@ -51,9 +51,9 @@ impl BuiltIn for ListDirectory {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let entries = list_directory_helper(&params.dir_path)?;
+        let entries = list_directory_helper(&params.dir_path.replace("\\", "/"))?;
         let formatted = entries
             .iter()
             .map(|entry| {
@@ -70,7 +70,7 @@ impl BuiltIn for ListDirectory {
             .collect::<Vec<_>>()
             .join("\n");
 
-        Ok(format!("successfully get all files and directories:\n{}", formatted))
+        Ok((format!("successfully get all files and directories:\n{}", formatted), None))
     }
 
     /// get approval message

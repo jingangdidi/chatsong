@@ -66,7 +66,7 @@ impl BuiltIn for ZipFiles {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
 
         let file_count = params.input_files.len();
@@ -74,14 +74,14 @@ impl BuiltIn for ZipFiles {
             return Err(MyError::OtherError{info: "No file(s) to zip. The input files array is empty.".to_string()})
         }
 
-        let target_path = validate_path(&PARAS.allowed_path, Path::new(&params.target_zip_file), false)?;
+        let target_path = validate_path(&PARAS.allowed_path, Path::new(&params.target_zip_file.replace("\\", "/")), false)?;
         if target_path.exists() {
             return Err(MyError::OtherError{info: format!("zip file {} already exist.", params.target_zip_file)})
         }
 
         let source_paths = params.input_files
             .iter()
-            .map(|p| validate_path(&PARAS.allowed_path, Path::new(p), true))
+            .map(|p| validate_path(&PARAS.allowed_path, Path::new(&p.replace("\\", "/")), true))
             .collect::<Result<Vec<_>, _>>()?;
 
         let zip_file = fs::File::create(&target_path)?;
@@ -100,7 +100,7 @@ impl BuiltIn for ZipFiles {
             zip_writer.write_all(&buffer)?;
         }
         zip_writer.finish().map_err(|e| MyError::ZipArchiveError{file: params.target_zip_file, error: e})?;
-        Ok(format!("Successfully compressed {} {} into '{}'.", file_count, if file_count == 1 { "file" } else { "files" }, target_path.display()))
+        Ok((format!("Successfully compressed {} {} into '{}'.", file_count, if file_count == 1 { "file" } else { "files" }, target_path.display()), None))
     }
 
     /// get approval message

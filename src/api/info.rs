@@ -1519,7 +1519,8 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                 },
                 ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
             },
-            ChatMessage::Tool{content, ..} => logs.push(DisplayInfo{is_query: false, content: content.clone(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+            ChatMessage::Tool{content: ChatMessageContent::Text(content_str), ..} => logs.push(DisplayInfo{is_query: false, content: content_str.clone(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+            _ => unreachable!(),
         }
     }
     // 如果该uuid是新建的，且指定了prompt，只是还没有保存对话，则写入prompt

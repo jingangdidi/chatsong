@@ -51,20 +51,20 @@ impl BuiltIn for ReadMultipleFiles {
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<String, MyError> {
+    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
 
         let contents: Vec<String> = params
             .paths
             .iter()
             .map(|path| {
-                match read_file_helper(&path) {
+                match read_file_helper(&path.replace("\\", "/")) {
                     Ok(c) => format!("{path}:\n{c}\n"),
                     Err(e) => format!("{path}: Error - {e}"),
                 }
             })
             .collect();
-        Ok(format!("Successfully read multiple files:\n---\n{}", contents.join("\n---\n")))
+        Ok((format!("Successfully read multiple files:\n---\n{}", contents.join("\n---\n")), Some(params.paths[0].clone())))
     }
 
     /// get approval message
