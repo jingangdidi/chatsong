@@ -28,6 +28,8 @@
 - 🔧 Support built-in filesystem tools
 - 🔨 Support custom external tools and MCP stdio tools
 - 🤔 Support planning mode
+- 🧰 Support skills
+- 👾 Support Discord bot
 
 ## 🚀 Quick-Start
 **structure**
@@ -35,6 +37,7 @@
 some dir
 ├─ chatsong   # single executable file
 ├─ config.txt # config file
+├─ skills     # skills path
 └─ chat-log   # save chat log
 ```
 **1. download a pre-built binary**
@@ -70,6 +73,19 @@ ip_address: "192.168.1.5",
 **5. terminate the service**
 ```
 press `Ctrl+C` to automatically save all chat records to the output directory while simultaneously updating the graph file
+```
+
+## 🧰 skills
+Starting from `v0.4.2`, calling skills is supported. You can place the skill folder directly inside the `skills` folder, or place multiple skill folders within the same subfolder under the `skills` directory; they will be grouped together. You can select them by group using the dropdown on the left side of the page.
+```
+skills
+├─ skill-1
+├─ skill-2
+├─ skill-3
+└─ skill-group-a # This folder can store multiple skills, grouped together
+   ├─ skill-a1
+   ├─ skill-a2
+   └─ skill-a3
 ```
 
 ## 🛠 Call tools
@@ -199,7 +215,7 @@ cargo build --release
 
 ## 🚥 Arguments
 ```
-Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-o <outpath>]
+Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-C <channels>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-A] [-S <skills>] [-b <bgc>] [-o <outpath>]
 
 server for LLM api
 
@@ -209,11 +225,15 @@ Options:
   -p, --port          port, default: 8080
   -e, --engine-key    search engine key, used for google search
   -s, --search-key    search api key, used for google search
+  -C, --channels      channel, multiple channels separated by `::`, currently only supports discord: `-C discord:token:guild_id`
   -w, --allowed-path  allowed path, used for call tools, multiple paths separated by commas, default: ./
   -g, --graph         graph file, default: search for the latest *.graph file in the output path
   -m, --maxage        cookie max age, default: 1DAY, support: SECOND, MINUTE, HOUR, DAY, WEEK
   -r, --share         allow sharing of all chat logs
   -l, --english       chat page show english
+  -A, --approval-all  approval to call all tools without pop-up prompts
+  -S, --skills        skills path, default: ./skills
+  -b, --bgc           background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
   -o, --outpath       output path, default: ./chat-log
   -h, --help          display usage information
 ```
@@ -228,6 +248,8 @@ Options:
     allowed_path: "./",      // optional, allowed path for tools, multiple paths separated by commas, default: ./
     maxage: "1DAY",          // required, cookie maxage, support: SECOND, MINUTE, HOUR, DAY, WEEK
     show_english: true,      // required, true: show english page，false: show chinese page
+    skills_path: "./skills", // skills path
+    bgc: "1",                // background color, support hex color (e.g. #F5F5DC, #fff, #000), or built-in color: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
     outpath: "./chat-log",   // required, where to save chat log files
     model_config: [
         Config(
@@ -404,6 +426,18 @@ Options:
 ```
 
 ## ⏰ changelog
+- [2026.04.?] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
+  - 🛠 Fix: Previously, the system was designed to retry tool calls up to 3 times upon failure, but due to a bug, it would exit immediately instead of retrying. This issue has now been resolved.
+  - ⭐️ Add: Support for skills — specify the path via command-line flag `-S` or via config file named `skills`. Default path is `./skills`. Skills can be placed directly in the `skills` folder, or multiple skill folders can be grouped under subdirectories within `skills`. These groups are selectable via a dropdown on the left sidebar.
+  - ⭐️ Add: Built-in tools now include `codebase`, `web` and `run_x`.
+  - ⭐️ Add: Support for Discord bot integration.
+  - 💪🏻 Optimize: Detailed token statistics are now displayed for each API call, including input tokens (including cached tokens) and output tokens (including reasoning tokens).
+  - 💪🏻 Optimize: Customizable page background color — set via command-line flag `-b` or config file `bgc`. Supports hex colors (e.g., #F5F5DC, #fff, #000) or four built-in options: 1 (#E6E6E6), 2 (#F5F5DC), 3 (#FFFFE0), 4 (#E6E6FA). Default is 1.
+  - 💪🏻 Optimize: Math formulas are now rendered properly in the UI.
+  - 💪🏻 Optimize: Option to disable reasoning (available for deepseek, qwen, kimi, glm).
+  - 💪🏻 Optimize: Separates reasoning content from the final response (supported for deepseek, qwen, kimi, glm, minimax).
+  - 💪🏻 Optimize: When calling the `edit_file` tool, vertical scrollbars are now supported to prevent content overflow beyond the viewport.
+  - 💪🏻 Optimize: Improved rendering of Markdown content on the page.
 - [2026.03.17] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
   - 🛠Fix: built-in tool `tail_file` and `read_file`.
   - 🛠Fix: When calling tools, the ID number is always 1.

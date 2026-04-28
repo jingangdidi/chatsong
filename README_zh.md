@@ -28,6 +28,8 @@
 - 🔧 支持内置文件系统工具（读写文件、压缩解压等）
 - 🔨 支持调用自定义的外部工具、MCP的stdio工具
 - 🤔 支持计划模式，复杂问题先制定计划，再调用工具逐个实现
+- 🧰 支持skills
+- 👾 支持Discord机器人
 
 ## 🚀 使用示例
 **目录结构**
@@ -35,6 +37,7 @@
 你的路径
 ├─ chatsong   # 单个可执行文件
 ├─ config.txt # 参数文件，填写自己要用的模型、api-key、api地址、prompt等
+├─ skills     # 存储skills的路径
 └─ chat-log   # 问答记录的保存路径
 ```
 **1. 下载预编译的可执行文件**
@@ -70,6 +73,19 @@ ip_address: "192.168.1.5",
 **4. 关闭服务**
 ```
 按下`Ctrl+C`将自动保存所有问答记录等信息至输出路径，下次开启服务可基于之前的问答继续提问。
+```
+
+## 🧰 skills
+从`v0.4.2`开始支持调用skills，可以将skill文件夹直接放在skills文件夹中，也可以将多个skill文件夹放在skills文件夹下的同一文件夹中，它们会被归为一组，页面左侧下拉可以按组选择：
+```
+skills
+├─ skill-1
+├─ skill-2
+├─ skill-3
+└─ skill-group-a # 这个文件夹可以存储多个skills，归为同一组
+   ├─ skill-a1
+   ├─ skill-a2
+   └─ skill-a3
 ```
 
 ## 🛠 调用工具
@@ -188,7 +204,7 @@ cargo build --release
 
 ## 🚥 命令行参数
 ```
-Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-o <outpath>]
+Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-C <channels>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-A] [-S <skills>] [-b <bgc>] [-o <outpath>]
 
 server for LLM api
 
@@ -198,11 +214,15 @@ Options:
   -p, --port          port, default: 8080
   -e, --engine-key    search engine key, used for google search
   -s, --search-key    search api key, used for google search
+  -C, --channels      channel, multiple channels separated by `::`, currently only supports discord: `-C discord:token:guild_id`
   -w, --allowed-path  allowed path, used for call tools, multiple paths separated by commas, default: ./
   -g, --graph         graph file, default: search for the latest *.graph file in the output path
   -m, --maxage        cookie max age, default: 1DAY, support: SECOND, MINUTE, HOUR, DAY, WEEK
   -r, --share         allow sharing of all chat logs
   -l, --english       chat page show english
+  -A, --approval-all  approval to call all tools without pop-up prompts
+  -S, --skills        skills path, default: ./skills
+  -b, --bgc           background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
   -o, --outpath       output path, default: ./chat-log
   -h, --help          display usage information
 ```
@@ -217,6 +237,8 @@ Options:
     allowed_path: "./",      // 可以空着，调用工具时允许读写的路径，多个路径用英文逗号间隔，默认当前路径
     maxage: "1DAY",          // 必填，cookie的maxage，支持：SECOND, MINUTE, HOUR, DAY, WEEK
     show_english: true,      // 必填，true表示英文页面，fasle表示中文页面
+    skills_path: "./skills", // skills路径
+    bgc: "1",                // 页面背景颜色，支持hex颜色（例如#F5F5DC、#fff、#000），或使用内置的4种浅色背景：1(#E6E6E6)、2(#F5F5DC)、3(#FFFFE0)、4(#E6E6FA)，默认1
     outpath: "./chat-log",   // 必填，问答记录的保存路径
     model_config: [
         Config(
@@ -393,6 +415,18 @@ Options:
 ```
 
 ## ⏰ 更新记录
+- [2026.04.?] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
+  - 🛠修复：调用工具错误时未尝试3次而直接退出
+  - ⭐️增加：增加支持`skills`，通过命令行`-S`参数或参数文件`skills`指定skills的路径，默认`./skills`，可以将skill直接放在skills文件夹中，也可以将多个skill文件夹放在skills文件夹下的同一文件夹中，它们会被归为一组，页面左侧下拉可以按组选择
+  - ⭐️增加：内置工具增加`codebase`、`web`、`run_x`
+  - ⭐️增加：增加支持Discord机器人
+  - 💪🏻优化：命令行输出每次调用的详细token统计：输入token（包括cached）和输出token（包括思考的token数）
+  - 💪🏻优化：支持修改页面背景色，可通过命令行`-b`参数或参数文件`bgc`指定页面背景颜色，可以指定hex颜色（例如：#F5F5DC、#fff、#000），或内置的4个颜色：1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA)，默认1
+  - 💪🏻优化：页面支持显示数学公式
+  - 💪🏻优化：支持关闭思考（deepseek、qwen、kimi、glm）
+  - 💪🏻优化：提取思考部分内容，与最终回答分隔开（deepseek、qwen、kimi、glm、minimax）
+  - 💪🏻优化：调用`edit_file`工具时，支持垂直滚动条，避免超出页面范围
+  - 💪🏻优化：优化页面markdown展示
 - [2026.03.17] release [v0.4.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.1)
   - 🛠修复：内置工具`tail_file`和`read_file`。
   - 🛠修复：调用工具时序号始终为1。
