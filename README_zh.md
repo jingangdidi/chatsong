@@ -415,7 +415,7 @@ Options:
 ```
 
 ## ⏰ 更新记录
-- [2026.04.?] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
+- [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠修复：调用工具错误时未尝试3次而直接退出
   - ⭐️增加：增加支持`skills`，通过命令行`-S`参数或参数文件`skills`指定skills的路径，默认`./skills`，可以将skill直接放在skills文件夹中，也可以将多个skill文件夹放在skills文件夹下的同一文件夹中，它们会被归为一组，页面左侧下拉可以按组选择
   - ⭐️增加：内置工具增加`codebase`、`web`、`run_x`

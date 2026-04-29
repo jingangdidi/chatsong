@@ -426,7 +426,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2026.04.?] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
+- [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠 Fix: Previously, the system was designed to retry tool calls up to 3 times upon failure, but due to a bug, it would exit immediately instead of retrying. This issue has now been resolved.
   - ⭐️ Add: Support for skills — specify the path via command-line flag `-S` or via config file named `skills`. Default path is `./skills`. Skills can be placed directly in the `skills` folder, or multiple skill folders can be grouped under subdirectories within `skills`. These groups are selectable via a dropdown on the left sidebar.
   - ⭐️ Add: Built-in tools now include `codebase`, `web` and `run_x`.
