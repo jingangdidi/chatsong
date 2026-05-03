@@ -103,6 +103,10 @@ struct Paras {
     #[argh(switch, short = 'A')]
     approval_all: bool,
 
+    /// enable shortcut key code complete, can be used in any editor, support 3 modes: 1. press the Ctrl 3 times (code completion), 2. press Left Shift 4 times (debug), 3. press Right Shift 4 times (shell command)
+    #[argh(switch, short = 'k')]
+    shortcut_key: bool,
+
     /// skills path, default: ./skills
     #[argh(option, short = 'S')]
     skills: Option<String>,
@@ -133,6 +137,7 @@ pub struct ParsedParas {
     pub share:        bool,                        // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
     pub english:      bool,                        // 是否展示英文界面，不指定则展示中文界面
     pub approval_all: bool,                        // approval to call all tools without pop-up prompts
+    pub shortcut_key: bool,                        // 开启快捷键代码自动补全，可在任意编辑器调用，支持3种模式：1. 连按3次`Ctrl`键（Windows和Linux）或`Command`键（macOS），补全选中的代码，2. 连按4次左侧`Shift`键，修复选中的代码，3. 连按4次右侧`Shift`键，补全选中的shell命令或写出描述内容对应的shell命令
     pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
     pub tools:        Tools,                       // all tools
     pub mcp_servers:  McpServers,                  // mcp servers
@@ -241,6 +246,7 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         share: para.share, // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
         english, // 是否展示英文界面，不指定则展示中文界面
         approval_all: para.approval_all, // approval to call all tools without pop-up prompts
+        shortcut_key: para.shortcut_key, // 开启快捷键代码自动补全，可在任意编辑器调用，支持3种模式：1. 连按3次`Ctrl`键（Windows和Linux）或`Command`键（macOS），补全选中的代码，2. 连按4次左侧`Shift`键，修复选中的代码，3. 连按4次右侧`Shift`键，补全选中的shell命令或写出描述内容对应的shell命令
         outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
             Some(o) => get_outpath(&o),
             None => {
@@ -255,18 +261,31 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         mcp_servers: McpServers::new(other_para.mcp_servers, english), // mcp servers
         skills: {
             let skills_path = match para.skills {
-                Some(s) => PathBuf::from(&s),
-                None => PathBuf::from(&other_para.skills_path),
+                Some(s) => Some(PathBuf::from(&s)),
+                None => if let Some(s) = other_para.skills_path {
+                    Some(PathBuf::from(&s))
+                } else {
+                    None
+                },
             };
-            let skill_manager = SkillManager::from_skills_dir(skills_path.clone());
-            let (available, unavailable, html) = if skills_path.exists() && skills_path.is_dir() {
-                let (available, unavailable) = skill_manager.discover_skills();
-                let html = skill_manager.html_dropdown(&available, &unavailable, english);
-                (available, unavailable, html)
+            if let Some(p) = skills_path {
+                let skill_manager = SkillManager::from_skills_dir(p.clone());
+                let (available, unavailable, html) = if p.exists() && p.is_dir() {
+                    let (available, unavailable) = skill_manager.discover_skills();
+                    let html = skill_manager.html_dropdown(&available, &unavailable, english);
+                    (available, unavailable, html)
+                } else {
+                    (Vec::new(), Vec::new(), String::new())
+                };
+                Skills{skill_manager, available, unavailable, html}
             } else {
-                (Vec::new(), Vec::new(), String::new())
-            };
-            Skills{skill_manager, available, unavailable, html}
+                Skills{
+                    skill_manager: SkillManager::from_skills_dir(PathBuf::from("./skills")),
+                    available: Vec::new(),
+                    unavailable: Vec::new(),
+                    html: String::new(),
+                }
+            }
         },
         bgc: match para.bgc { // 页面背景色
             Some(b) => get_bg_color(&b),
@@ -536,7 +555,8 @@ struct Para {
     allowed_path:      String,                  // allowed path for tools, multiple paths separated by commas, default: ./
     maxage:            String,                  // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                    // true展示英文界面，false展示中文界面
-    skills_path:       String,                  // skills路径
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    skills_path:       Option<String>,          // skills路径
     bgc:               String,                  // 页面背景色
     outpath:           String,                  // 问答结果输出路径
     model_config:      Vec<Config>,             // 模型参数
@@ -557,7 +577,7 @@ struct OptherPara {
     allowed_path:      String,                      // allowed path for tools, multiple paths separated by commas, default: ./
     maxage:            String,                      // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                        // true展示英文界面，false展示中文界面
-    skills_path:       String,                      // skills路径
+    skills_path:       Option<String>,              // skills路径
     bgc:               String,                      // 页面背景色
     outpath:           String,                      // 问答结果输出路径
     prompt:            HashMap<usize, [String; 2]>, // key: 序号，value: [prompt名称, prompt内容]

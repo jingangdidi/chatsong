@@ -15,6 +15,7 @@ pub mod tools;
 pub mod mcp;
 pub mod channel;
 pub mod skills;
+pub mod code_completion;
 
 mod handlers;
 mod v1;

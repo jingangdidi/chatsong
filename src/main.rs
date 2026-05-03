@@ -1,7 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::exit;
 
+use arboard::Clipboard;
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
+use tokio::task;
 use tracing::{event, Level};
 use tracing_subscriber::{
     filter::EnvFilter,
@@ -21,6 +24,11 @@ use chatsong::{
     parse_paras::PARAS,
     api::configure,
     ctrlc::wait_for_signal,
+    code_completion::{
+        listen_hotkey,
+        ModelForCompletion,
+        KeySignal,
+    },
 };
 
 /// 参考：https://github.com/joelparkerhenderson/demo-rust-axum
@@ -49,10 +57,34 @@ async fn main() {
     let mut handles = vec![];
     if !PARAS.channels.is_empty() {
         for channel in &PARAS.channels {
-            let handle = tokio::task::spawn(async move {
+            let handle = task::spawn(async move {
                 channel.start_bot().await;
             });
             handles.push(handle);
+        }
+    }
+
+    if PARAS.shortcut_key {
+        // start code complation
+        let (tx_code_complation, mut rx_code_complation) = mpsc::unbounded_channel::<KeySignal>();
+        // 这里异步调用LLM
+        match Clipboard::new() {
+            Ok(c) => {
+                let handle = task::spawn(async move {
+                    let mut clipboard = c;
+                    let mut completion = ModelForCompletion::new();
+                    while let Some(key_signal) = rx_code_complation.recv().await {
+                        completion.code_completion_llm(&mut clipboard, key_signal).await;
+                    }
+                });
+                handles.push(handle);
+                // 这里同步监听快捷键
+                let handle = task::spawn_blocking(move || {
+                    listen_hotkey(tx_code_complation);
+                });
+                handles.push(handle);
+            },
+            Err(e) => event!(Level::ERROR, "create clipboard error: {:?}", e),
         }
     }
 
