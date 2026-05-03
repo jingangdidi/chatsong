@@ -415,6 +415,8 @@ Options:
 ```
 
 ## ⏰ 更新记录
+- [2026.05.?] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
+  - ⭐️增加：增加通过监听指定快捷键，在任意编辑器使用代码补全、debug、编写shell命令，支持3种模式：1. 连按3次`Ctrl`键对选中的代码进行代码补全，2. 连按4次左侧`Shift`键修复选中的代码，3. 连按4次`Shift`键补全选中的shell命令或写出符合选中的命令描述的shell命令
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠修复：调用工具错误时未尝试3次而直接退出
   - ⭐️增加：增加支持`skills`，通过命令行`-S`参数或参数文件`skills`指定skills的路径，默认`./skills`，可以将skill直接放在skills文件夹中，也可以将多个skill文件夹放在skills文件夹下的同一文件夹中，它们会被归为一组，页面左侧下拉可以按组选择
