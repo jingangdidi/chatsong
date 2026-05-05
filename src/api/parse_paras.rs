@@ -104,6 +104,7 @@ struct Paras {
     approval_all: bool,
 
     /// enable shortcut key code complete, can be used in any editor, support 3 modes: 1. press the Ctrl 3 times (code completion), 2. press Left Shift 4 times (debug), 3. press Right Shift 4 times (shell command)
+    #[cfg(feature = "code_completion")]
     #[argh(switch, short = 'k')]
     shortcut_key: bool,
 
@@ -137,6 +138,7 @@ pub struct ParsedParas {
     pub share:        bool,                        // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
     pub english:      bool,                        // 是否展示英文界面，不指定则展示中文界面
     pub approval_all: bool,                        // approval to call all tools without pop-up prompts
+    #[cfg(feature = "code_completion")]
     pub shortcut_key: bool,                        // 开启快捷键代码自动补全，可在任意编辑器调用，支持3种模式：1. 连按3次`Ctrl`键（Windows和Linux）或`Command`键（macOS），补全选中的代码，2. 连按4次左侧`Shift`键，修复选中的代码，3. 连按4次右侧`Shift`键，补全选中的shell命令或写出描述内容对应的shell命令
     pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
     pub tools:        Tools,                       // all tools
@@ -246,6 +248,7 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         share: para.share, // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
         english, // 是否展示英文界面，不指定则展示中文界面
         approval_all: para.approval_all, // approval to call all tools without pop-up prompts
+        #[cfg(feature = "code_completion")]
         shortcut_key: para.shortcut_key, // 开启快捷键代码自动补全，可在任意编辑器调用，支持3种模式：1. 连按3次`Ctrl`键（Windows和Linux）或`Command`键（macOS），补全选中的代码，2. 连按4次左侧`Shift`键，修复选中的代码，3. 连按4次右侧`Shift`键，补全选中的shell命令或写出描述内容对应的shell命令
         outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
             Some(o) => get_outpath(&o),
