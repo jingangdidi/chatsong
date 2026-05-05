@@ -212,6 +212,10 @@ git clone https://github.com/jingangdidi/chatsong.git
 cd chatsong
 cargo build --release
 ```
+if use `-k` code complation:
+```
+cargo build --release --features code_completion
+```
 
 ## 🚥 Arguments
 ```
@@ -427,7 +431,7 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2026.05.?] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
+- [2026.05.05] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
   - ⭐️ Add: Support shortcut key code complete, can be used in any editor, support 3 modes: 1. press the Left Ctrl 3 times (complete the selected code), 2. press the Left Shift 4 times (debug the selected code), 3. press Right Shift 4 times (complete the shell command of the current command line or write a shell command that matches the description of the current command line)
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠 Fix: Previously, the system was designed to retry tool calls up to 3 times upon failure, but due to a bug, it would exit immediately instead of retrying. This issue has now been resolved.
