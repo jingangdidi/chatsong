@@ -1,8 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::exit;
 
+#[cfg(feature = "code_completion")]
 use arboard::Clipboard;
 use tokio::net::TcpListener;
+#[cfg(feature = "code_completion")]
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::{event, Level};
@@ -18,18 +20,14 @@ use tracing_subscriber::{
 };
 */
 
-/// PARAS: 存储命令行参数的全局变量
-/// api::configure: 路由
 use chatsong::{
     parse_paras::PARAS,
     api::configure,
     ctrlc::wait_for_signal,
-    code_completion::{
-        listen_hotkey,
-        ModelForCompletion,
-        KeySignal,
-    },
 };
+
+#[cfg(feature = "code_completion")]
+use chatsong::code_completion::{listen_hotkey, ModelForCompletion, KeySignal};
 
 /// 参考：https://github.com/joelparkerhenderson/demo-rust-axum
 
@@ -64,6 +62,7 @@ async fn main() {
         }
     }
 
+    #[cfg(feature = "code_completion")]
     if PARAS.shortcut_key {
         // start code complation
         let (tx_code_complation, mut rx_code_complation) = mpsc::unbounded_channel::<KeySignal>();

@@ -15,6 +15,7 @@ pub mod tools;
 pub mod mcp;
 pub mod channel;
 pub mod skills;
+#[cfg(feature = "code_completion")]
 pub mod code_completion;
 
 mod handlers;
