@@ -408,14 +408,14 @@ impl ModelForCompletion {
                 event!(Level::ERROR, "1. code_completion_llm: {}", e);
             } else if cfg!(target_os = "windows") {
                 // ` | clip`
-                if let Some(e) = press_string_key(" | clip", clipboard) {
+                if let Some(e) = press_string_key("\" | clip", clipboard) {
                     answer = Some(format!("{}", e));
                     run_next = false;
                     event!(Level::ERROR, "1. code_completion_llm: {}", e);
                 }
             } else if cfg!(target_os = "linux") {
                 // ` | xclip -selection clipboard`
-                if let Some(e) = press_string_key(" | xclip -selection clipboard", clipboard) {
+                if let Some(e) = press_string_key("\" | xclip -selection clipboard", clipboard) {
                     answer = Some(format!("{}", e));
                     run_next = false;
                     event!(Level::ERROR, "1. code_completion_llm: {}", e);
