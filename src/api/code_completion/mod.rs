@@ -387,19 +387,83 @@ impl ModelForCompletion {
         } else {
             Key::ControlLeft
         };
-        // 1. 调用`ctrl+c`（windows或linux）或`command+c`（macOS）将选中内容复制到剪切板
-        if let Err(e) = press_release_key(&EventType::KeyPress(copy_paste_key)) {
-            answer = Some(format!("{}", e));
-            run_next = false;
-            event!(Level::ERROR, "1. listen_hotkey_run_llm: {}", e);
-        } else if let Err(e) = press_release_key(&EventType::KeyPress(Key::KeyC)) {
-            answer = Some(format!("{}", e));
-            run_next = false;
-            event!(Level::ERROR, "1. listen_hotkey_run_llm: {}", e);
+        if KeySignal::Shell == key_signal {
+            // 1. 将当前命令行的命令复制到剪切板
+            // `ctrl+a`光标移到起始
+            // 调用键盘输入`echo "`
+            // `ctrl+e`光标移到末尾
+            // 调用键盘输入`" ｜ 系统剪切板命令`，`clip`（windows），`xclip -selection clipboard`（linux），`pbcopy`（macOS）
+            // 调用键盘按下`enter`键执行上面命令，此时原始命令已复制到剪切板
+            if let Some(e) = press_multi_keys(vec![Key::ControlLeft, Key::KeyA]) {
+                answer = Some(format!("{}", e));
+                run_next = false;
+                event!(Level::ERROR, "1. code_completion_llm: {}", e);
+            } else if let Some(e) = press_string_key("echo \"", clipboard) {
+                answer = Some(format!("{}", e));
+                run_next = false;
+                event!(Level::ERROR, "1. code_completion_llm: {}", e);
+            } else if let Some(e) = press_multi_keys(vec![Key::ControlLeft, Key::KeyE]) {
+                answer = Some(format!("{}", e));
+                run_next = false;
+                event!(Level::ERROR, "1. code_completion_llm: {}", e);
+            } else if cfg!(target_os = "windows") {
+                // ` | clip`
+                if let Some(e) = press_string_key(" | clip", clipboard) {
+                    answer = Some(format!("{}", e));
+                    run_next = false;
+                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
+                }
+            } else if cfg!(target_os = "linux") {
+                // ` | xclip -selection clipboard`
+                if let Some(e) = press_string_key(" | xclip -selection clipboard", clipboard) {
+                    answer = Some(format!("{}", e));
+                    run_next = false;
+                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
+                }
+            } else if cfg!(target_os = "macos") {
+                // ` | pbcopy`
+                if let Some(e) = press_string_key("\" | pbcopy", clipboard) {
+                    answer = Some(format!("{}", e));
+                    run_next = false;
+                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
+                }
+            }
+            if answer.is_some() {
+                // `ctrl+u`清空当前命令
+                if let Some(e) = press_multi_keys(vec![Key::ControlLeft, Key::KeyU]) {
+                    answer = Some(format!("{}", e));
+                    run_next = false;
+                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
+                }
+            } else {
+                // `enter`
+                if let Err(e) = press_release_key(&EventType::KeyPress(Key::Return)) {
+                    answer = Some(format!("{}", e));
+                    run_next = false;
+                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
+                } else if let Err(e) = press_release_key(&EventType::KeyRelease(Key::Return)) {
+                    answer = Some(format!("{}", e));
+                    run_next = false;
+                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
+                } else {
+                    event!(Level::INFO, "1. code_completion_llm: copy command line text to clipboard");
+                }
+            }
         } else {
-            event!(Level::INFO, "1. listen_hotkey_run_llm: copy text to clipboard");
-            let _ = press_release_key(&EventType::KeyRelease(Key::KeyC));
-            let _ = press_release_key(&EventType::KeyRelease(copy_paste_key));
+            // 1. 调用`ctrl+c`（windows或linux）或`command+c`（macOS）将选中内容复制到剪切板
+            if let Err(e) = press_release_key(&EventType::KeyPress(copy_paste_key)) {
+                answer = Some(format!("{}", e));
+                run_next = false;
+                event!(Level::ERROR, "1. listen_hotkey_run_llm: {}", e);
+            } else if let Err(e) = press_release_key(&EventType::KeyPress(Key::KeyC)) {
+                answer = Some(format!("{}", e));
+                run_next = false;
+                event!(Level::ERROR, "1. listen_hotkey_run_llm: {}", e);
+            } else {
+                event!(Level::INFO, "1. listen_hotkey_run_llm: copy text to clipboard");
+                let _ = press_release_key(&EventType::KeyRelease(Key::KeyC));
+                let _ = press_release_key(&EventType::KeyRelease(copy_paste_key));
+            }
         }
         // 2. 从剪切板获取问题
         if run_next {
@@ -503,8 +567,8 @@ impl ModelForCompletion {
             }
         }
         // 4. 答案写入剪切板
-        if let Some(a) = answer {
-            if let Err(e) = clipboard.set_text(&a) {
+        if let Some(a) = &answer {
+            if let Err(e) = clipboard.set_text(a) {
                 run_next = false;
                 event!(Level::ERROR, "4. listen_hotkey_run_llm clipboard error: {:?}", e);
             } else {
@@ -515,22 +579,189 @@ impl ModelForCompletion {
         }
         // 5. 调用`ctrl+c`（windows或linux）或`command+c`（macOS）将答案内容贴到编辑器
         if run_next {
-            if KeySignal::Completion == key_signal { // 代码补全需要取消选中，并将光标放在选中内容的最后
-                if let Err(e) = press_release_key(&EventType::KeyPress(Key::RightArrow)) {
-                    event!(Level::ERROR, "4. listen_hotkey_run_llm: {}", e);
-                } else {
-                    let _ = press_release_key(&EventType::KeyRelease(Key::RightArrow));
+            if KeySignal::Shell == key_signal { // shell命令不粘贴，调用键盘打印到终端
+                if let Some(a) = &answer {
+                    if let Some(e) = press_string_key(a, clipboard) {
+                        event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
+                    }
                 }
-            }
-            if let Err(e) = press_release_key(&EventType::KeyPress(copy_paste_key)) {
-                event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
-            } else if let Err(e) = press_release_key(&EventType::KeyPress(Key::KeyV)) {
-                event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
             } else {
-                event!(Level::INFO, "5. listen_hotkey_run_llm: paste answer");
-                let _ = press_release_key(&EventType::KeyRelease(Key::KeyV));
-                let _ = press_release_key(&EventType::KeyRelease(copy_paste_key));
+                if KeySignal::Completion == key_signal { // 代码补全需要取消选中，并将光标放在选中内容的最后
+                    if let Err(e) = press_release_key(&EventType::KeyPress(Key::RightArrow)) {
+                        event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
+                    } else {
+                        let _ = press_release_key(&EventType::KeyRelease(Key::RightArrow));
+                    }
+                }
+                if let Err(e) = press_release_key(&EventType::KeyPress(copy_paste_key)) {
+                    event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
+                } else if let Err(e) = press_release_key(&EventType::KeyPress(Key::KeyV)) {
+                    event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
+                } else {
+                    event!(Level::INFO, "5. listen_hotkey_run_llm: paste answer");
+                    let _ = press_release_key(&EventType::KeyRelease(Key::KeyV));
+                    let _ = press_release_key(&EventType::KeyRelease(copy_paste_key));
+                }
             }
         }
     }
+}
+
+/// press multiple keys
+fn press_multi_keys(keys: Vec<Key>) -> Option<String> {
+    // 先依次都按下
+    for key in keys.clone() {
+        if let Err(e) = press_release_key(&EventType::KeyPress(key)) {
+            return Some(format!("press {:?}: {}", key, e))
+        }
+    }
+    // 再依次都松开
+    for key in keys.into_iter().rev() {
+        if let Err(e) = press_release_key(&EventType::KeyRelease(key)) {
+            return Some(format!("release {:?}: {}", key, e))
+        }
+    }
+    // 以上没有保持返回None
+    None
+}
+
+/// press string keyboard
+fn press_string_key(command: &str, clipboard: &mut Clipboard) -> Option<String> {
+    for c in command.chars() {
+        let (k, need_shift) = match c {
+            '`' => (Key::BackQuote, false),
+            '~' => (Key::BackQuote, true),
+            '1' => (Key::Num1, false),
+            '!' => (Key::Num1, true),
+            '2' => (Key::Num2, false),
+            '@' => (Key::Num2, true),
+            '3' => (Key::Num3, false),
+            '#' => (Key::Num3, true),
+            '4' => (Key::Num4, false),
+            '$' => (Key::Num4, true),
+            '5' => (Key::Num5, false),
+            '%' => (Key::Num5, true),
+            '6' => (Key::Num6, false),
+            '^' => (Key::Num6, true),
+            '7' => (Key::Num7, false),
+            '&' => (Key::Num7, true),
+            '8' => (Key::Num8, false),
+            '*' => (Key::Num8, true),
+            '9' => (Key::Num9, false),
+            '(' => (Key::Num9, true),
+            '0' => (Key::Num0, false),
+            ')' => (Key::Num0, true),
+            '-' => (Key::Minus, false),
+            '_' => (Key::Minus, true),
+            '=' => (Key::Equal, false),
+            '+' => (Key::Equal, true),
+            'q' => (Key::KeyQ, false),
+            'Q' => (Key::KeyQ, true),
+            'w' => (Key::KeyW, false),
+            'W' => (Key::KeyW, true),
+            'e' => (Key::KeyE, false),
+            'E' => (Key::KeyE, true),
+            'r' => (Key::KeyR, false),
+            'R' => (Key::KeyR, true),
+            't' => (Key::KeyT, false),
+            'T' => (Key::KeyT, true),
+            'y' => (Key::KeyY, false),
+            'Y' => (Key::KeyY, true),
+            'u' => (Key::KeyU, false),
+            'U' => (Key::KeyU, true),
+            'i' => (Key::KeyI, false),
+            'I' => (Key::KeyI, true),
+            'o' => (Key::KeyO, false),
+            'O' => (Key::KeyO, true),
+            'p' => (Key::KeyP, false),
+            'P' => (Key::KeyP, true),
+            'a' => (Key::KeyA, false),
+            'A' => (Key::KeyA, true),
+            's' => (Key::KeyS, false),
+            'S' => (Key::KeyS, true),
+            'd' => (Key::KeyD, false),
+            'D' => (Key::KeyD, true),
+            'f' => (Key::KeyF, false),
+            'F' => (Key::KeyF, true),
+            'g' => (Key::KeyG, false),
+            'G' => (Key::KeyG, true),
+            'h' => (Key::KeyH, false),
+            'H' => (Key::KeyH, true),
+            'j' => (Key::KeyJ, false),
+            'J' => (Key::KeyJ, true),
+            'k' => (Key::KeyK, false),
+            'K' => (Key::KeyK, true),
+            'l' => (Key::KeyL, false),
+            'L' => (Key::KeyL, true),
+            'z' => (Key::KeyZ, false),
+            'Z' => (Key::KeyZ, true),
+            'x' => (Key::KeyX, false),
+            'X' => (Key::KeyX, true),
+            'c' => (Key::KeyC, false),
+            'C' => (Key::KeyC, true),
+            'v' => (Key::KeyV, false),
+            'V' => (Key::KeyV, true),
+            'b' => (Key::KeyB, false),
+            'B' => (Key::KeyB, true),
+            'n' => (Key::KeyN, false),
+            'N' => (Key::KeyN, true),
+            'm' => (Key::KeyM, false),
+            'M' => (Key::KeyM, true),
+            ';' => (Key::SemiColon, false),
+            ':' => (Key::SemiColon, true),
+            '\'' => (Key::Quote, false),
+            '"' => (Key::Quote, true),
+            '[' => (Key::LeftBracket, false),
+            '{' => (Key::LeftBracket, true),
+            ']' => (Key::RightBracket, false),
+            '}' => (Key::RightBracket, true),
+            '\\' => (Key::BackSlash, false),
+            '|' => (Key::BackSlash, true),
+            ',' => (Key::Comma, false),
+            '<' => (Key::Comma, true),
+            '.' => (Key::Dot, false),
+            '>' => (Key::Dot, true),
+            '/' => (Key::Slash, false),
+            '?' => (Key::Slash, true),
+            ' ' => (Key::Space, false),
+            //_ => return Some(format!("unsupported character: {}", c)),
+            _ => {
+                // 特殊字符不能通过键盘输入，这里通过剪切板输入，先写入剪切板，然后输入`ctrl+v`
+                if let Err(e) = clipboard.set_text(c.to_string()) {
+                    return Some(format!("set {} to clipboard error: {}", c, e))
+                } else {
+                    thread::sleep(time::Duration::from_millis(20));
+                }
+                if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
+                    if let Some(e) = press_multi_keys(vec![Key::ControlLeft, Key::ShiftLeft, Key::KeyV]) {
+                        return Some(format!("{}", e))
+                    }
+                } else if cfg!(target_os = "macos") {
+                    if let Some(e) = press_multi_keys(vec![Key::MetaLeft, Key::KeyV]) {
+                        return Some(format!("{}", e))
+                    }
+                } else {
+                    return Some(format!("unsupported character: {}", c))
+                }
+                continue
+            },
+        };
+        if need_shift {
+            if let Err(e) = press_release_key(&EventType::KeyPress(Key::ShiftLeft)) {
+                return Some(format!("press ShiftLeft: {}", e))
+            }
+        }
+        if let Err(e) = press_release_key(&EventType::KeyPress(k)) {
+            return Some(format!("press {}: {}", c, e))
+        }
+        if let Err(e) = press_release_key(&EventType::KeyRelease(k)) {
+            return Some(format!("release {}: {}", c, e))
+        }
+        if need_shift {
+            if let Err(e) = press_release_key(&EventType::KeyRelease(Key::ShiftLeft)) {
+                return Some(format!("release ShiftLeft: {}", e))
+            }
+        }
+    }
+    return None
 }
