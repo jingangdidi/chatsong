@@ -415,6 +415,7 @@ impl ModelForCompletion {
                 }
             } else if cfg!(target_os = "linux") {
                 // ` | xclip -selection clipboard`
+                // apt install xclip
                 if let Some(e) = press_string_key("\" | xclip -selection clipboard", clipboard) {
                     answer = Some(format!("{}", e));
                     run_next = false;
