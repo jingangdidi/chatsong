@@ -41,12 +41,12 @@ pub enum KeySignal {
 }
 
 /// 监听指定按键
-/// 监听连续按下3次左侧`ctrl`，触发代码补全（需要选中代码）
+/// 监听连续按下3次左侧`ctrl`(macos是左侧`command`)，触发代码补全（需要选中代码）
 /// 监听连续按下4次键盘左侧`shift`，触发debug（需要选中代码）
 /// 监听连续按下4次键盘右侧`shift`，触发补全或编写shell命令（不需要选中代码，在命令行写出命令或要求即可，注意触发前切换至英文输入法）
-/// 监听连续按下3次右侧`ctrl`，触发写代码（需要选中代码）
+/// 监听连续按下3次右侧`ctrl`(macos是右侧`command`)，触发写代码（需要选中代码）
 pub fn listen_hotkey(sender: UnboundedSender<KeySignal>) {
-    // 监听连续按下3次左侧`ctrl`
+    // 监听连续按下3次左侧`ctrl`(macos是左侧`command`)
     let mut nctrl_l_release: u8 = 0; // 记录连续松开左侧Ctrl键的次数，连续3次则触发提问
     let mut previous_ctrl_l_press = false; // 上一个键是否按下左侧Ctrl键
     let mut previous_ctrl_l_release = false; // 上一个键是否松开左侧Ctrl键
@@ -58,33 +58,69 @@ pub fn listen_hotkey(sender: UnboundedSender<KeySignal>) {
     let mut nshift_r_release: u8 = 0; // 记录连续松开左侧shift键的次数，连续4次则触发提问
     let mut previous_shift_r_press = false; // 上一个键是否按下左侧shift键
     let mut previous_shift_r_release = false; // 上一个键是否松开左侧shift键
-    // 监听连续按下3次右侧`ctrl`
+    // 监听连续按下3次右侧`ctrl`(macos是右侧`command`)
     let mut nctrl_r_release: u8 = 0; // 记录连续松开右侧Ctrl键的次数，连续3次则触发提问
     let mut previous_ctrl_r_press = false; // 上一个键是否按下右侧Ctrl键
     let mut previous_ctrl_r_release = false; // 上一个键是否松开右侧Ctrl键
 
     if let Err(error) = listen(move |event: Event| {
-        // 1(按下左侧`ctrl`), 2(释放左侧`ctrl`)
+        // 1(按下左侧`ctrl`, macos是左侧`command`), 2(释放左侧`ctrl`, macos是左侧`command`)
         // 3(按下左侧`shift`), 4(释放左侧`shift`)
         // 5(按下右侧`shift`), 6(释放右侧`shift`)
-        // 7(按下右侧`ctrl`), 8(释放右侧`ctrl`)
+        // 7(按下右侧`ctrl`, macos是右侧`command`), 8(释放右侧`ctrl`, macos是右侧`command`)
         // 9(按下其他键), 10(释放其他键), 11(其他事件)
         let press_release = match event.event_type {
             EventType::KeyPress(key) => {
                 match key {
-                    Key::ControlLeft => 1,
+                    Key::ControlLeft => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
+                        1
+                    } else {
+                        9
+                    },
+                    Key::MetaLeft => if cfg!(target_os = "macos") {
+                        1
+                    } else {
+                        9
+                    },
                     Key::ShiftLeft => 3,
                     Key::ShiftRight => 5,
-                    Key::ControlRight => 7,
+                    Key::ControlRight => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
+                        7
+                    } else {
+                        9
+                    },
+                    Key::MetaRight => if cfg!(target_os = "macos") {
+                        7
+                    } else {
+                        9
+                    },
                     _ => 9,
                 }
             },
             EventType::KeyRelease(key) => {
                 match key {
-                    Key::ControlLeft => 2,
+                    Key::ControlLeft => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
+                        2
+                    } else {
+                        10
+                    },
+                    Key::MetaLeft => if cfg!(target_os = "macos") {
+                        2
+                    } else {
+                        10
+                    },
                     Key::ShiftLeft => 4,
                     Key::ShiftRight => 6,
-                    Key::ControlRight => 8,
+                    Key::ControlRight => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
+                        8
+                    } else {
+                        10
+                    },
+                    Key::MetaRight => if cfg!(target_os = "macos") {
+                        8
+                    } else {
+                        10
+                    },
                     _ => 10,
                 }
             },
