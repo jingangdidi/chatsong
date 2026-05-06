@@ -225,7 +225,7 @@ Options:
   -r, --share         allow sharing of all chat logs
   -l, --english       chat page show english
   -A, --approval-all  approval to call all tools without pop-up prompts
-  -k, --shortcut-key  enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl 3 times (code completion), 2. press the Right Ctrl 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
+  -k, --shortcut-key  enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl/command 3 times (code completion), 2. press the Right Ctrl/command 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
   -S, --skills        skills path, default: ./skills
   -b, --bgc           background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
   -o, --outpath       output path, default: ./chat-log
@@ -421,7 +421,7 @@ Options:
 
 ## ⏰ 更新记录
 - [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
-  - ⭐️增加：增加通过监听指定快捷键，在任意编辑器使用代码补全、写代码、debug、编写shell命令，支持4种模式：1. 连按3次左侧`Ctrl`键对选中的代码进行代码补全，2. 连按3次右侧`Ctrl`键根据选中的要求编写代码，3. 连按4次左侧`Shift`键修复选中的代码，4. 连按4次右侧`Shift`键，补全当前命令行的shell命令或写出符合当前命令行命令描述的shell命令
+  - ⭐️增加：增加通过监听指定快捷键，在任意编辑器使用代码补全、写代码、debug、编写shell命令，支持4种模式：1. 连按3次左侧`Ctrl`(macos是`command`)键对选中的代码进行代码补全，2. 连按3次右侧`Ctrl`(macos是`command`)键根据选中的要求编写代码，3. 连按4次左侧`Shift`键修复选中的代码，4. 连按4次右侧`Shift`键，补全当前命令行的shell命令或写出符合当前命令行命令描述的shell命令
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠修复：调用工具错误时未尝试3次而直接退出
   - ⭐️增加：增加支持`skills`，通过命令行`-S`参数或参数文件`skills`指定skills的路径，默认`./skills`，可以将skill直接放在skills文件夹中，也可以将多个skill文件夹放在skills文件夹下的同一文件夹中，它们会被归为一组，页面左侧下拉可以按组选择

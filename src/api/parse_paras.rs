@@ -103,7 +103,7 @@ struct Paras {
     #[argh(switch, short = 'A')]
     approval_all: bool,
 
-    /// enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl 3 times (code completion), 2. press the Right Ctrl 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
+    /// enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl/command 3 times (code completion), 2. press the Right Ctrl/command 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
     #[cfg(feature = "code_completion")]
     #[argh(switch, short = 'k')]
     shortcut_key: bool,
