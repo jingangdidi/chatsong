@@ -486,6 +486,12 @@ impl ModelForCompletion {
                         } else {
                             let _ = press_release_key(&EventType::KeyRelease(Key::Backspace));
                         }
+                    } else if let Some(suffix) = q.strip_prefix("thinking=") {
+                        if suffix == "true" {
+                            *self.thinking = true;
+                        } else if suffix == "false" {
+                            *self.thinking = false;
+                        }
                     } else {
                         event!(Level::INFO, "2. listen_hotkey_run_llm: get text from clipboard: `{}`", q);
                         question = Some(q);
@@ -538,6 +544,21 @@ impl ModelForCompletion {
                     // glm: https://docs.bigmodel.cn/cn/guide/develop/openai/introduction
                     para_builder.extra_body(json!({"thinking": {"type": "enabled"}}));
                 }
+            } else {
+                // 关闭思考，不同模型思考的设置不同
+                if self.lowercase_model.starts_with("deepseek") {
+                    // deepseek: https://api-docs.deepseek.com/
+                    para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                } else if self.lowercase_model.starts_with("qwen") {
+                    // Qwen: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions#05cfceb898csa
+                    para_builder.extra_body(json!({"enable_thinking": false}));
+                } else if self.lowercase_model.starts_with("kimi") {
+                    // kimi: https://platform.kimi.com/docs/api/models-overview
+                    para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                } else if self.lowercase_model.starts_with("glm") {
+                    // glm: https://docs.bigmodel.cn/cn/guide/develop/openai/introduction
+                    para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                }
             }
             para_builder.messages(messages);
             match para_builder.build() {
@@ -584,6 +605,8 @@ impl ModelForCompletion {
                 if let Some(a) = &answer {
                     if let Some(e) = press_string_key(a, clipboard) {
                         event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
+                    } else {
+                        event!(Level::INFO, "5. listen_hotkey_run_llm: write answer to command line");
                     }
                 }
             } else {
