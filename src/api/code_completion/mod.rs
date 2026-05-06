@@ -227,9 +227,9 @@ fn press_release_key(event_type: &EventType) -> Result<(), SimulateError> {
 ///     2. 准确性：确保语法正确，逻辑连贯，无幻觉引用。
 ///     3. 简洁性：仅输出需要补全的代码部分，不包含用户输入内容的后缀，用户会自己将输入内容与你回复的内容合并为完整代码。
 ///     4. 安全性：避免生成潜在的漏洞或不安全的代码实践。
-/// -----------------------------------------------------
+///
 /// 下方为待补全的代码，请继续编写。
-
+/// -----------------------------------------------------
 /// https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools/blob/main/VSCode%20Agent/nes-tab-completion.txt
 const COMPLETION_PROMPT: &str = r###"You are a senior development engineer proficient in multiple programming languages, skilled at understanding contextual intent.
 
@@ -438,11 +438,7 @@ impl ModelForCompletion {
                 }
             } else {
                 // `enter`
-                if let Err(e) = press_release_key(&EventType::KeyPress(Key::Return)) {
-                    answer = Some(format!("{}", e));
-                    run_next = false;
-                    event!(Level::ERROR, "1. code_completion_llm: {}", e);
-                } else if let Err(e) = press_release_key(&EventType::KeyRelease(Key::Return)) {
+                if let Some(e) = press_release_single_key(Key::Return) {
                     answer = Some(format!("{}", e));
                     run_next = false;
                     event!(Level::ERROR, "1. code_completion_llm: {}", e);
@@ -452,28 +448,23 @@ impl ModelForCompletion {
             }
         } else {
             // 1. 调用`ctrl+c`（windows或linux）或`command+c`（macOS）将选中内容复制到剪切板
-            if let Err(e) = press_release_key(&EventType::KeyPress(copy_paste_key)) {
+            if let Some(e) = press_multi_keys(vec![copy_paste_key, Key::KeyC]) {
                 answer = Some(format!("{}", e));
                 run_next = false;
-                event!(Level::ERROR, "1. listen_hotkey_run_llm: {}", e);
-            } else if let Err(e) = press_release_key(&EventType::KeyPress(Key::KeyC)) {
-                answer = Some(format!("{}", e));
-                run_next = false;
-                event!(Level::ERROR, "1. listen_hotkey_run_llm: {}", e);
+                event!(Level::ERROR, "1. code_completion_llm: {}", e);
             } else {
                 event!(Level::INFO, "1. listen_hotkey_run_llm: copy text to clipboard");
-                let _ = press_release_key(&EventType::KeyRelease(Key::KeyC));
-                let _ = press_release_key(&EventType::KeyRelease(copy_paste_key));
             }
         }
         // 2. 从剪切板获取问题
         if run_next {
             match clipboard.get_text() {
                 Ok(q) => {
-                    if q.is_empty() {
+                    let trim_q = q.trim_matches('"').to_string();
+                    if trim_q.is_empty() {
                         event!(Level::INFO, "2. listen_hotkey_run_llm: empty content from clipboard");
                         run_next = false;
-                    } else if let Ok(n) = q.parse::<usize>() { // 修改模型
+                    } else if let Ok(n) = trim_q.parse::<usize>() { // 修改模型
                         if let Some(c) = ModelForCompletion::from_n(n) {
                             event!(Level::INFO, "2. listen_hotkey_run_llm: change model from {} to {}", self.model, c.model);
                             *self = c;
@@ -481,12 +472,10 @@ impl ModelForCompletion {
                             event!(Level::INFO, "2. listen_hotkey_run_llm: model unchanged {}", self.model);
                         }
                         run_next = false;
-                        if let Err(e) = press_release_key(&EventType::KeyPress(Key::Backspace)) {
+                        if let Some(e) = press_release_single_key(Key::Backspace) {
                             event!(Level::ERROR, "2. listen_hotkey_run_llm: {}", e);
-                        } else {
-                            let _ = press_release_key(&EventType::KeyRelease(Key::Backspace));
                         }
-                    } else if let Some(suffix) = q.strip_prefix("thinking=") {
+                    } else if let Some(suffix) = trim_q.strip_prefix("thinking=") {
                         if suffix == "true" {
                             event!(Level::INFO, "2. listen_hotkey_run_llm: enable {} thinking", self.model);
                             self.thinking = true;
@@ -495,14 +484,12 @@ impl ModelForCompletion {
                             self.thinking = false;
                         }
                         run_next = false;
-                        if let Err(e) = press_release_key(&EventType::KeyPress(Key::Backspace)) {
+                        if let Some(e) = press_release_single_key(Key::Backspace) {
                             event!(Level::ERROR, "2. listen_hotkey_run_llm: {}", e);
-                        } else {
-                            let _ = press_release_key(&EventType::KeyRelease(Key::Backspace));
                         }
                     } else {
-                        event!(Level::INFO, "2. listen_hotkey_run_llm: get text from clipboard: `{}`", q);
-                        question = Some(q);
+                        event!(Level::INFO, "2. listen_hotkey_run_llm: get text from clipboard: `{}`", trim_q);
+                        question = Some(trim_q);
                     }
                 },
                 Err(e) => {
@@ -619,24 +606,32 @@ impl ModelForCompletion {
                 }
             } else {
                 if KeySignal::Completion == key_signal { // 代码补全需要取消选中，并将光标放在选中内容的最后
-                    if let Err(e) = press_release_key(&EventType::KeyPress(Key::RightArrow)) {
+                    if let Some(e) = press_release_single_key(Key::RightArrow) {
                         event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
-                    } else {
-                        let _ = press_release_key(&EventType::KeyRelease(Key::RightArrow));
                     }
                 }
-                if let Err(e) = press_release_key(&EventType::KeyPress(copy_paste_key)) {
-                    event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
-                } else if let Err(e) = press_release_key(&EventType::KeyPress(Key::KeyV)) {
+                if let Some(e) = press_multi_keys(vec![copy_paste_key, Key::KeyV]) {
                     event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
                 } else {
                     event!(Level::INFO, "5. listen_hotkey_run_llm: paste answer");
-                    let _ = press_release_key(&EventType::KeyRelease(Key::KeyV));
-                    let _ = press_release_key(&EventType::KeyRelease(copy_paste_key));
                 }
             }
         }
     }
+}
+
+/// press & release single key
+fn press_release_single_key(key: Key) -> Option<String> {
+    // 按下
+    if let Err(e) = press_release_key(&EventType::KeyPress(key)) {
+        return Some(format!("press {:?}: {}", key, e))
+    }
+    // 松开
+    if let Err(e) = press_release_key(&EventType::KeyRelease(key)) {
+        return Some(format!("release {:?}: {}", key, e))
+    }
+    // 以上没有报错返回None
+    None
 }
 
 /// press multiple keys
@@ -653,7 +648,7 @@ fn press_multi_keys(keys: Vec<Key>) -> Option<String> {
             return Some(format!("release {:?}: {}", key, e))
         }
     }
-    // 以上没有保持返回None
+    // 以上没有报错返回None
     None
 }
 
@@ -766,11 +761,11 @@ fn press_string_key(command: &str, clipboard: &mut Clipboard) -> Option<String> 
                 }
                 if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
                     if let Some(e) = press_multi_keys(vec![Key::ControlLeft, Key::ShiftLeft, Key::KeyV]) {
-                        return Some(format!("{}", e))
+                        return Some(e)
                     }
                 } else if cfg!(target_os = "macos") {
                     if let Some(e) = press_multi_keys(vec![Key::MetaLeft, Key::KeyV]) {
-                        return Some(format!("{}", e))
+                        return Some(e)
                     }
                 } else {
                     return Some(format!("unsupported character: {}", c))
@@ -779,19 +774,12 @@ fn press_string_key(command: &str, clipboard: &mut Clipboard) -> Option<String> 
             },
         };
         if need_shift {
-            if let Err(e) = press_release_key(&EventType::KeyPress(Key::ShiftLeft)) {
-                return Some(format!("press ShiftLeft: {}", e))
+            if let Some(e) = press_multi_keys(vec![Key::ShiftLeft, k]) {
+                return Some(e)
             }
-        }
-        if let Err(e) = press_release_key(&EventType::KeyPress(k)) {
-            return Some(format!("press {}: {}", c, e))
-        }
-        if let Err(e) = press_release_key(&EventType::KeyRelease(k)) {
-            return Some(format!("release {}: {}", c, e))
-        }
-        if need_shift {
-            if let Err(e) = press_release_key(&EventType::KeyRelease(Key::ShiftLeft)) {
-                return Some(format!("release ShiftLeft: {}", e))
+        } else {
+            if let Some(e) = press_release_single_key(k) {
+                return Some(e)
             }
         }
     }
