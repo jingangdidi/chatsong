@@ -488,9 +488,17 @@ impl ModelForCompletion {
                         }
                     } else if let Some(suffix) = q.strip_prefix("thinking=") {
                         if suffix == "true" {
-                            *self.thinking = true;
+                            event!(Level::INFO, "2. listen_hotkey_run_llm: enable {} thinking", self.model);
+                            self.thinking = true;
                         } else if suffix == "false" {
-                            *self.thinking = false;
+                            event!(Level::INFO, "2. listen_hotkey_run_llm: disable {} thinking", self.model);
+                            self.thinking = false;
+                        }
+                        run_next = false;
+                        if let Err(e) = press_release_key(&EventType::KeyPress(Key::Backspace)) {
+                            event!(Level::ERROR, "2. listen_hotkey_run_llm: {}", e);
+                        } else {
+                            let _ = press_release_key(&EventType::KeyRelease(Key::Backspace));
                         }
                     } else {
                         event!(Level::INFO, "2. listen_hotkey_run_llm: get text from clipboard: `{}`", q);
