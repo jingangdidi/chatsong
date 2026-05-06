@@ -37,7 +37,7 @@
 some dir
 ├─ chatsong   # single executable file
 ├─ config.txt # config file
-├─ skills     # skills path
+├─ skills     # skills path (optional)
 └─ chat-log   # save chat log
 ```
 **1. download a pre-built binary**
@@ -236,7 +236,7 @@ Options:
   -r, --share         allow sharing of all chat logs
   -l, --english       chat page show english
   -A, --approval-all  approval to call all tools without pop-up prompts
-  -k, --shortcut-key  enable shortcut key code complete, can be used in any editor, support 3 modes: 1. press the Ctrl 3 times (code completion), 2. press Left Shift 4 times (debug), 3. press Right Shift 4 times (shell command)
+  -k, --shortcut-key  enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl 3 times (code completion), 2. press the Right Ctrl 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
   -S, --skills        skills path, default: ./skills
   -b, --bgc           background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
   -o, --outpath       output path, default: ./chat-log
@@ -431,8 +431,8 @@ Options:
 ```
 
 ## ⏰ changelog
-- [2026.05.05] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
-  - ⭐️ Add: Support shortcut key code complete, can be used in any editor, support 3 modes: 1. press the Left Ctrl 3 times (complete the selected code), 2. press the Left Shift 4 times (debug the selected code), 3. press Right Shift 4 times (complete the shell command of the current command line or write a shell command that matches the description of the current command line)
+- [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
+  - ⭐️ Add: Support shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl 3 times (complete the selected code), 2. press the Right Ctrl 3 times (write code), 3. press the Left Shift 4 times (debug the selected code), 4. press Right Shift 4 times (complete the shell command of the current command line or write a shell command that matches the description of the current command line)
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠 Fix: Previously, the system was designed to retry tool calls up to 3 times upon failure, but due to a bug, it would exit immediately instead of retrying. This issue has now been resolved.
   - ⭐️ Add: Support for skills — specify the path via command-line flag `-S` or via config file named `skills`. Default path is `./skills`. Skills can be placed directly in the `skills` folder, or multiple skill folders can be grouped under subdirectories within `skills`. These groups are selectable via a dropdown on the left sidebar.
