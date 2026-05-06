@@ -37,96 +37,81 @@ pub enum KeySignal {
     Completion, // 代码补全
     Debug,      // 修复代码
     Shell,      // 补全或编写shell命令
+    WriteCode,  // 写代码
 }
 
 /// 监听指定按键
-/// 监听连续按下3次`ctrl`（windows或linux）或`command`（macOS），触发代码补全
-/// 监听连续按下4次键盘左侧`shift`，触发debug
+/// 监听连续按下3次左侧`ctrl`，触发代码补全（需要选中代码）
+/// 监听连续按下4次键盘左侧`shift`，触发debug（需要选中代码）
+/// 监听连续按下4次键盘右侧`shift`，触发补全或编写shell命令（不需要选中代码，在命令行写出命令或要求即可，注意触发前切换至英文输入法）
+/// 监听连续按下3次右侧`ctrl`，触发写代码（需要选中代码）
 pub fn listen_hotkey(sender: UnboundedSender<KeySignal>) {
-    // 监听连续按下3次`ctrl`（windows或linux）或`command`（macOS）
-    let mut nctrl_release: u8 = 0; // 记录连续松开Ctrl键的次数，连续3次则触发提问
-    let mut previous_ctrl_press = false; // 上一个键是否按下Ctrl键
-    let mut previous_ctrl_release = false; // 上一个键是否松开Ctrl键
+    // 监听连续按下3次左侧`ctrl`
+    let mut nctrl_l_release: u8 = 0; // 记录连续松开左侧Ctrl键的次数，连续3次则触发提问
+    let mut previous_ctrl_l_press = false; // 上一个键是否按下左侧Ctrl键
+    let mut previous_ctrl_l_release = false; // 上一个键是否松开左侧Ctrl键
     // 监听连续按下4次键盘左侧`shift`
-    let mut nshift_l_release: u8 = 0; // 记录连续松开左侧shift键的次数，连续3次则触发提问
+    let mut nshift_l_release: u8 = 0; // 记录连续松开左侧shift键的次数，连续4次则触发提问
     let mut previous_shift_l_press = false; // 上一个键是否按下左侧shift键
     let mut previous_shift_l_release = false; // 上一个键是否松开左侧shift键
     // 监听连续按下4次键盘右侧`shift`
-    let mut nshift_r_release: u8 = 0; // 记录连续松开左侧shift键的次数，连续3次则触发提问
+    let mut nshift_r_release: u8 = 0; // 记录连续松开左侧shift键的次数，连续4次则触发提问
     let mut previous_shift_r_press = false; // 上一个键是否按下左侧shift键
     let mut previous_shift_r_release = false; // 上一个键是否松开左侧shift键
+    // 监听连续按下3次右侧`ctrl`
+    let mut nctrl_r_release: u8 = 0; // 记录连续松开右侧Ctrl键的次数，连续3次则触发提问
+    let mut previous_ctrl_r_press = false; // 上一个键是否按下右侧Ctrl键
+    let mut previous_ctrl_r_release = false; // 上一个键是否松开右侧Ctrl键
 
     if let Err(error) = listen(move |event: Event| {
-        // 1(按下左侧`ctrl`或`command`), 2(释放左侧`ctrl`或`command`), 3(按下左侧`shift`), 4(释放左侧`shift`), 5(按下右侧`shift`), 6(释放右侧`shift`), 7(按下其他键), 8(释放其他键), 9(其他事件)
+        // 1(按下左侧`ctrl`), 2(释放左侧`ctrl`)
+        // 3(按下左侧`shift`), 4(释放左侧`shift`)
+        // 5(按下右侧`shift`), 6(释放右侧`shift`)
+        // 7(按下右侧`ctrl`), 8(释放右侧`ctrl`)
+        // 9(按下其他键), 10(释放其他键), 11(其他事件)
         let press_release = match event.event_type {
             EventType::KeyPress(key) => {
                 match key {
-                    Key::ControlLeft => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
-                        1
-                    } else if cfg!(target_os = "macos") {
-                        7
-                    } else {
-                        7
-                    },
-                    Key::MetaLeft => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
-                        7
-                    } else if cfg!(target_os = "macos") {
-                        1
-                    } else {
-                        7
-                    },
+                    Key::ControlLeft => 1,
                     Key::ShiftLeft => 3,
                     Key::ShiftRight => 5,
-                    _ => 7,
+                    Key::ControlRight => 7,
+                    _ => 9,
                 }
             },
             EventType::KeyRelease(key) => {
                 match key {
-                    Key::ControlLeft => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
-                        2
-                    } else if cfg!(target_os = "macos") {
-                        8
-                    } else {
-                        8
-                    },
-                    Key::MetaLeft => if cfg!(target_os = "windows") || cfg!(target_os = "linux") {
-                        8
-                    } else if cfg!(target_os = "macos") {
-                        2
-                    } else {
-                        8
-                    },
+                    Key::ControlLeft => 2,
                     Key::ShiftLeft => 4,
                     Key::ShiftRight => 6,
-                    _ => 8,
+                    Key::ControlRight => 8,
+                    _ => 10,
                 }
             },
             //EventType::ButtonPress(Button), // Linux下有效，Windows下无效
             //EventType::ButtonRelease(Button),
             //EventType::MouseMove{x: f64, y: f64},
             //EventType::Wheel{delta_x: i64, delta_y: i64},
-            _ => 9,
+            _ => 11,
         };
 
         if press_release == 1 || press_release == 2 {
-            trigger_code_completion(&mut previous_ctrl_press, &mut previous_ctrl_release, &mut nctrl_release, press_release == 1);
-            //println!("press ctrl: {}, release ctrl: {}, {}", previous_ctrl_press, previous_ctrl_release, nctrl_release);
-            if nctrl_release >= 3 {
+            trigger_code_completion(&mut previous_ctrl_l_press, &mut previous_ctrl_l_release, &mut nctrl_l_release, press_release == 1);
+            //println!("press ctrl: {}, release ctrl: {}, {}", previous_ctrl_l_press, previous_ctrl_l_release, nctrl_l_release);
+            if nctrl_l_release >= 3 {
                 // 这里是同步的，通过管道将监听信号发送给异步函数执行
                 if let Err(e) = sender.send(KeySignal::Completion) {
                     event!(Level::ERROR, "listen keyboard error: {:?}", e);
                 }
                 // 恢复状态
-                previous_ctrl_release = false;
-                nctrl_release = 0;
+                previous_ctrl_l_release = false;
+                nctrl_l_release = 0;
             }
             // 更新其他键
-            if press_release == 1 && previous_shift_l_press {
-                previous_shift_l_press = false;
-                previous_shift_r_press = false;
-            } else if press_release == 2 && previous_shift_l_release {
-                previous_shift_l_release = false;
-                previous_shift_r_release = false;
+            if press_release == 1 {
+                set_false(&mut [&mut previous_shift_l_press, &mut previous_shift_r_press, &mut previous_ctrl_r_press]);
+            } else if press_release == 2 {
+                set_false(&mut [&mut previous_shift_l_release, &mut previous_shift_r_release, &mut previous_ctrl_r_release]);
             }
         } else if press_release == 3 || press_release == 4 {
             trigger_code_completion(&mut previous_shift_l_press, &mut previous_shift_l_release, &mut nshift_l_release, press_release == 3);
@@ -141,12 +126,10 @@ pub fn listen_hotkey(sender: UnboundedSender<KeySignal>) {
                 nshift_l_release = 0;
             }
             // 更新其他键
-            if press_release == 3 && previous_ctrl_press {
-                previous_ctrl_press = false;
-                previous_shift_r_press = false;
-            } else if press_release == 4 && previous_ctrl_release {
-                previous_ctrl_release = false;
-                previous_shift_r_release = false;
+            if press_release == 3 {
+                set_false(&mut [&mut previous_ctrl_l_press, &mut previous_shift_r_press, &mut previous_ctrl_r_press]);
+            } else if press_release == 4 {
+                set_false(&mut [&mut previous_ctrl_l_release, &mut previous_shift_r_release, &mut previous_ctrl_r_release]);
             }
         } else if press_release == 5 || press_release == 6 {
             trigger_code_completion(&mut previous_shift_r_press, &mut previous_shift_r_release, &mut nshift_r_release, press_release == 5);
@@ -161,26 +144,60 @@ pub fn listen_hotkey(sender: UnboundedSender<KeySignal>) {
                 nshift_r_release = 0;
             }
             // 更新其他键
-            if press_release == 3 && previous_ctrl_press {
-                previous_ctrl_press = false;
-                previous_shift_l_press = false;
-            } else if press_release == 4 && previous_ctrl_release {
-                previous_shift_l_release = false;
-                previous_ctrl_release = false;
+            if press_release == 5 {
+                set_false(&mut [&mut previous_ctrl_l_press, &mut previous_shift_l_press, &mut previous_ctrl_r_press]);
+            } else if press_release == 6 {
+                set_false(&mut [&mut previous_ctrl_l_release, &mut previous_shift_l_release, &mut previous_ctrl_r_release]);
             }
-        } else if press_release != 9 { // 更新监听按键的状态
+        } else if press_release == 7 || press_release == 8 {
+            trigger_code_completion(&mut previous_ctrl_r_press, &mut previous_ctrl_r_release, &mut nctrl_r_release, press_release == 7);
+            //println!("press dot: {}, release dot: {}, {}", previous_ctrl_r_press, previous_ctrl_r_release, nctrl_r_release);
+            if nctrl_r_release >= 3 {
+                // 这里是同步的，通过管道将监听信号发送给异步函数执行
+                if let Err(e) = sender.send(KeySignal::WriteCode) {
+                    event!(Level::ERROR, "listen keyboard error: {:?}", e);
+                }
+                // 恢复状态
+                previous_ctrl_r_release = false;
+                nctrl_r_release = 0;
+            }
+            // 更新其他键
             if press_release == 7 {
-                previous_ctrl_press = false;
-                previous_shift_l_press = false;
-                previous_shift_r_press = false;
+                set_false(&mut [&mut previous_ctrl_l_press, &mut previous_shift_l_press, &mut previous_shift_r_press]);
             } else if press_release == 8 {
-                previous_ctrl_release = false;
-                previous_shift_l_release = false;
-                previous_shift_r_release = false;
+                set_false(&mut [&mut previous_ctrl_l_release, &mut previous_shift_l_release, &mut previous_shift_r_release]);
+            }
+        } else if press_release != 11 { // 更新监听按键的状态
+            if press_release == 9 {
+                set_false(&mut [&mut previous_ctrl_l_press, &mut previous_shift_l_press, &mut previous_shift_r_press, &mut previous_ctrl_r_press]);
+            } else if press_release == 10 {
+                set_false(&mut [&mut previous_ctrl_l_release, &mut previous_shift_l_release, &mut previous_shift_r_release, &mut previous_ctrl_r_release]);
             }
         }
     }) {
         event!(Level::ERROR, "listen keyboard error: {:?}", error);
+    }
+}
+
+/// 将指定的一组 bool 变量统一设置为 false
+///
+/// `bool_refs`: 可变 bool 引用的切片，包含所有需要被设置为 false 的变量引用
+///
+/// --------------------------------
+/// let mut a = true;
+/// let mut b = true;
+/// let mut c = true;
+/// let mut d = true;
+///
+/// // 修改 3 个变量
+/// set_false(&mut [&mut a, &mut b, &mut c]);
+///
+/// // 修改 4 个变量
+/// set_false(&mut [&mut a, &mut b, &mut c, &mut d]);
+/// --------------------------------
+fn set_false(bool_refs: &mut [&mut bool]) {
+    for r in bool_refs {
+        **r = false;
     }
 }
 
@@ -335,6 +352,25 @@ Example 2 - Natural language to command:
 Example 3 - Natural language:
     User input: Check disk usage
     Output: df -h
+"###;
+
+/// 写代码
+const WRITE_CODE_PROMPT: &str = r###"You are a senior development engineer proficient in multiple programming languages, skilled at understanding contextual intent.
+
+Task Objective:
+    Based on the natural language description provided below, generate the most logically consistent code fragment.
+
+Generation Guidelines:
+    1. Consistency: Do not output explanations, dialogues, or markdown code fences.
+    2. Accuracy: Ensure syntactic correctness and logical coherence, avoid hallucinated references.
+    3. Security: Avoid generating potentially vulnerable or unsafe code practices.
+    4. Simplicity: Write simple and straightforward code.
+    5. Readability: Ensure your code is easy to read and understand.
+    6. Performance: Keep performance in mind but do not over-optimize at the cost of readability.
+    7. Maintainability: Write code that is easy to maintain and update.
+    8. Detailed Docstrings: All functions and methods must have docstrings, thoroughly explaining their purpose, parameters, return values, and any exceptions raised. Include usage examples where helpful.
+
+Below is the natural language description.
 "###;
 
 /// 问题和模型
@@ -508,6 +544,7 @@ impl ModelForCompletion {
                         KeySignal::Completion => COMPLETION_PROMPT.to_string(),
                         KeySignal::Debug => DEBUG_PROMPT.to_string(),
                         KeySignal::Shell => SHELL_ASSIST_PROMPT.to_string(),
+                        KeySignal::WriteCode => WRITE_CODE_PROMPT.to_string(),
                     }),
                     name: None,
                 },
@@ -609,6 +646,10 @@ impl ModelForCompletion {
                     if let Some(e) = press_release_single_key(Key::RightArrow) {
                         event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
                     }
+                } else if KeySignal::WriteCode == key_signal { // 写代码需要取消选中，并换行，保留输入的问题
+                    if let Some(e) = press_multi_keys(vec![Key::RightArrow, Key::Return]) {
+                        event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
+                    }
                 }
                 if let Some(e) = press_multi_keys(vec![copy_paste_key, Key::KeyV]) {
                     event!(Level::ERROR, "5. listen_hotkey_run_llm: {}", e);
@@ -656,100 +697,53 @@ fn press_multi_keys(keys: Vec<Key>) -> Option<String> {
 fn press_string_key(command: &str, clipboard: &mut Clipboard) -> Option<String> {
     for c in command.chars() {
         let (k, need_shift) = match c {
-            '`' => (Key::BackQuote, false),
-            '~' => (Key::BackQuote, true),
-            '1' => (Key::Num1, false),
-            '!' => (Key::Num1, true),
-            '2' => (Key::Num2, false),
-            '@' => (Key::Num2, true),
-            '3' => (Key::Num3, false),
-            '#' => (Key::Num3, true),
-            '4' => (Key::Num4, false),
-            '$' => (Key::Num4, true),
-            '5' => (Key::Num5, false),
-            '%' => (Key::Num5, true),
-            '6' => (Key::Num6, false),
-            '^' => (Key::Num6, true),
-            '7' => (Key::Num7, false),
-            '&' => (Key::Num7, true),
-            '8' => (Key::Num8, false),
-            '*' => (Key::Num8, true),
-            '9' => (Key::Num9, false),
-            '(' => (Key::Num9, true),
-            '0' => (Key::Num0, false),
-            ')' => (Key::Num0, true),
-            '-' => (Key::Minus, false),
-            '_' => (Key::Minus, true),
-            '=' => (Key::Equal, false),
-            '+' => (Key::Equal, true),
-            'q' => (Key::KeyQ, false),
-            'Q' => (Key::KeyQ, true),
-            'w' => (Key::KeyW, false),
-            'W' => (Key::KeyW, true),
-            'e' => (Key::KeyE, false),
-            'E' => (Key::KeyE, true),
-            'r' => (Key::KeyR, false),
-            'R' => (Key::KeyR, true),
-            't' => (Key::KeyT, false),
-            'T' => (Key::KeyT, true),
-            'y' => (Key::KeyY, false),
-            'Y' => (Key::KeyY, true),
-            'u' => (Key::KeyU, false),
-            'U' => (Key::KeyU, true),
-            'i' => (Key::KeyI, false),
-            'I' => (Key::KeyI, true),
-            'o' => (Key::KeyO, false),
-            'O' => (Key::KeyO, true),
-            'p' => (Key::KeyP, false),
-            'P' => (Key::KeyP, true),
-            'a' => (Key::KeyA, false),
-            'A' => (Key::KeyA, true),
-            's' => (Key::KeyS, false),
-            'S' => (Key::KeyS, true),
-            'd' => (Key::KeyD, false),
-            'D' => (Key::KeyD, true),
-            'f' => (Key::KeyF, false),
-            'F' => (Key::KeyF, true),
-            'g' => (Key::KeyG, false),
-            'G' => (Key::KeyG, true),
-            'h' => (Key::KeyH, false),
-            'H' => (Key::KeyH, true),
-            'j' => (Key::KeyJ, false),
-            'J' => (Key::KeyJ, true),
-            'k' => (Key::KeyK, false),
-            'K' => (Key::KeyK, true),
-            'l' => (Key::KeyL, false),
-            'L' => (Key::KeyL, true),
-            'z' => (Key::KeyZ, false),
-            'Z' => (Key::KeyZ, true),
-            'x' => (Key::KeyX, false),
-            'X' => (Key::KeyX, true),
-            'c' => (Key::KeyC, false),
-            'C' => (Key::KeyC, true),
-            'v' => (Key::KeyV, false),
-            'V' => (Key::KeyV, true),
-            'b' => (Key::KeyB, false),
-            'B' => (Key::KeyB, true),
-            'n' => (Key::KeyN, false),
-            'N' => (Key::KeyN, true),
-            'm' => (Key::KeyM, false),
-            'M' => (Key::KeyM, true),
-            ';' => (Key::SemiColon, false),
-            ':' => (Key::SemiColon, true),
-            '\'' => (Key::Quote, false),
-            '"' => (Key::Quote, true),
-            '[' => (Key::LeftBracket, false),
-            '{' => (Key::LeftBracket, true),
-            ']' => (Key::RightBracket, false),
-            '}' => (Key::RightBracket, true),
-            '\\' => (Key::BackSlash, false),
-            '|' => (Key::BackSlash, true),
-            ',' => (Key::Comma, false),
-            '<' => (Key::Comma, true),
-            '.' => (Key::Dot, false),
-            '>' => (Key::Dot, true),
-            '/' => (Key::Slash, false),
-            '?' => (Key::Slash, true),
+            '`' | '~' => (Key::BackQuote, c == '~'),
+            '1' | '!' => (Key::Num1, c == '!'),
+            '2' | '@' => (Key::Num2, c == '@'),
+            '3' | '#' => (Key::Num3, c == '#'),
+            '4' | '$' => (Key::Num4, c == '$'),
+            '5' | '%' => (Key::Num5, c == '%'),
+            '6' | '^' => (Key::Num6, c == '^'),
+            '7' | '&' => (Key::Num7, c == '&'),
+            '8' | '*' => (Key::Num8, c == '*'),
+            '9' | '(' => (Key::Num9, c == '('),
+            '0' | ')' => (Key::Num0, c == ')'),
+            '-' | '_' => (Key::Minus, c == '_'),
+            '=' | '+' => (Key::Equal, c == '+'),
+            'q' | 'Q' => (Key::KeyQ, c == 'Q'),
+            'w' | 'W' => (Key::KeyW, c == 'W'),
+            'e' | 'E' => (Key::KeyE, c == 'E'),
+            'r' | 'R' => (Key::KeyR, c == 'R'),
+            't' | 'T' => (Key::KeyT, c == 'T'),
+            'y' | 'Y' => (Key::KeyY, c == 'Y'),
+            'u' | 'U' => (Key::KeyU, c == 'U'),
+            'i' | 'I' => (Key::KeyI, c == 'I'),
+            'o' | 'O' => (Key::KeyO, c == 'O'),
+            'p' | 'P' => (Key::KeyP, c == 'P'),
+            'a' | 'A' => (Key::KeyA, c == 'A'),
+            's' | 'S' => (Key::KeyS, c == 'S'),
+            'd' | 'D' => (Key::KeyD, c == 'D'),
+            'f' | 'F' => (Key::KeyF, c == 'F'),
+            'g' | 'G' => (Key::KeyG, c == 'G'),
+            'h' | 'H' => (Key::KeyH, c == 'H'),
+            'j' | 'J' => (Key::KeyJ, c == 'J'),
+            'k' | 'K' => (Key::KeyK, c == 'K'),
+            'l' | 'L' => (Key::KeyL, c == 'L'),
+            'z' | 'Z' => (Key::KeyZ, c == 'Z'),
+            'x' | 'X' => (Key::KeyX, c == 'X'),
+            'c' | 'C' => (Key::KeyC, c == 'C'),
+            'v' | 'V' => (Key::KeyV, c == 'V'),
+            'b' | 'B' => (Key::KeyB, c == 'B'),
+            'n' | 'N' => (Key::KeyN, c == 'N'),
+            'm' | 'M' => (Key::KeyM, c == 'M'),
+            ';' | ':' => (Key::SemiColon, c == ':'),
+            '\'' | '"' => (Key::Quote, c == '"'),
+            '[' | '{' => (Key::LeftBracket, c == '{'),
+            ']' | '}' => (Key::RightBracket, c == '}'),
+            '\\' | '|' => (Key::BackSlash, c == '|'),
+            ',' | '<' => (Key::Comma, c == '<'),
+            '.' | '>' => (Key::Dot, c == '>'),
+            '/' | '?' => (Key::Slash, c == '?'),
             ' ' => (Key::Space, false),
             //_ => return Some(format!("unsupported character: {}", c)),
             _ => {
