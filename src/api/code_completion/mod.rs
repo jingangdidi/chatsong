@@ -460,7 +460,7 @@ impl ModelForCompletion {
         if run_next {
             match clipboard.get_text() {
                 Ok(q) => {
-                    let trim_q = q.trim_matches('"').to_string();
+                    let trim_q = q.trim().trim_matches('"').to_string();
                     if trim_q.is_empty() {
                         event!(Level::INFO, "2. listen_hotkey_run_llm: empty content from clipboard");
                         run_next = false;
