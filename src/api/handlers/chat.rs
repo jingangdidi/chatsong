@@ -485,8 +485,14 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         // deepseek: https://api-docs.deepseek.com/
                         para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
                     } else if lowercase_model.starts_with("qwen") {
-                        // Qwen: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions#05cfceb898csa
-                        para_builder.extra_body(json!({"enable_thinking": false}));
+                        if client_para.endpoint.starts_with("http://") { // local model
+                            // https://modelscope.cn/models/Qwen/Qwen3.5-397B-A17B
+                            // https://modelscope.cn/models/Qwen/Qwen3.6-35B-A3B#instruct-or-non-thinking-mode
+                            para_builder.extra_body(json!({"chat_template_kwargs": {"enable_thinking": false}}));
+                        } else {
+                            // Qwen: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions#05cfceb898csa
+                            para_builder.extra_body(json!({"enable_thinking": false}));
+                        }
                     } else if lowercase_model.starts_with("kimi") {
                         // kimi: https://platform.kimi.com/docs/api/models-overview
                         para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
