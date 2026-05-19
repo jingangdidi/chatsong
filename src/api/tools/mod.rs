@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 //use std::io::Read;
 use std::path::Path;
 //use std::process::{Command, Stdio};
@@ -34,6 +35,7 @@ use crate::{
         DataType,
         update_approval,
         approved,
+        get_tool_calling_count,
     },
     openai::{
         for_tool::{
@@ -330,6 +332,9 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     }
     // prepare buider for call tool
     tool_schema.extend(mcp_schema);
+    // tool名称加了`_uuid第一部分`保证不重复，但是上下文很长时可能导致模型返回的要调用的模型丢失了`_uuid第一部分`，导致调用模型失败
+    // 这里把不含`_uuid第一部分`的tool名称作为key，将对应的完整tool名称作为value，存入HashMap，当`_uuid第一部分`丢失，也能确认具体要调用的模型
+    let tool_map = get_tool_hashmap(&tool_schema);
     para_builder.tools(tool_schema);
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
     if let Some(sele_skills) = selected_skills {
@@ -345,9 +350,10 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
             }
         );
     }
-    let mut count = 0; // limit loop
-    let mut call_tool_count = 0; // call tool count
+    let mut call_tool_count = get_tool_calling_count(&uuid); // call tool count
+    let call_tool_limit = call_tool_count+100; // 调用工具的次数限制
     let mut try_count = 0;
+    let mut real_name: String; // 要调用的工具的真实名称，含有`_uuid第一部分`后缀
 
     'outer: loop {
         // send query to LLM
@@ -358,10 +364,26 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
         match answer {
             CallToolResult::CallTool((raw_message, call_tool_result)) => { // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
                 for j in call_tool_result {
-                    call_tool_count += 1;
                     // call tool
-                    let name_id: Vec<&str> = j.0.split("__").collect();
-                    let (result, language) = match try_call_tool(&uuid, &name_id, &j.1, j.3.clone(), sender.clone()).await? {
+                    let mut name_id: Vec<&str> = j.0.split("__").collect();
+                    if name_id.len() < 2 && name_id[0] != "activate_skill" {
+                        if let Some(tools_vec) = tool_map.get(&j.0) {
+                            if tools_vec.len() > 1 {
+                                event!(Level::WARN, "{} call tool error, llm only return tool name prefix `{}`, but this prefix have multiple tools: {}", uuid, j.0, tools_vec.join(", "));
+                            } else {
+                                real_name = tools_vec[0].clone();
+                                name_id = real_name.split("__").collect();
+                                event!(Level::WARN, "{} call real tool `{}` by model returned `{}`", uuid, real_name, j.0);
+                            }
+                        } else {
+                            event!(Level::WARN, "{} can't find real tool by model returned `{}`", uuid, j.0);
+                        }
+                    }
+                    let safe_args = j.1
+                        .replace(": \"[\\\"", ": [\"") // `"[\"` --> `["`
+                        .replace("\\\"]\"", "\"]") // `"\"]"` --> `"]`
+                        .replace("\\\"", "\""); // `\"` --> `"`
+                    let (result, language) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await? {
                         Ok((result, file_option)) => {
                             try_count = 0;
                             (result, get_file_language(file_option))
@@ -376,6 +398,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                             }
                         },
                     };
+                    call_tool_count += 1;
 
                     // 1. send call tool result to user page
                     let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
@@ -445,9 +468,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                 break
             },
         }
-        count += 1;
-        if count > 50 {
-            event!(Level::WARN, "{} already call tool {} times, stop this loop", uuid, count);
+        if call_tool_count > call_tool_limit {
+            event!(Level::WARN, "{} already call tool {} times, stop this loop", uuid, call_tool_count);
             break
         }
     }
@@ -1347,4 +1369,18 @@ fn get_file_language(file: Option<String>) -> String {
     } else {
         "text".to_string()
     }
+}
+
+/// tool名称加了`_uuid第一部分`保证不重复，但是上下文很长时可能导致模型返回的要调用的模型丢失了`_uuid第一部分`，导致调用模型失败
+/// 这里把不含`_uuid第一部分`的tool名称作为key，将对应的完整tool名称作为value，存入HashMap，当`_uuid第一部分`丢失，也能确认具体要调用的模型
+fn get_tool_hashmap(tools: &Vec<ChatCompletionTool>) -> HashMap<String, Vec<String>> {
+    let mut out = HashMap::new();
+    for t in tools {
+        let real_name = t.function.name.clone();
+        let name_prefix = real_name.split("__").next().unwrap().to_string();
+        out.entry(name_prefix)
+            .or_insert_with(Vec::new)
+            .push(real_name);
+    }
+    out
 }

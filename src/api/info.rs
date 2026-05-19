@@ -854,6 +854,29 @@ pub fn get_messages(uuid: &str) -> Vec<ChatMessage> {
     }
 }
 
+/// 获取指定uuid调用tool的次数
+pub fn get_tool_calling_count(uuid: &str) -> usize {
+    let data = DATA.lock().unwrap();
+    match data.get(uuid) {
+        Some(info) => {
+            let mut count = 0;
+            for m in &info.messages {
+                if !m.data.is_hide() {
+                    if let ChatMessage::Assistant{content, ..} = &m.message {
+                        if let Some(ChatMessageContent::Text(t)) = content {
+                            if t.starts_with("## 📌 ") && t.contains(" call tool\n\n---\n\n") {
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            count
+        },
+        None => 0,
+    }
+}
+
 /// 获取指定uuid的messages总数
 pub fn get_messages_num(uuid: &str) -> usize {
     let data = DATA.lock().unwrap();
