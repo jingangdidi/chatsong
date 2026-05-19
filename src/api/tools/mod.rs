@@ -379,6 +379,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                             event!(Level::WARN, "{} can't find real tool by model returned `{}`", uuid, j.0);
                         }
                     }
+                    // 模型返回的调用tool的json格式参数可能有问题，导致调用tool时解析参数失败，这里修复下可能存在的json格式问题
                     let safe_args = j.1
                         .replace(": \"[\\\"", ": [\"") // `"[\"` --> `["`
                         .replace("\\\"]\"", "\"]") // `"\"]"` --> `"]`
