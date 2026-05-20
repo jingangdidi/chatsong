@@ -870,13 +870,13 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         if log.is_query { // 用户输入的问题
             result += "                msg.textContent = tmp.replaceAll('\\\\n', '\\n');\n            }\n            // 问题不需要markdown解析\n";
         } else { // 答案
-            result += &format!("                if (tmp.includes('edit_file') && tmp.includes(' result\\n```\\n--- ')) {{
-                    var text_diff = tmp.split(' result\\n```');
+            result += &format!("                if (tmp.includes('edit_file') && tmp.includes(' result\\n```text\\n--- ')) {{
+                    var text_diff = tmp.split(' result\\n```text');
                     msg.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', '');
                     let diff_code = document.createElement('div');
                     diff_code.setAttribute('id', 'm{}diff');
                     diff_code.setAttribute('class', 'diff-scroll');
-                    const diffCode = Diff2Html.html('```'+text_diff[1], {{
+                    const diffCode = Diff2Html.html('```text'+text_diff[1], {{
                         drawFileList: false,
                         matching: 'lines',
                         //colorScheme: 'dark',
@@ -1390,13 +1390,13 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                         }
                     }
                     if (is_diff) {
-                        var text_diff = for_markdown.split(' result\n\`\`\`');
+                        var text_diff = for_markdown.split(' result\n\`\`\`text');
                         // 注意这里去除转换后的`<p>`和`</p>`，因为p标签会让回复内容上下有更多的空间，与右侧提问不一致
                         msg_lr.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', ''); // 转为markdown显示，https://github.com/markedjs/marked，head标签中加上：<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
                         let diff_code = document.createElement("div");
                         diff_code.setAttribute("id", new_id+'diff');
                         diff_code.setAttribute('class', 'diff-scroll');
-                        const diffCode = Diff2Html.html('\`\`\`'+text_diff[1], {
+                        const diffCode = Diff2Html.html('\`\`\`text'+text_diff[1], {
                             drawFileList: false,
                             matching: 'lines',
                             //colorScheme: 'dark',
@@ -2087,12 +2087,12 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
         if log.is_query { // 用户输入的问题
             result += "                msg.textContent = tmp.replaceAll('\\\\n', '\\n');\n            }\n // 问题不需要markdown解析\n";
         } else { // 答案
-            result += &format!("                if (tmp.includes('edit_file') && tmp.includes(' result\\n```\\n--- ')) {{
-                    var text_diff = tmp.split(' result\\n```');
+            result += &format!("                if (tmp.includes('edit_file') && tmp.includes(' result\\n```text\\n--- ')) {{
+                    var text_diff = tmp.split(' result\\n```text');
                     msg.innerHTML = marked.parse(text_diff[0]+' result').replaceAll('<p>', '').replaceAll('</p>', '');
                     let diff_code = document.createElement('div');
                     diff_code.setAttribute('id', 'm{}diff');
-                    const diffCode = Diff2Html.html('```'+text_diff[1], {{
+                    const diffCode = Diff2Html.html('```text'+text_diff[1], {{
                         drawFileList: false,
                         matching: 'lines',
                         //colorScheme: 'dark',
