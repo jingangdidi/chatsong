@@ -382,21 +382,30 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     // 模型返回的调用tool的json格式参数可能有问题，导致调用tool时解析参数失败，这里修复下可能存在的json格式问题
                     let safe_args = j.1
                         .replace(": \"[\\\"", ": [\"") // `"[\"` --> `["`
-                        .replace("\\\"]\"", "\"]") // `"\"]"` --> `"]`
-                        .replace("\\\"", "\""); // `\"` --> `"`
-                    let (result, language) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await? {
-                        Ok((result, file_option)) => {
-                            try_count = 0;
-                            (result, get_file_language(file_option))
+                        .replace("\\\"]\"", "\"]"); // `"\"]"` --> `"]`
+                        //.replace("\\\"", "\""); // `\"` --> `"`
+                    let (result, language) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
+                        Ok(inner_result) => {
+                            match inner_result {
+                                Ok((result, file_option)) => {
+                                    try_count = 0;
+                                    (result, get_file_language(file_option))
+                                },
+                                Err(e) => {
+                                    try_count += 1;
+                                    if try_count >= 3 {
+                                        return Err(e)
+                                    } else {
+                                        event!(Level::WARN, "{} call tool {} error, try again {}", uuid, name_id[0], try_count);
+                                        continue 'outer
+                                    }
+                                },
+                            }
                         },
                         Err(e) => {
-                            try_count += 1;
-                            if try_count >= 3 {
-                                return Err(e)
-                            } else {
-                                event!(Level::WARN, "{} call tool error, try again {}", uuid, try_count);
-                                continue 'outer
-                            }
+                            event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
+                            event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                            return Err(e)
                         },
                     };
                     call_tool_count += 1;
