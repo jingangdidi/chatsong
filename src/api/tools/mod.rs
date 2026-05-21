@@ -353,6 +353,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     let mut call_tool_count = get_tool_calling_count(&uuid); // call tool count
     let call_tool_limit = call_tool_count+100; // 调用工具的次数限制
     let mut try_count = 0;
+    let mut is_first: bool;
     let mut real_name: String; // 要调用的工具的真实名称，含有`_uuid第一部分`后缀
 
     'outer: loop {
@@ -363,6 +364,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
         // if answer is call tool result, continue; else break
         match answer {
             CallToolResult::CallTool((raw_message, call_tool_result)) => { // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
+                is_first = true;
                 for j in call_tool_result {
                     // call tool
                     let mut name_id: Vec<&str> = j.0.split("__").collect();
@@ -452,7 +454,10 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     }
 
                     // add each tool call result to current message history
-                    history_messages.push(raw_message.clone());
+                    if is_first {
+                        history_messages.push(raw_message.clone());
+                        is_first = false;
+                    }
                     history_messages.push(ChatMessage::Tool{content: ChatMessageContent::Text(result), tool_call_id: j.2});
                 }
             },
