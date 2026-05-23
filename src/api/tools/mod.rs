@@ -15,6 +15,7 @@ use openai_dive::v1::{
         ChatMessageContent,
     },
 };
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{
@@ -382,10 +383,37 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                         }
                     }
                     // 模型返回的调用tool的json格式参数可能有问题，导致调用tool时解析参数失败，这里修复下可能存在的json格式问题
-                    let safe_args = j.1
-                        .replace(": \"[\\\"", ": [\"") // `"[\"` --> `["`
-                        .replace("\\\"]\"", "\"]"); // `"\"]"` --> `"]`
-                        //.replace("\\\"", "\""); // `\"` --> `"`
+                    let mut safe_args = j.1
+                        .replace(": \"[", ": [") // `: "[` --> `: ["`
+                        .replace("]\"", "]"); // `]"` --> `]`
+                        //.replace(": \"[\\\"", ": [\"") // `"[\"` --> `["`
+                        //.replace("\\\"]\"", "\"]") // `"\"]"` --> `"]`
+                        //.replace("\\\", ", "\", ") // `\\\", ` --> `\", `
+                        //.replace(", \\\"", ", \"") // `, \\\"` --> `, \"`
+                    if name_id[0].starts_with("write_file") {
+                        if let Some((first_part, second_part)) = safe_args.split_once("\"content\":") {
+                            let re = Regex::new(r#", \\\"(.*?)\\\""#).unwrap();
+                            let mut tmp = re.replace_all(first_part, r#", "$1""#).to_string();
+                            let re = Regex::new(r#"\\\"(.*?)\\\", "#).unwrap();
+                            tmp = re.replace_all(&tmp, r#""$1", "#).to_string();
+                            let re = Regex::new(r#"\[\\\"(.*?)\\\\]", "#).unwrap();
+                            tmp = re.replace_all(&tmp, r#"["$1"]"#).to_string();
+                            tmp += "\"content\":";
+                            tmp += second_part;
+                            safe_args = tmp;
+                        }
+                    } else {
+                        let re = Regex::new(r#", \\\"(.*?)\\\""#).unwrap();
+                        safe_args = re.replace_all(&safe_args, r#", "$1""#).to_string();
+                        let re = Regex::new(r#"\\\"(.*?)\\\", "#).unwrap();
+                        safe_args = re.replace_all(&safe_args, r#""$1", "#).to_string();
+                        let re = Regex::new(r#"\[\\\"(.*?)\\\\]", "#).unwrap();
+                        safe_args = re.replace_all(&safe_args, r#"["$1"]"#).to_string();
+                        //let re = Regex::new(r#"\\\"(.*?)\\\""#).unwrap();
+                        //safe_args = re.replace_all(&safe_args, r#""$1""#).to_string();
+                    }
+                    //println!("raw  args: {:?}", j.1);
+                    //println!("safe args: {:?}", safe_args);
                     let (result, language) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
                         Ok(inner_result) => {
                             match inner_result {
@@ -395,10 +423,10 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                                 },
                                 Err(e) => {
                                     try_count += 1;
-                                    if try_count >= 3 {
+                                    if try_count >= 3 || !is_first {
                                         return Err(e)
                                     } else {
-                                        event!(Level::WARN, "{} call tool {} error, try again {}", uuid, name_id[0], try_count);
+                                        event!(Level::WARN, "{} call tool {} error, try again {}\nraw args: {}\nsafe args: {}", uuid, name_id[0], try_count, j.1, safe_args);
                                         continue 'outer
                                     }
                                 },

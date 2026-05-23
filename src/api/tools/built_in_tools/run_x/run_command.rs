@@ -61,13 +61,25 @@ impl BuiltIn for RunCommand {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
 
         // prepare command
-        let mut tool_cmd = Command::new(&params.command);
+        let cmd_vec: Vec<&str> = params.command.split(" ").collect(); // 有些模型会把命令和参数都写在`command`里
+        let mut tool_cmd = if cmd_vec.len() > 1 {
+            let mut tool_cmd = Command::new(cmd_vec[0]);
+            tool_cmd.args(&cmd_vec[1..]);
+            tool_cmd
+        } else {
+            Command::new(&params.command)
+        };
+
+        // 设置python环境变量，支持UTF-8
+        if params.command.starts_with("python") {
+            tool_cmd.env("PYTHONIOENCODING", "utf-8");
+        }
 
         // 处理参数
         let args_string = if let Some(a) = &params.args {
             tool_cmd.args(a);
             format!(
-                "{}",
+                " {}",
                 a.iter().map(|arg| if arg.contains(" ") {
                         format!("\"{}\"", arg)
                     } else {

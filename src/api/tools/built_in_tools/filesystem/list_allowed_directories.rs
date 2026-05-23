@@ -44,7 +44,14 @@ impl BuiltIn for ListAllowedDirectories {
                 &PARAS
                     .allowed_path
                     .iter()
-                    .map(|entry| entry.1.display().to_string())
+                    .map(|entry| {
+                        let tmp = entry.1.display().to_string();
+                        if tmp.starts_with(r"\\?\") {
+                            tmp.strip_prefix(r"\\?\").unwrap().to_string()
+                        } else {
+                            tmp
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join("\n")
             ),
