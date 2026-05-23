@@ -390,15 +390,23 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                         //.replace("\\\"]\"", "\"]") // `"\"]"` --> `"]`
                         //.replace("\\\", ", "\", ") // `\\\", ` --> `\", `
                         //.replace(", \\\"", ", \"") // `, \\\"` --> `, \"`
-                    if name_id[0].starts_with("write_file") {
-                        if let Some((first_part, second_part)) = safe_args.split_once("\"content\":") {
+                    if name_id[0].starts_with("edit_file") {
+                        safe_args = safe_args
+                            .replace("{\\\"newText\\\": \\\"", "{\"newText\": \"") // `{\"newText\": \"` --> `{"newText": "`
+                            .replace("\\\"}, {\\\"newText\\\": \\\"", "\\\"}, {\"newText\": \"") // `\"}, {\"newText\": \"` --> `"}, {"newText": "`
+                            .replace("\\\", \\\"oldText\\\": \\\"", "\", \"oldText\": \"") // `\", \"oldText\": \"` --> `", "oldText": "`
+                            .replace("\\\"}]}", "\"}]}"); // `\"}]}` --> `"}]}`
+                    }
+                    if name_id[0].starts_with("write_file") || name_id[0].starts_with("edit_file") {
+                        let sep = if name_id[0].starts_with("write_file") { "\"content\":" } else { "\"edits\":" };
+                        if let Some((first_part, second_part)) = safe_args.split_once(sep) {
                             let re = Regex::new(r#", \\\"(.*?)\\\""#).unwrap();
                             let mut tmp = re.replace_all(first_part, r#", "$1""#).to_string();
                             let re = Regex::new(r#"\\\"(.*?)\\\", "#).unwrap();
                             tmp = re.replace_all(&tmp, r#""$1", "#).to_string();
                             let re = Regex::new(r#"\[\\\"(.*?)\\\\]", "#).unwrap();
                             tmp = re.replace_all(&tmp, r#"["$1"]"#).to_string();
-                            tmp += "\"content\":";
+                            tmp += sep;
                             tmp += second_part;
                             safe_args = tmp;
                         }
