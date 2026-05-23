@@ -39,7 +39,7 @@
 你的路径
 ├─ chatsong      # 单个可执行文件
 ├─ config.txt    # 参数文件，填写自己要用的模型、api-key、api地址、prompt等
-├─ skills        # 存储skills的路径（可选）
+├─ skills        # 存储skills的路径（可选，使用`-S`指定该路径，默认`./skills`）
 ├─ Qwen3-ASR     # 下载的Qwen3-ASR模型路径（可选，使用`-d`指定该路径）
 ├─ OmniVoice-TTS # 下载的OmniVoice-TTS模型路径（可选，使用`-D`指定该路径）
 └─ chat-log      # 问答记录的保存路径
@@ -437,7 +437,7 @@ Options:
 - [2026.05.?] release [v0.5.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.1)
   - 🛠修复：调用工具时的错误
   - ⭐️增加：增加`Qwen3-ASR`和`OmniVoice-TTS`模型，编译时使用`--features asr-cuda,tts-cuda`，即可通过麦克风与大模型对话，捕获的音频使用`Qwen3-ASR`转为文本发送给大模型，模型返回文本使用`OmniVoice-TTS`转为音频并自动播放，唤醒词`你好`、`hello`，结束词`结束`、`stop`。
-  - [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
+- [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
   - ⭐️增加：增加通过监听指定快捷键，在任意编辑器使用代码补全、写代码、debug、编写shell命令，支持4种模式：1. 连按3次左侧`Ctrl`(macos是`command`)键对选中的代码进行代码补全，2. 连按3次右侧`Ctrl`(macos是`command`)键根据选中的要求编写代码，3. 连按4次左侧`Shift`键修复选中的代码，4. 连按4次右侧`Shift`键，补全当前命令行的shell命令或写出符合当前命令行命令描述的shell命令
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠修复：调用工具错误时未尝试3次而直接退出

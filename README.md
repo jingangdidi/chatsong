@@ -39,7 +39,7 @@
 some dir
 ├─ chatsong      # single executable file
 ├─ config.txt    # config file
-├─ skills        # skills path (optional)
+├─ skills        # skills path (optional, `-S`, default: `./skills`)
 ├─ Qwen3-ASR     # downloaded Qwen3-ASR model path (optional, `-d`)
 ├─ OmniVoice-TTS # downloaded OmniVoice-TTS model path (optional, `-D`)
 └─ chat-log      # save chat log
@@ -80,7 +80,6 @@ press `Ctrl+C` to automatically save all chat records to the output directory wh
 ```
 
 ## 🎤 ASR + TTS
-从`v0.5.1`开始支持和模型，
 
 Starting from v0.5.1, [Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) and [OmniVoice-TTS](https://huggingface.co/k2-fsa/OmniVoice) models are supported. When compiling, `--features asr-cuda,tts-cuda` are specified. When using, `-d` is used to specify the downloaded path of the Qwen3-ASR model, and `-D` is used to specify the downloaded path of the OmniVoice-TTS model. If you want to use voice cloning, `-R` can be used to specify the wav audio file (preferably less than 20 seconds, but not too short). The default voice assistant identity is `daily chat assistant`, and `-E` can be used to change the identity.
 
@@ -451,7 +450,7 @@ Options:
 - [2026.05.?] release [v0.5.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.1)
   - 🛠 Fix: Tool calling.
   - ⭐️ Add: Support `Qwen3-ASR` and `OmniVoice-TTS`, compile `--features asr-cuda,tts-cuda`, the wake-up word is `hello` and the termination word is `stop`.
-  - [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
+- [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
   - ⭐️ Add: Support shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl (macos `command`) 3 times (complete the selected code), 2. press the Right Ctrl (macos `command`) 3 times (write code), 3. press the Left Shift 4 times (debug the selected code), 4. press Right Shift 4 times (complete the shell command of the current command line or write a shell command that matches the description of the current command line)
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠 Fix: Previously, the system was designed to retry tool calls up to 3 times upon failure, but due to a bug, it would exit immediately instead of retrying. This issue has now been resolved.
