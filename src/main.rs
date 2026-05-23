@@ -1,10 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::exit;
 
-#[cfg(feature = "code_completion")]
+#[cfg(feature = "code-completion")]
 use arboard::Clipboard;
 use tokio::net::TcpListener;
-#[cfg(feature = "code_completion")]
+#[cfg(feature = "code-completion")]
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing::{event, Level};
@@ -26,8 +26,11 @@ use chatsong::{
     ctrlc::wait_for_signal,
 };
 
-#[cfg(feature = "code_completion")]
+#[cfg(feature = "code-completion")]
 use chatsong::code_completion::{listen_hotkey, ModelForCompletion, KeySignal};
+
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use chatsong::asr::auto_speech_rec;
 
 /// 参考：https://github.com/joelparkerhenderson/demo-rust-axum
 
@@ -49,6 +52,7 @@ async fn main() {
     tracing_subscriber::fmt() // 限制输入级别，如果是TRACE则全部输出，会有很多信息，尤其联网搜索时特别多，这里限制为INFO，即INFO、WARN、ERROR的信息才输出，https://github.com/tokio-rs/tracing/blob/master/examples/examples/hyper-echo.rs
         .with_max_level(Level::INFO)
         .with_timer(LocalTime::rfc_3339()) // 使用本地时间，格式为 RFC 3339，需要在Cargo.toml的features中添加"local-time"
+        .with_target(false)
         .init();
 
     // start channel bot
@@ -62,7 +66,7 @@ async fn main() {
         }
     }
 
-    #[cfg(feature = "code_completion")]
+    #[cfg(feature = "code-completion")]
     if PARAS.shortcut_key {
         // start code complation
         let (tx_code_complation, mut rx_code_complation) = mpsc::unbounded_channel::<KeySignal>();
@@ -85,6 +89,18 @@ async fn main() {
             },
             Err(e) => event!(Level::ERROR, "create clipboard error: {:?}", e),
         }
+    }
+
+    // Qwen3-ASR
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    {
+        let handle = task::spawn(async move {
+            if let Err(e) = auto_speech_rec().await {
+                println!("{}", e);
+                exit(1);
+            }
+        });
+        handles.push(handle);
     }
 
     // 测试不同Level（TRACE、DEBUG、INFO、WARN、ERROR），可以比较，TRACE最高，ERROR最低，越高则有越多的verbose

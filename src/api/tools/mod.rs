@@ -431,11 +431,17 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                                 },
                                 Err(e) => {
                                     try_count += 1;
-                                    if try_count >= 3 || !is_first {
-                                        return Err(e)
+                                    if is_first {
+                                        if try_count >= 3 {
+                                            return Err(e)
+                                        } else {
+                                            event!(Level::WARN, "{} call tool {} error, try again {}\n{}\n\nraw args: {}\n\nsafe args: {}", uuid, name_id[0], try_count, e, j.1, safe_args);
+                                            continue 'outer
+                                        }
                                     } else {
-                                        event!(Level::WARN, "{} call tool {} error, try again {}\nraw args: {}\nsafe args: {}", uuid, name_id[0], try_count, j.1, safe_args);
-                                        continue 'outer
+                                        event!(Level::WARN, "{} call tool {} error, not try again, return to model\n{}\n\nraw args: {}\n\nsafe args: {}", uuid, name_id[0], try_count, j.1, safe_args);
+                                        try_count = 0;
+                                        (format!("call tool {} error: {}", name_id[0], e), "text".to_string())
                                     }
                                 },
                             }

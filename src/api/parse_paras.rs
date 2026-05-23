@@ -104,9 +104,29 @@ struct Paras {
     approval_all: bool,
 
     /// enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl/command 3 times (code completion), 2. press the Right Ctrl/command 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
-    #[cfg(feature = "code_completion")]
+    #[cfg(feature = "code-completion")]
     #[argh(switch, short = 'k')]
     shortcut_key: bool,
+
+    /// qwen3-ASR model dir (config.json, merges.txt, model.safetensors, tokenizer_config.json, vocab.json)
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[argh(option, short = 'd')]
+    asr_dir: String,
+
+    /// omni voice TTS model dir (config.json, tokenizer_config.json, model.safetensors, audio_tokenizer/config.json, audio_tokenizer/model.safetensors)
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    #[argh(option, short = 'D')]
+    tts_dir: String,
+
+    /// reference audio for omni voice clone
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    #[argh(option, short = 'R')]
+    ref_audio: Option<String>,
+
+    /// prompt role for asr and tts
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal", feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[argh(option, short = 'E')]
+    role: Option<String>,
 
     /// skills path, default: ./skills
     #[argh(option, short = 'S')]
@@ -138,8 +158,16 @@ pub struct ParsedParas {
     pub share:        bool,                        // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
     pub english:      bool,                        // 是否展示英文界面，不指定则展示中文界面
     pub approval_all: bool,                        // approval to call all tools without pop-up prompts
-    #[cfg(feature = "code_completion")]
+    #[cfg(feature = "code-completion")]
     pub shortcut_key: bool,                        // 开启快捷键代码自动补全，可在任意编辑器调用，支持3种模式：1. 连按3次`Ctrl`键（Windows和Linux）或`Command`键（macOS），补全选中的代码，2. 连按4次左侧`Shift`键，修复选中的代码，3. 连按4次右侧`Shift`键，补全选中的shell命令或写出描述内容对应的shell命令
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    pub asr_dir:      String,                      // Qwen3-ASR model dir: config.json, merges.txt, model.safetensors, tokenizer_config.json, vocab.json
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    pub tts_dir:      String,                      // Omni voice TTS model dir: config.json, tokenizer_config.json, model.safetensors, audio_tokenizer/config.json, audio_tokenizer/model.safetensors
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    pub ref_audio:    Option<PathBuf>,             // omni tts语音克隆所需的参考音频文件
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal", feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    pub role:         String,                      // asr和tts语音提问llm时prompt的身份，默认是`日常聊天助手`，可自定义身份，比如`李世民`
     pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
     pub tools:        Tools,                       // all tools
     pub mcp_servers:  McpServers,                  // mcp servers
@@ -248,8 +276,40 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         share: para.share, // 用户A将自己的uuid-a分享给用户B，用户B将自己的uuid-b与uuid-a建立间接关系（用户B在uuid-b页面左侧“uuid”中输入uuid-a），如果使用该参数，此时用户A可以看到用户B的uuid-b，如果不使用该参数，则用户A看不到用户B的uuid-b，即使用该参数则间接关系是双向的（互相可以看到建立间接关系的uuid-a和uuid-b），不使用该参数则间接关系是单向的（用户B可以看到uuid-a但用户A看不到uuid-b）
         english, // 是否展示英文界面，不指定则展示中文界面
         approval_all: para.approval_all, // approval to call all tools without pop-up prompts
-        #[cfg(feature = "code_completion")]
+        #[cfg(feature = "code-completion")]
         shortcut_key: para.shortcut_key, // 开启快捷键代码自动补全，可在任意编辑器调用，支持3种模式：1. 连按3次`Ctrl`键（Windows和Linux）或`Command`键（macOS），补全选中的代码，2. 连按4次左侧`Shift`键，修复选中的代码，3. 连按4次右侧`Shift`键，补全选中的shell命令或写出描述内容对应的shell命令
+        #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        asr_dir: { // Qwen3-ASR model dir: config.json, merges.txt, model.safetensors, tokenizer_config.json, vocab.json
+            let tmp_path = Path::new(&para.asr_dir);
+            if !(tmp_path.exists() && tmp_path.is_dir()) {
+                return Err(MyError::DirNotExistError{dir: para.asr_dir})
+            }
+            para.asr_dir.replace("\\", "/").trim_end_matches('/').to_string() + "/"
+        },
+        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+        tts_dir: { // Omni voice TTS model dir: config.json, tokenizer_config.json, model.safetensors, audio_tokenizer/config.json, audio_tokenizer/model.safetensors
+            let tmp_path = Path::new(&para.tts_dir);
+            if !(tmp_path.exists() && tmp_path.is_dir()) {
+                return Err(MyError::DirNotExistError{dir: para.tts_dir})
+            }
+            para.tts_dir.replace("\\", "/").trim_end_matches('/').to_string()
+        },
+        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+        ref_audio: match para.ref_audio { // omni tts语音克隆所需的参考音频文件
+            Some(r) => {
+                let tmp_path = PathBuf::from(&r);
+                if !(tmp_path.exists() && tmp_path.is_file()) {
+                    return Err(MyError::FileNotExistError{file: r})
+                }
+                Some(tmp_path)
+            },
+            None => None,
+        },
+        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal", feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        role: match para.role {
+            Some(r) => r,
+            None => "日常聊天助手".to_string(),
+        },
         outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
             Some(o) => get_outpath(&o),
             None => {
@@ -455,7 +515,7 @@ fn remove_no_log_folder(p: &Path, outpath: &str) {
             for i in uuid_dirs { // 遍历指定输出路径下每项
                 if let Ok(entry) = i {
                     let uuid_path = entry.path();
-                    if uuid_path.is_dir() { // 判断是否是文件夹
+                    if uuid_path.is_dir() && !uuid_path.file_name().unwrap().to_str().unwrap().starts_with("audio_") { // 判断是否是文件夹
                         if let Ok(j) = uuid_path.read_dir() { // 读取该文件夹
                             /*
                             if j.next().is_none() { // 如果是空文件夹则删除

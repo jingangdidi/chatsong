@@ -129,7 +129,8 @@ pub fn traverse_directory(root_path: &str, include: &Vec<(String, Pattern)>, exc
                                                 for i in &tmp_idx[1..] { // 遍历其余层级
                                                     tmp_v = &mut tmp_v[i]; // 获取该层级文件夹Value
                                                 }
-                                                if let Value::Array(ref mut v_inner) = tmp_v { // 该Value是当前文件所在的文件夹，插入
+                                                //if let Value::Array(ref mut v_inner) = tmp_v { // 该Value是当前文件所在的文件夹，插入
+                                                if let Value::Array(v_inner) = tmp_v { // 该Value是当前文件所在的文件夹，插入
                                                     v_inner.push(Value::Array(vec![Value::String(tmp_code_path), Value::String(tmp_code_str)]));
                                                 }
                                             }

@@ -2,6 +2,19 @@ use std::io;
 use std::num::ParseIntError;
 use std::string::FromUtf8Error;
 
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use qwen3_asr::AsrError;
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use cpal::{DeviceNameError, DefaultStreamConfigError, BuildStreamError, PlayStreamError, SupportedStreamConfigsError};
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use hound::Error as hound_error;
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use rodio::{stream::StreamError, /*decoder::DecoderError*/};
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use rubato::{ResamplerConstructionError, ResampleError};
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use tokenizers::tokenizer::Error as tokenizer_error;
+
 use axum::{
     http::{StatusCode, Error as http_error},
     response::{Response, IntoResponse},
@@ -146,8 +159,8 @@ pub enum MyError {
     ResponseError{uuid: String, error: http_error},
 
     // Tokenizer错误
-    #[error("Error - Initialize {tokenizer} tokenizer: {error}")]
-    TokenizerError{tokenizer: String, error: anyhow::Error},
+    //#[error("Error - Initialize {tokenizer} tokenizer: {error}")]
+    //TokenizerError{tokenizer: String, error: anyhow::Error},
 
     // 向指定url发送请求错误
     #[error("Error - sending request {url}: {error}")]
@@ -212,6 +225,66 @@ pub enum MyError {
     // MCP error
     #[error("Error - {info}")]
     McpError{info: String},
+
+    // retrieve supported stream config error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - retrieve supported stream config: {error}")]
+    RetrieveSupportedStreamConfigError{error: SupportedStreamConfigsError},
+
+    // retrieve a device name error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - retrieve device name: {error}")]
+    RetrieveDeviceNameError{error: DeviceNameError},
+
+    // get default input stream config error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - get default input stream config: {error}")]
+    GetDefaultStreamConfigError{error: DefaultStreamConfigError},
+
+    // build input stream error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - build input stream: {error}")]
+    BuildInputStreamError{error: BuildStreamError},
+
+    // paly input stream error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - play input stream: {error}")]
+    PlayInputStreamError{error: PlayStreamError},
+
+    // create new resampler error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - create new resampler: {error}")]
+    CreateResamplerError{error: ResamplerConstructionError},
+
+    // create new resampler error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - run resampler: {error}")]
+    RunResamplerError{error: ResampleError},
+
+    // interfacing with audio output error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - interfacing with audio output: {error}")]
+    AudioStreamError{error: StreamError},
+
+    // Qwen3-ASR error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - Qwen3-ASR: {error}")]
+    Qwen3AsrError{error: AsrError},
+
+    // tokenizer error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - tokenizer: {error}")]
+    TokenizerError{error: tokenizer_error},
+
+    // tts error
+    //#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    //#[error("Error - Qwen3-TTS: {error}")]
+    //TtsError{error: anyhow::Error},
+
+    // wav error
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[error("Error - wav: {error}")]
+    WavError{error: hound_error},
 
     // language error
     #[error("Error - trying to assign an incompatible Language {language} to a Parser")]

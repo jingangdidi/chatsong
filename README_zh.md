@@ -30,15 +30,19 @@
 - 🤔 支持计划模式，复杂问题先制定计划，再调用工具逐个实现
 - 🧰 支持skills
 - 👾 支持Discord机器人
+- 🎤 支持Qwen3-ASR
+- 📢 支持OmniVoice-TTS
 
 ## 🚀 使用示例
 **目录结构**
 ```
 你的路径
-├─ chatsong   # 单个可执行文件
-├─ config.txt # 参数文件，填写自己要用的模型、api-key、api地址、prompt等
-├─ skills     # 存储skills的路径（可选）
-└─ chat-log   # 问答记录的保存路径
+├─ chatsong      # 单个可执行文件
+├─ config.txt    # 参数文件，填写自己要用的模型、api-key、api地址、prompt等
+├─ skills        # 存储skills的路径（可选）
+├─ Qwen3-ASR     # 下载的Qwen3-ASR模型路径（可选，使用`-d`指定该路径）
+├─ OmniVoice-TTS # 下载的OmniVoice-TTS模型路径（可选，使用`-D`指定该路径）
+└─ chat-log      # 问答记录的保存路径
 ```
 **1. 下载预编译的可执行文件**
 
@@ -74,6 +78,8 @@ ip_address: "192.168.1.5",
 ```
 按下`Ctrl+C`将自动保存所有问答记录等信息至输出路径，下次开启服务可基于之前的问答继续提问。
 ```
+## 🎤 语音模型
+从`v0.5.1`开始支持[Qwen3-ASR](https://modelscope.cn/models/Qwen/Qwen3-ASR-0.6B)和[OmniVoice-TTS](https://modelscope.cn/models/k2-fsa/OmniVoice)模型，编译时指定`--features asr-cuda,tts-cuda`，使用时通过`-d`指定下载的`Qwen3-ASR`模型路径，`-D`指定下载的`OmniVoice-TTS`模型路径，如果要使用声音克隆，可使用`-R`指定wav音频文件（最好小于20秒，也不要太短），默认语音助手身份为`日常聊天助手`，可使用`-E`更换身份，比如`神机妙算的诸葛亮`。
 
 ## 🧰 skills
 从`v0.4.2`开始支持调用skills，可以将skill文件夹直接放在skills文件夹中，也可以将多个skill文件夹放在skills文件夹下的同一文件夹中，它们会被归为一组，页面左侧下拉可以按组选择：
@@ -205,10 +211,14 @@ cargo build --release
 ```
 cargo build --release --features code_completion
 ```
+如果使用语音助手，编译时需加上`--features asr-cuda,tts-cuda`，也可以使用cpu推理`asr,tts`，但是会较慢，Mac可使用`asr-metal,tts-metal`:
+```
+cargo build --release --features asr-cuda,tts-cuda
+```
 
 ## 🚥 命令行参数
 ```
-Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-C <channels>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-A] [-k] [-S <skills>] [-b <bgc>] [-o <outpath>]
+Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-C <channels>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-A] [-k] -d <asr-dir> -D <tts-dir> [-R <ref-audio>] [-E <role>] [-S <skills>] [-b <bgc>] [-o <outpath>]
 
 server for LLM api
 
@@ -226,6 +236,10 @@ Options:
   -l, --english       chat page show english
   -A, --approval-all  approval to call all tools without pop-up prompts
   -k, --shortcut-key  enable shortcut key code complete, can be used in any editor, support 4 modes: 1. press the Left Ctrl/command 3 times (code completion), 2. press the Right Ctrl/command 3 times (write code), 3. press Left Shift 4 times (debug), 4. press Right Shift 4 times (shell command)
+  -d, --asr-dir       qwen3-ASR model dir (config.json, merges.txt, model.safetensors, tokenizer_config.json, vocab.json)
+  -D, --tts-dir       omni voice TTS model dir (config.json, tokenizer_config.json, model.safetensors, audio_tokenizer/config.json, audio_tokenizer/model.safetensors)
+  -R, --ref-audio     reference audio for omni voice clone
+  -E, --role          prompt role for asr and tts
   -S, --skills        skills path, default: ./skills
   -b, --bgc           background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
   -o, --outpath       output path, default: ./chat-log
@@ -420,7 +434,10 @@ Options:
 ```
 
 ## ⏰ 更新记录
-- [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
+- [2026.05.?] release [v0.5.1](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.1)
+  - 🛠修复：调用工具时的错误
+  - ⭐️增加：增加`Qwen3-ASR`和`OmniVoice-TTS`模型，编译时使用`--features asr-cuda,tts-cuda`，即可通过麦克风与大模型对话，捕获的音频使用`Qwen3-ASR`转为文本发送给大模型，模型返回文本使用`OmniVoice-TTS`转为音频并自动播放，唤醒词`你好`、`hello`，结束词`结束`、`stop`。
+  - [2026.05.06] release [v0.5.0](https://github.com/jingangdidi/chatsong/releases/tag/v0.5.0)
   - ⭐️增加：增加通过监听指定快捷键，在任意编辑器使用代码补全、写代码、debug、编写shell命令，支持4种模式：1. 连按3次左侧`Ctrl`(macos是`command`)键对选中的代码进行代码补全，2. 连按3次右侧`Ctrl`(macos是`command`)键根据选中的要求编写代码，3. 连按4次左侧`Shift`键修复选中的代码，4. 连按4次右侧`Shift`键，补全当前命令行的shell命令或写出符合当前命令行命令描述的shell命令
 - [2026.04.29] release [v0.4.2](https://github.com/jingangdidi/chatsong/releases/tag/v0.4.2)
   - 🛠修复：调用工具错误时未尝试3次而直接退出

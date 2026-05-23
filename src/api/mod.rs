@@ -15,8 +15,12 @@ pub mod tools;
 pub mod mcp;
 pub mod channel;
 pub mod skills;
-#[cfg(feature = "code_completion")]
+#[cfg(feature = "code-completion")]
 pub mod code_completion;
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+pub mod asr;
+#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+pub mod tts;
 
 mod handlers;
 mod v1;
