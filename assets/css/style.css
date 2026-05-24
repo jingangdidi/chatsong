@@ -129,6 +129,18 @@
         transition: transform 0.3s;
     }
 
+    /* 左下语音模式按钮 */
+    #left-microphone {
+        left: 255px;
+        transition: transform 0.3s ease-in-out; /* 平滑过渡 */
+    }
+
+    #left-microphone:hover {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s;
+    }
+
     #right-part {
         position: absolute;
         right: 0px;

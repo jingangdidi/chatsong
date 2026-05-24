@@ -1,10 +1,12 @@
 use chrono::Local;
 use futures::StreamExt;
+use once_cell::sync::Lazy;
 use openai_dive::v1::{
     api::Client,
     endpoints::chat::RoleTrackingStream,
     resources::{
         chat::{
+            ChatCompletionParametersBuilder,
             ChatCompletionParameters,
             ChatMessage,
             ChatMessageContent,
@@ -13,7 +15,8 @@ use openai_dive::v1::{
         shared::Usage,
     },
 };
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, UnboundedReceiver};
+use tokio::sync::Mutex;
 //use tokio::time::{sleep, Duration};
 use tracing::{event, Level};
 
@@ -25,14 +28,21 @@ use crate::{
         DataType, // 存储问答信息的数据
         get_messages_num, // 获取指定uuid的messages总数
         update_token,
+        get_messages, // 获取指定uuid最近的指定数量个message
     },
     api::handlers::chat::MainData,
     error::MyError,
 };
 
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use crate::asr::AUDIO;
+#[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+use tokio::sync::mpsc;
+
+pub static START_AUDIO: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
+
 const THOUGHT_START: &[&str] = &["<think>", "<thought>", "<thinking>", "<reasoning>"];
 const THOUGHT_END: &[&str] = &["</think>", "</thought>", "</thinking>", "</reasoning>"];
-
 
 /// stream接收答案，通过管道将接受的答案传输出去，并将完整答案记录到该uuid中
 /// uuid: 当前对话的uuid
@@ -44,297 +54,354 @@ pub async fn use_stream(
     uuid: String,
     sender: Sender<Vec<u8>>,
     client: Client,
-    parameters: ChatCompletionParameters,
+    //parameters: ChatCompletionParameters,
+    mut para_builder: ChatCompletionParametersBuilder,
     model: &str,
     show_thought: bool,
+    qa_msg_p: Option<(usize, usize, bool)>,
 ) -> Result<(), MyError> {
-    let mut whole_answer = "".to_string(); // 存储完整答案
-    let mut msg_token = None;
-    let mut role: u8 = 3; // 1表示User，2表示System，3表示Assistant，4表示Developer
-    let mut think = false; // 是否属于think思维链部分
-    let mut start_stop_think: u8 = 0; // 显示思维链
-    let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-    let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
-    // 创建stream
-    let stream = client.chat().create_stream(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
-    let mut tracked_stream = RoleTrackingStream::new(stream);
-    // 遍历接受stream信息
-    'outer: while let Some(response) = tracked_stream.next().await {
-        //let chat_response = response.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
-        let chat_response = match response { // 这里遇到错误不能直接返回，否则服务端与前端id差一个，后面代码insert_message没有执行，下个问题会显示在这个未回答完的答案末尾
-            Ok(r) => r,
-            Err(e) => { // 可能api服务端停止发送答案
-                event!(Level::ERROR, "{} {:?}", uuid, e);
-                break;
-            },
-        };
-        for choice in chat_response.choices { // 这里要用`for`，不能用`for_each()`，`choice`不是async报错
-            match &choice.delta {
-                DeltaChatMessage::User{content: ChatMessageContent::Text(c), ..} => {
-                    whole_answer += &c;
-                    role = 1;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                    }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+    let mut rx_audio: Option<UnboundedReceiver<String>> = None;
+    if *START_AUDIO.lock().await {
+        // 将发送端存入全局
+        #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        {
+            let (tx, rx) = mpsc::unbounded_channel::<String>();
+            let mut guard = AUDIO.lock().await;
+            *guard = Some((uuid.to_string(), tx));
+            rx_audio = Some(rx);
+        }
+    } else {
+        #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        {
+            let mut guard = AUDIO.lock().await;
+            *guard = None;
+        }
+    };
+
+    'outer: loop {
+        if let Some(ref mut rx) = rx_audio {
+            event!(Level::INFO, "{} waiting audio string ...", uuid);
+            if let Some(msg) = rx.recv().await {
+                event!(Level::INFO, "{} received audio string: {}", uuid, msg);
+                if msg == "停止对话" || msg == "stop chat" {
+                    break
+                }
+                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, get_messages_num(&uuid), msg.replace("\n", "srxtzn"), false, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                    event!(Level::WARN, "channel send error: {:?}", e);
+                    break
+                }
+                let message = ChatMessage::User{
+                    content: ChatMessageContent::Text(msg),
+                    name: None,
+                };
+                insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p.clone(), model, None);
+            };
+        }
+        // 获取当前message，创建parameters
+        para_builder.messages(get_messages(&uuid));
+        let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
+
+        let mut whole_answer = "".to_string(); // 存储完整答案
+        let mut msg_token = None;
+        let mut role: u8 = 3; // 1表示User，2表示System，3表示Assistant，4表示Developer
+        let mut think = false; // 是否属于think思维链部分
+        let mut start_stop_think: u8 = 0; // 显示思维链
+        let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
+        let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
+        // 创建stream
+        let stream = client.chat().create_stream(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
+        let mut tracked_stream = RoleTrackingStream::new(stream);
+        // 遍历接受stream信息
+        while let Some(response) = tracked_stream.next().await {
+            //let chat_response = response.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
+            let chat_response = match response { // 这里遇到错误不能直接返回，否则服务端与前端id差一个，后面代码insert_message没有执行，下个问题会显示在这个未回答完的答案末尾
+                Ok(r) => r,
+                Err(e) => { // 可能api服务端停止发送答案
+                    event!(Level::ERROR, "{} {:?}", uuid, e);
+                    break 'outer;
                 },
-                DeltaChatMessage::System{content: ChatMessageContent::Text(c), ..} => {
-                    whole_answer += &c;
-                    role = 2;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                    }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
-                },
-                /*
-                DeltaChatMessage::Assistant{content: Some(ChatMessageContent::Text(c)), ..} => {
-                    whole_answer += &c;
-                    role = 3;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                    }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
-                },
-                */
-                DeltaChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
-                    let c = match (tmp_content, tmp_reasoning_content) {
-                        (Some(ChatMessageContent::Text(c)), None) => { // 答案
-                            if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
-                                think = true;
-                                start_stop_think = 1; // 开始思维链
-                                None
-                            } else if start_stop_think == 7 {
-                                start_stop_think = 4; // 结束思维链
-                                whole_answer += &c;
-                                Some(c)
-                            } else if start_stop_think == 8 && THOUGHT_END.contains(&c.as_ref()) {
-                                start_stop_think = 4; // 结束思维链
-                                None
-                            } else if start_stop_think == 1 {
-                                start_stop_think = 8;
-                                whole_answer += &c;
-                                Some(c)
-                            } else {
-                                whole_answer += &c;
-                                Some(c)
-                            }
-                        },
-                        (None, Some(c)) => { // 思考过程
-                            if start_stop_think == 0 {
-                                think = true;
-                                start_stop_think = 2; // 开始思维链
-                            } else if start_stop_think == 2 {
-                                start_stop_think = 7;
-                            }
-                            Some(c)
-                        },
-                        _ => continue,
-                    };
-                    if think && !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
-                        continue
-                    }
-                    if think {
-                        if start_stop_think == 1 || start_stop_think == 2 {
-                            //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                                event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                            }
-                        } else if start_stop_think == 4 {
-                            //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                                event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                            }
-                            think = false;
-                        }
-                    }
-                    role = 3;
-                    if let Some(c_str) = c {
+            };
+            for choice in chat_response.choices { // 这里要用`for`，不能用`for_each()`，`choice`不是async报错
+                match &choice.delta {
+                    DeltaChatMessage::User{content: ChatMessageContent::Text(c), ..} => {
+                        whole_answer += &c;
+                        role = 1;
                         //print!("{}", c);
                         //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), false, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                             //println!("channel send error: {:?}", e);
                             event!(Level::WARN, "channel send error: {:?}", e);
                             break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                         }
                         //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
-                    }
-                },
-                DeltaChatMessage::Developer{content: ChatMessageContent::Text(c), ..} => {
-                    whole_answer += &c;
-                    role = 4;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                    }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
-                },
-                /*
-                DeltaChatMessage::Untagged{content: Some(ChatMessageContent::Text(c)), ..} => { // llama.cpp的llama-server的api传输的答案会在这里
-                    whole_answer += &c;
-                    role = 3;
-                    //print!("{}", c);
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        //println!("channel send error: {:?}", e);
-                        event!(Level::WARN, "channel send error: {:?}", e);
-                        break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                    }
-                    //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
-                    if think {
-                        if whole_answer == "<think>" {
-                            whole_answer += "thinking ...<br>"; // 开始think时在最开始显示“thinking ...”
-                            //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                                event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                            }
-                        } else if c == "</think>" {
-                            whole_answer += "<br>"; // think结束后换行
-                            //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                                event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                            }
-                            think = false;
-                        }
-                    }
-                },
-                */
-                DeltaChatMessage::Untagged{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => { // llama.cpp的llama-server的api传输的答案会在这里
-                    let c = match (tmp_content, tmp_reasoning_content) {
-                        (Some(ChatMessageContent::Text(c)), None) => { // 答案
-                            if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
-                                think = true;
-                                start_stop_think = 1; // 开始思维链
-                                None
-                            } else if start_stop_think == 7 {
-                                start_stop_think = 4; // 结束思维链
-                                whole_answer += &c;
-                                Some(c)
-                            } else if start_stop_think == 8 && THOUGHT_END.contains(&c.as_ref()) {
-                                start_stop_think = 4; // 结束思维链
-                                None
-                            } else if start_stop_think == 1 {
-                                start_stop_think = 8;
-                                whole_answer += &c;
-                                Some(c)
-                            } else {
-                                whole_answer += &c;
-                                Some(c)
-                            }
-                        },
-                        (None, Some(c)) => { // 思考过程
-                            if start_stop_think == 0 {
-                                think = true;
-                                start_stop_think = 2; // 开始思维链
-                            } else if start_stop_think == 2 {
-                                start_stop_think = 7;
-                            }
-                            Some(c)
-                        },
-                        _ => continue,
-                    };
-                    if think && !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
-                        continue
-                    }
-                    if think {
-                        if start_stop_think == 1 || start_stop_think == 2 {
-                            //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                                event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                            }
-                        } else if start_stop_think == 4 {
-                            //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                                event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
-                            }
-                            think = false;
-                        }
-                    }
-                    role = 3;
-                    if let Some(c_str) = c {
+                    },
+                    DeltaChatMessage::System{content: ChatMessageContent::Text(c), ..} => {
+                        whole_answer += &c;
+                        role = 2;
                         //print!("{}", c);
                         //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
                         //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
-                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                             //println!("channel send error: {:?}", e);
                             event!(Level::WARN, "channel send error: {:?}", e);
                             break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                         }
                         //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
-                    }
-                },
-                _ => (),
+                    },
+                    /*
+                    DeltaChatMessage::Assistant{content: Some(ChatMessageContent::Text(c)), ..} => {
+                        whole_answer += &c;
+                        role = 3;
+                        //print!("{}", c);
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //println!("channel send error: {:?}", e);
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                        }
+                        //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    },
+                    */
+                    DeltaChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
+                        let c = match (tmp_content, tmp_reasoning_content) {
+                            (Some(ChatMessageContent::Text(c)), None) => { // 答案
+                                if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
+                                    think = true;
+                                    start_stop_think = 1; // 开始思维链
+                                    None
+                                } else if start_stop_think == 7 {
+                                    start_stop_think = 4; // 结束思维链
+                                    whole_answer += &c;
+                                    Some(c)
+                                } else if start_stop_think == 8 && THOUGHT_END.contains(&c.as_ref()) {
+                                    start_stop_think = 4; // 结束思维链
+                                    None
+                                } else if start_stop_think == 1 {
+                                    start_stop_think = 8;
+                                    whole_answer += &c;
+                                    Some(c)
+                                } else {
+                                    whole_answer += &c;
+                                    Some(c)
+                                }
+                            },
+                            (None, Some(c)) => { // 思考过程
+                                if start_stop_think == 0 {
+                                    think = true;
+                                    start_stop_think = 2; // 开始思维链
+                                } else if start_stop_think == 2 {
+                                    start_stop_think = 7;
+                                }
+                                Some(c)
+                            },
+                            _ => continue,
+                        };
+                        if think && !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
+                            continue
+                        }
+                        if think {
+                            if start_stop_think == 1 || start_stop_think == 2 {
+                                //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                    event!(Level::WARN, "channel send error: {:?}", e);
+                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                }
+                            } else if start_stop_think == 4 {
+                                //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                    event!(Level::WARN, "channel send error: {:?}", e);
+                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                }
+                                think = false;
+                            }
+                        }
+                        role = 3;
+                        if let Some(c_str) = c {
+                            //print!("{}", c);
+                            //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                //println!("channel send error: {:?}", e);
+                                event!(Level::WARN, "channel send error: {:?}", e);
+                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                            }
+                            //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                        }
+                    },
+                    DeltaChatMessage::Developer{content: ChatMessageContent::Text(c), ..} => {
+                        whole_answer += &c;
+                        role = 4;
+                        //print!("{}", c);
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //println!("channel send error: {:?}", e);
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                        }
+                        //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                    },
+                    /*
+                    DeltaChatMessage::Untagged{content: Some(ChatMessageContent::Text(c)), ..} => { // llama.cpp的llama-server的api传输的答案会在这里
+                        whole_answer += &c;
+                        role = 3;
+                        //print!("{}", c);
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //println!("channel send error: {:?}", e);
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                        }
+                        //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                        if think {
+                            if whole_answer == "<think>" {
+                                whole_answer += "thinking ...<br>"; // 开始think时在最开始显示“thinking ...”
+                                //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "thinking ...<br>".to_string(), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                    event!(Level::WARN, "channel send error: {:?}", e);
+                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                }
+                            } else if c == "</think>" {
+                                whole_answer += "<br>"; // think结束后换行
+                                //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<br>".to_string(), true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                    event!(Level::WARN, "channel send error: {:?}", e);
+                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                }
+                                think = false;
+                            }
+                        }
+                    },
+                    */
+                    DeltaChatMessage::Untagged{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => { // llama.cpp的llama-server的api传输的答案会在这里
+                        let c = match (tmp_content, tmp_reasoning_content) {
+                            (Some(ChatMessageContent::Text(c)), None) => { // 答案
+                                if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
+                                    think = true;
+                                    start_stop_think = 1; // 开始思维链
+                                    None
+                                } else if start_stop_think == 7 {
+                                    start_stop_think = 4; // 结束思维链
+                                    whole_answer += &c;
+                                    Some(c)
+                                } else if start_stop_think == 8 && THOUGHT_END.contains(&c.as_ref()) {
+                                    start_stop_think = 4; // 结束思维链
+                                    None
+                                } else if start_stop_think == 1 {
+                                    start_stop_think = 8;
+                                    whole_answer += &c;
+                                    Some(c)
+                                } else {
+                                    whole_answer += &c;
+                                    Some(c)
+                                }
+                            },
+                            (None, Some(c)) => { // 思考过程
+                                if start_stop_think == 0 {
+                                    think = true;
+                                    start_stop_think = 2; // 开始思维链
+                                } else if start_stop_think == 2 {
+                                    start_stop_think = 7;
+                                }
+                                Some(c)
+                            },
+                            _ => continue,
+                        };
+                        if think && !show_thought { // 不显示思考过程则不传递，仅记录在whole_answer中
+                            continue
+                        }
+                        if think {
+                            if start_stop_think == 1 || start_stop_think == 2 {
+                                //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                    event!(Level::WARN, "channel send error: {:?}", e);
+                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                }
+                            } else if start_stop_think == 4 {
+                                //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                    event!(Level::WARN, "channel send error: {:?}", e);
+                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                }
+                                think = false;
+                            }
+                        }
+                        role = 3;
+                        if let Some(c_str) = c {
+                            //print!("{}", c);
+                            //if let Err(e) = sender.send(format!("data: {}\n\n", c).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            //if let Err(e) = sender.send(format!("data: {}\n\n", c.replace("\n", "srxtzn")).into_bytes()).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                                //println!("channel send error: {:?}", e);
+                                event!(Level::WARN, "channel send error: {:?}", e);
+                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                            }
+                            //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
+                        }
+                    },
+                    _ => (),
+                }
+            }
+            // get token usage from last response
+            if let Some(usage) = chat_response.usage {
+                msg_token = get_print_token(usage, &uuid);
             }
         }
-        // get token usage from last response
-        if let Some(usage) = chat_response.usage {
-            msg_token = get_print_token(usage, &uuid);
+        // if whole_answer is empty, send `no response result` to client
+        if whole_answer.is_empty() {
+            if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "no response result".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                //println!("channel send error: {:?}", e);
+                event!(Level::WARN, "channel send error: {:?}", e);
+            } else {
+                event!(Level::WARN, "{} no response result", uuid);
+            }
+        }
+        // 记录答案
+        let message = match role {
+            1 => ChatMessage::User{
+                content: ChatMessageContent::Text(whole_answer.clone()),
+                name: None,
+            },
+            2 => ChatMessage::System{
+                content: ChatMessageContent::Text(whole_answer.clone()),
+                name: None,
+            },
+            3 => ChatMessage::Assistant{
+                content: Some(ChatMessageContent::Text(whole_answer.clone())),
+                reasoning_content: None,
+                refusal: None,
+                name: None,
+                audio: None,
+                tool_calls: None,
+            },
+            4 => ChatMessage::Developer{
+                content: ChatMessageContent::Text(whole_answer.clone()),
+                name: None,
+            },
+            _ => ChatMessage::User{
+                content: ChatMessageContent::Text(whole_answer.clone()),
+                name: None,
+            },
+        };
+        // 将回答加到问答记录中
+        insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
+        // 未开启语音模式，或关闭了语音模式，则跳出循环，结束对话
+        if rx_audio.is_none() || !*START_AUDIO.lock().await {
+            break
         }
     }
-    // if whole_answer is empty, send `no response result` to client
-    if whole_answer.is_empty() {
-        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "no response result".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-            //println!("channel send error: {:?}", e);
-            event!(Level::WARN, "channel send error: {:?}", e);
+    if rx_audio.is_some() {
+        #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        if *START_AUDIO.lock().await {
+            *START_AUDIO.lock().await = false;
         } else {
-            event!(Level::WARN, "{} no response result", uuid);
+            let mut guard = AUDIO.lock().await;
+            *guard = None;
         }
     }
-    // 记录答案
-    let message = match role {
-        1 => ChatMessage::User{
-            content: ChatMessageContent::Text(whole_answer.clone()),
-            name: None,
-        },
-        2 => ChatMessage::System{
-            content: ChatMessageContent::Text(whole_answer.clone()),
-            name: None,
-        },
-        3 => ChatMessage::Assistant{
-            content: Some(ChatMessageContent::Text(whole_answer.clone())),
-            reasoning_content: None,
-            refusal: None,
-            name: None,
-            audio: None,
-            tool_calls: None,
-        },
-        4 => ChatMessage::Developer{
-            content: ChatMessageContent::Text(whole_answer.clone()),
-            name: None,
-        },
-        _ => ChatMessage::User{
-            content: ChatMessageContent::Text(whole_answer.clone()),
-            name: None,
-        },
-    };
-    // 将回答加到问答记录中
-    insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
     Ok(())
 }
 

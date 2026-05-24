@@ -32,6 +32,8 @@ const ICON_DELETE: &str = include_str!("../../assets/image/delete-svgrepo-com.sv
 const ICON_INCOGNITO1: &str = include_str!("../../assets/image/incognito-svgrepo-com-1.txt");
 const ICON_INCOGNITO2: &str = include_str!("../../assets/image/incognito-svgrepo-com-2.txt");
 const ICON_COMPRESS: &str = include_str!("../../assets/image/format-space-less-svgrepo-com.txt");
+const ICON_MICROPHONE0: &str = include_str!("../../assets/image/microphone-svgrepo-com-8-0.txt");
+const ICON_MICROPHONE1: &str = include_str!("../../assets/image/microphone-svgrepo-com-8-1.txt");
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -103,6 +105,7 @@ struct PageInfo {
     textarea:     String,      // 输入框内的提示信息
     button:       [String; 4], // 左下角设置、下载、使用说明、压缩总结这4个按钮的title
     incognito:    [String; 3], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
+    microphone:   [String; 3], // 左下角语音按钮开启和关闭2个状态的title，以及开启的前2个字符
     wait:         [String; 3], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
 }
 
@@ -265,6 +268,7 @@ impl PageInfo {
                 textarea:   "Input your query (Press Shift+Enter for line breaks)".to_string(), // 输入框内的提示信息
                 button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string()], // 左下角设置、下载、使用说明、压缩总结这4个按钮的title
                 incognito:  ["Activate incognito mode, where the current conversation will not be locally preserved upon program termination and shall be irrevocably discarded, refreshing or reopening the current page will also erase the conversation history".to_string(), "Disable the incognito mode, and your current conversation will be preserved locally upon exiting the application, allowing you to resume seamlessly during your next session".to_string(), "Ac".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
+                microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
         } else {
@@ -424,6 +428,7 @@ impl PageInfo {
                 textarea:   "输入你的问题 (Shift+Enter换行)".to_string(), // 输入框内的提示信息
                 button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string()], // 左下角设置、下载、使用说明、压缩总结这4个按钮的title
                 incognito:  ["开启无痕模式，关闭程序时，当前对话不会被保存在本地，直接舍弃，刷新或重新打开当前页面也将丢弃对话记录".to_string(), "关闭无痕模式，关闭程序时，当前对话会被保存在本地，下次可以接着提问".to_string(), "开启".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
+                microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
         }
@@ -817,7 +822,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         </div>
         <div id='left-incognito' class='left-bottom' title='{}'>
             <img src='{}' id='incognito' aria-hidden='true' />
-        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 });
+        </div>
+        <div id='left-microphone' class='left-bottom' title='{}'>
+            <img src='{}' id='microphone' aria-hidden='true' />
+        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0);
     result += r###"
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
@@ -973,6 +981,28 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     // 监听点击无痕模式按钮
     document.getElementById('left-incognito').addEventListener('click', function(event) {
         incognito_toggle(null);
+    })
+    // 切换语音模式，参数only_update为null表示进行toggle，为true表示更新为开启语音模式，false表示更新为关闭语音模式
+    function microphone_toggle() {
+        const microphoneDiv = document.getElementById('left-microphone');
+        const microphoneImg = document.getElementById('microphone');
+"###;
+    result += &format!("        const current_close_microphone = microphoneDiv.title.substring(0, 2) === '{}';
+        if (current_close_microphone) {{ // 此时关闭状态，转为开启
+            microphoneImg.src = '{}';
+            microphoneDiv.title = '{}';
+        }} else {{ // 此时开启状态，转为关闭
+            microphoneImg.src = '{}';
+            microphoneDiv.title = '{}';
+        }}
+        fetch('http://{}:{}{}/microphone/'+current_close_microphone).catch(error => {{
+            console.error('Failed set microphone:', error);
+        }});
+    }}", page_data.microphone[2], ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0], PARAS.addr_str, PARAS.port, v);
+    result += r###"
+    // 监听点击语音模式按钮
+    document.getElementById('left-microphone').addEventListener('click', function(event) {
+        microphone_toggle();
     })
     // 使用事件委托监听点击事件
     document.addEventListener('click', async function(event) {
@@ -1807,6 +1837,18 @@ print(b)
                         document.getElementById("show-out-token").value = jsonData.out_token;
                         document.getElementById("show-context-token").value = jsonData.context_token;
                         related_uuid(jsonData.related_uuid);
+"###;
+    result += &format!("                        // 更新语音模式图标
+                        const microphoneDiv = document.getElementById('left-microphone');
+                        const microphoneImg = document.getElementById('microphone');
+                        if (jsonData.microphone) {{ // 设为开启状态
+                            microphoneImg.src = '{}';
+                            microphoneDiv.title = '{}';
+                        }} else {{ // 设为关闭状态
+                            microphoneImg.src = '{}';
+                            microphoneDiv.title = '{}';
+                        }}", ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0]);
+    result += r###"
                         if (autoScroll) {
                             scroll();
                         }
@@ -1916,6 +1958,25 @@ print(b)
             restore_input();
             isStopped = true;
             controller = null;
+        }
+    });
+    // 鼠标点击左下角microphone图标发送
+    document.getElementById("left-microphone").addEventListener("click", async(e) => {
+        const microphoneDiv = document.getElementById('left-microphone');
+"###;
+    result += &format!("        const current_close_microphone = microphoneDiv.title.substring(0, 2) === '{}';", page_data.microphone[2]);
+    result += r###"
+        if (!current_close_microphone) { // 此时开启状态
+            if (isStopped) { // 发送问题
+                del_id = '';
+                await send_query_receive_answer();
+            } else { // 停止接收回答
+                //if (reader) reader.cancel();
+                controller.abort();
+                restore_input();
+                isStopped = true;
+                controller = null;
+            }
         }
     });
     // click left bottom summary/compress button

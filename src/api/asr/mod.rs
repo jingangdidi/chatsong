@@ -1,7 +1,6 @@
 use std::fs::{write, create_dir_all};
 use std::path::Path;
 use std::process::exit;
-use std::sync::RwLock;
 
 use chrono::Local;
 use once_cell::sync::Lazy;
@@ -31,10 +30,12 @@ use tokenizers::{
     pre_tokenizers::byte_level::ByteLevel,
 };
 use tokio::sync::mpsc::{
+    self,
     channel,
     Sender,
     Receiver,
 };
+use tokio::sync::Mutex;
 use tokio::sync::oneshot;
 use tracing::{event, Level};
 
@@ -79,15 +80,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+use std::sync::RwLock;
+
+#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
 use utils::read_wav_sample_resample;
 
 /// 全局变量，可以修改，存储当前开启语音模式的uuid
-/// Mutex:
-///     不区分读取还是写入，都需要lock
-/// RwLock:
-///     read: 可以同时多个读，如果正在被其他线程写，则等待其他线程的操作结束后才返回RwLockReadGuard
-///     write: 写时不能有其他读或写，如果正在被其他线程读或写，则等待其他线程的操作结束后才返回RwLockWriteGuard
-pub static AUDIO: Lazy<RwLock<Option<String>>> = Lazy::new(|| RwLock::new(None));
+pub static AUDIO: Lazy<Mutex<Option<(String, mpsc::UnboundedSender<String>)>>> = Lazy::new(|| Mutex::new(None));
 
 static START_WORDS: &[&str; 8] = &["你好，", "你好", "狗屁，", "狗屁", "hello,", "hello", "Hello,", "Hello"];
 static STOP_WORDS: &[&str; 8] = &["，结束。", "。结束。", "结束。", "，结束", "。结束", "结束？", "stop", "stop."];
@@ -125,7 +124,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
 
     // 音频播放线程（独立线程），不要放到`tokio::spawn(async move {})`内
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-    let (play_tx, play_rx) = std::sync::mpsc::channel::<(Vec<f32>, u32)>();
+    let (play_tx, play_rx) = std::sync::mpsc::channel::<(Vec<f32>, u32, Option<oneshot::Sender<()>>)>();
 
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
     std::thread::spawn(move || {
@@ -133,10 +132,13 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         let stream_handle = OutputStreamBuilder::open_default_stream().map_err(|e| MyError::AudioStreamError{error: e}).unwrap();
         let sink = Sink::connect_new(stream_handle.mixer());
 
-        while let Ok((audio_data, sample_rate)) = play_rx.recv() {
+        while let Ok((audio_data, sample_rate, play_done)) = play_rx.recv() {
             let source = SamplesBuffer::new(1, sample_rate, audio_data);
             sink.append(source);
-            //sink.sleep_until_end();
+            if let Some(done) = play_done {
+                sink.sleep_until_end();
+                done.send(()).unwrap(); // 发送确认
+            }
         }
     });
 
@@ -306,73 +308,78 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                             },
                         ];
                         run_llm_tts = false;
+                        event!(Level::INFO, "start new chat successfully");
                     } else if whole_string.contains("不记录历史") || whole_string.contains("without history") {
                         with_history = false;
+                        event!(Level::INFO, "change to no history mode successfully");
                     } else if whole_string.contains("记录历史") || whole_string.contains("with history") {
                         with_history = true;
+                        event!(Level::INFO, "change to history mode successfully");
                     }
                 }
                 if run_llm_tts {
-                    // 检查日期是否变更
-                    today_current = Local::now().format("%Y-%m-%d").to_string();
-                    if today_current != today {
-                        today = today_current;
-                        audio_save_path = format!("{}/audio_{}", outpath, today);
-                        let tmp_audio_path = Path::new(&audio_save_path);
-                        if !(tmp_audio_path.exists() && tmp_audio_path.is_dir()) {
-                            if let Err(e) = create_dir_all(&tmp_audio_path) {
-                                event!(Level::ERROR, "create_dir_all error: {:?}", e);
+                    run_llm_tts = false;
+                    event!(Level::INFO, "whole asr string: {}", whole_string);
+                    let guard = AUDIO.lock().await;
+                    if let Some((_, tx)) = guard.as_ref() {
+                        let _ = tx.send(whole_string);
+                    } else {
+                        // 检查日期是否变更
+                        today_current = Local::now().format("%Y-%m-%d").to_string();
+                        if today_current != today {
+                            today = today_current;
+                            audio_save_path = format!("{}/audio_{}", outpath, today);
+                            let tmp_audio_path = Path::new(&audio_save_path);
+                            if !(tmp_audio_path.exists() && tmp_audio_path.is_dir()) {
+                                if let Err(e) = create_dir_all(&tmp_audio_path) {
+                                    event!(Level::ERROR, "create_dir_all error: {:?}", e);
+                                }
                             }
                         }
-                    }
-                    // save user question
-                    if let Err(e) = write(format!("{}/me_{}.txt", audio_save_path, audio_id), &whole_string) {
-                        event!(Level::ERROR, "save user question error: {:?}", e);
-                    }
-                    // save user audio
-                    if let Err(e) = write_wav_sample(&whole_uer_audio, max_sample_rate, audio_id, true, &audio_save_path) {
-                        event!(Level::ERROR, "save user audio error: {:?}", e);
-                    }
-                    event!(Level::INFO, "whole asr string: {}", whole_string);
-                    run_llm_tts = false;
-                    if with_history {
-                        history_msg.push(
-                            ChatMessage::User{
-                                content: ChatMessageContent::Text(whole_string.clone()),
-                                name: None,
-                            },
-                        );
-                    } else {
-                        history_msg = vec![
-                            ChatMessage::User{
-                                content: ChatMessageContent::Text(CHAT_PROMPT.replace("是日常聊天助手", &role)),
-                                name: None,
-                            },
-                            ChatMessage::User{
-                                content: ChatMessageContent::Text(whole_string.clone()),
-                                name: None,
-                            },
-                        ];
-                    }
-                    if let Ok(answer) = run_llm(history_msg.clone()).await {
-                        event!(Level::INFO, "llm: {}", answer);
+                        // save user question
+                        if let Err(e) = write(format!("{}/me_{}.txt", audio_save_path, audio_id), &whole_string) {
+                            event!(Level::ERROR, "save user question error: {:?}", e);
+                        }
+                        // save user audio
+                        if let Err(e) = write_wav_sample(&whole_uer_audio, max_sample_rate, audio_id, true, &audio_save_path) {
+                            event!(Level::ERROR, "save user audio error: {:?}", e);
+                        }
                         if with_history {
                             history_msg.push(
-                                ChatMessage::Assistant {
-                                    content: Some(ChatMessageContent::Text(answer.clone())),
-                                    reasoning_content: None,
-                                    refusal: None,
+                                ChatMessage::User{
+                                    content: ChatMessageContent::Text(whole_string.clone()),
                                     name: None,
-                                    audio: None,
-                                    tool_calls: None,
                                 },
                             );
+                        } else {
+                            history_msg = vec![
+                                ChatMessage::User{
+                                    content: ChatMessageContent::Text(CHAT_PROMPT.replace("是日常聊天助手", &role)),
+                                    name: None,
+                                },
+                                ChatMessage::User{
+                                    content: ChatMessageContent::Text(whole_string.clone()),
+                                    name: None,
+                                },
+                            ];
                         }
+                        if let Ok(answer) = run_llm(history_msg.clone()).await {
+                            event!(Level::INFO, "llm: {}", answer);
+                            if with_history {
+                                history_msg.push(
+                                    ChatMessage::Assistant {
+                                        content: Some(ChatMessageContent::Text(answer.clone())),
+                                        reasoning_content: None,
+                                        refusal: None,
+                                        name: None,
+                                        audio: None,
+                                        tool_calls: None,
+                                    },
+                                );
+                            }
 
-                        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-                        {
-                            let tmp_uuid = AUDIO.read().unwrap().clone(); // 使用RwLock，保证一写多读，只要不在写，就可以同时多个读取
-                            if tmp_uuid.is_none() {
+                            #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+                            {
                                 //for t in answer.replace("\n\n", "\n").replace("\n", "。").split("。") {
                                 let sub_answer: Vec<String> = answer.replace("\n\n", "\n").split("\n").map(|a| a.to_string()).collect();
                                 let mut sub_len = sub_answer.len();
@@ -414,7 +421,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                     }
                                     */
                                 }
-                                for _i in 0..sub_len {
+                                for i in 0..sub_len {
                                     if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
                                         ack_tts_tx.send(()).unwrap(); // 发送确认
                                         whole_tts_audio.extend(audio_data.clone());
@@ -422,8 +429,16 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                         let source = SamplesBuffer::new(1, sample_rate as u32, audio_data);
                                         sink.append(source);
                                         */
-                                        if let Err(_) = play_tx.send((audio_data, sample_rate as u32)) {
-                                            event!(Level::ERROR, "play tts receiver dropped");
+                                        if i + 1 == sub_len {
+                                            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
+                                            if let Err(_) = play_tx.send((audio_data, sample_rate as u32, Some(ack_tx))) {
+                                                event!(Level::ERROR, "play tts receiver dropped");
+                                            }
+                                            ack_rx.await.unwrap(); // 等待最后一段音频播放完
+                                        } else {
+                                            if let Err(_) = play_tx.send((audio_data, sample_rate as u32, None)) {
+                                                event!(Level::ERROR, "play tts receiver dropped");
+                                            }
                                         }
                                     }
                                 }

@@ -11,6 +11,7 @@ pub mod index; // `GET /嵌套的前缀`
 pub mod chat; // `GET /嵌套的前缀/chat`
 pub mod save; // `GET /嵌套的前缀/save`
 pub mod delete_message; // `GET /嵌套的前缀/delmsg/:id`
+pub mod microphone; // `GET /嵌套的前缀/microphone/:id`
 pub mod incognito; // `GET /嵌套的前缀/incognito`
 pub mod approval; // `GET /嵌套的前缀/approval`
 pub mod upload; // `POST /嵌套的前缀/upload`
