@@ -45,12 +45,12 @@ impl BuiltIn for RunScript {
             "properties": {
                 "script": {
                     "type": "string",
-                    "description": "The script to execute, IMPORTANT: This parameter only specifies the script name and does not include any parameters.",
+                    "description": "The script file to execute. This parameter must contain only the script path or filename (e.g., script.sh or /path/to/script.py). Do not include the interpreter program name (e.g., bash, python) or any additional arguments/parameters.",
                 },
                 "args": {
                     "type": ["array", "null"],
                     "items": {"type": "string"},
-                    "description": "The list of args.",
+                    "description": "List of arguments for the script. No script name or interpreter.",
                 },
             },
             "required": ["script"],

@@ -611,11 +611,7 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
                     info.chat_name = n;
                 }
             },
-            None => {
-                if !info.chat_name.is_empty() {
-                    info.chat_name = "".to_string();
-                }
-            },
+            None => (),
         },
         None => {
             // 从本地log文件加载或创建新Info对象

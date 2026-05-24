@@ -118,10 +118,27 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     let tx_start_clone = tx_start.clone();
 
     // start audio capture
-    let (_stream, sample_rate, channels) = start_audio_capture(tx, rx_start).await?;
+    let (sample_rate, channels) = start_audio_capture(tx, rx_start).await?;
     // qwen3-asr need 16000, omni-voice return 24000
     let max_sample_rate = std::cmp::max(sample_rate, 24000);
     let max_sample_rate_f64 = max_sample_rate as f64;
+
+    // 音频播放线程（独立线程），不要放到`tokio::spawn(async move {})`内
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let (play_tx, play_rx) = std::sync::mpsc::channel::<(Vec<f32>, u32)>();
+
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    std::thread::spawn(move || {
+        // play audio
+        let stream_handle = OutputStreamBuilder::open_default_stream().map_err(|e| MyError::AudioStreamError{error: e}).unwrap();
+        let sink = Sink::connect_new(stream_handle.mixer());
+
+        while let Ok((audio_data, sample_rate)) = play_rx.recv() {
+            let source = SamplesBuffer::new(1, sample_rate, audio_data);
+            sink.append(source);
+            //sink.sleep_until_end();
+        }
+    });
 
     // channel for send audio data to asr
     let (tx_asr, rx_asr) = channel::<(Vec<f32>, Vec<f32>, bool)>(1);
@@ -206,11 +223,13 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         let mut today_current: String;
         let mut audio_save_path = format!("{}/audio_{}", outpath, today);
 
+        /*
         // play audio
         #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
         let stream_handle = OutputStreamBuilder::open_default_stream().map_err(|e| MyError::AudioStreamError{error: e}).unwrap();
         #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
         let sink = Sink::connect_new(stream_handle.mixer());
+        */
 
         while let Some((asr_string, _language, audio_chunk_24, is_ref)) = rx_asr_string.recv().await {
             event!(Level::INFO, "part: {}", asr_string);
@@ -399,8 +418,13 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                     if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
                                         ack_tts_tx.send(()).unwrap(); // 发送确认
                                         whole_tts_audio.extend(audio_data.clone());
+                                        /*
                                         let source = SamplesBuffer::new(1, sample_rate as u32, audio_data);
                                         sink.append(source);
+                                        */
+                                        if let Err(_) = play_tx.send((audio_data, sample_rate as u32)) {
+                                            event!(Level::ERROR, "play tts receiver dropped");
+                                        }
                                     }
                                 }
                                 // save tts anwser
@@ -417,7 +441,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                 }
                                 whole_tts_audio.clear();
                                 // The sound plays in a separate thread. This call will block the current thread until the sink has finished playing all its queued sounds.
-                                sink.sleep_until_end();
+                                //sink.sleep_until_end();
                                 /*
                                 if let Err(e) = run_tts_voice_clone("./OmniVoice".to_string(), &answer, Some("Chinese".to_string())) {
                                     // tts error: Error - Qwen3-TTS: DriverError(CUDA_ERROR_UNSUPPORTED_PTX_VERSION, "the provided PTX was compiled with an unsupported toolchain.")

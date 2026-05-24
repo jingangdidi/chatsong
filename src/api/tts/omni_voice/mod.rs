@@ -69,7 +69,7 @@ pub async fn run_omni_tts(
             }
         }
         #[cfg(feature = "tts-metal")]
-        match candle_core::Device::new_cuda(0) {
+        match candle_core::Device::new_metal(0) {
             Ok(device) => Ok(device),
             Err(e) => Err(anyhow!(format!("CUDA feature enabled but device creation failed: {}", e))),
         }
