@@ -123,7 +123,8 @@ async fn main() {
         },
     };
     // 开启http服务
-    if let Err(e) = axum::serve(listener, router.into_make_service()).await {
+    //if let Err(e) = axum::serve(listener, router.into_make_service()).await {
+    if let Err(e) = axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>()).await {
         println!("{}", e); // 这里不要用`{:?}`，会打印结构体而不是打印指定的错误信息
         exit(1);
     }

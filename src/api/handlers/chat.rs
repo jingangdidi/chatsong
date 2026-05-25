@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::fs::write;
+use std::net::{IpAddr, SocketAddr};
 
 use axum::{
     body::Body,
-    extract::{Query, OriginalUri},
+    extract::{Query, OriginalUri, ConnectInfo},
     response::{Response, IntoResponse},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -213,7 +214,7 @@ fn format_sse_message<T: Serialize>(uuid: &str, event_name: &str, data: &T) -> R
 /// 例如访问：http://127.0.0.1:8080/chat?cx=912b8adxxxx8e41a9&q=how+to+use+cubecl&num=10&key=AIzaSyAOi2Dxxxxrv0cZKcl0RX8WLs70-vQwiBM
 /// 解析得到：{"cx": "912b8adxxxx8e41a9", "q": "how to use cubecl", "num": "10", "key": "AIzaSyAOi2Dxxxxrv0cZKcl0RX8WLs70-vQwiBM"}
 /// stream格式：https://www.ruanyifeng.com/blog/2017/05/server-sent_events.html
-pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUri, jar: CookieJar, body: String) -> Result<(CookieJar, impl IntoResponse), MyError> {
+pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUri, ConnectInfo(addr): ConnectInfo<SocketAddr>, jar: CookieJar, body: String) -> Result<(CookieJar, impl IntoResponse), MyError> {
     let client_para = ClientPara::new(&params, jar)?;
     // 记录提问内容或提交请求
     if let Some(q) = params.get("q") {
@@ -248,14 +249,15 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 if let Some(top_p) = client_para.top_p {
                     para_builder.top_p(top_p);
                 }
-                para_builder.messages(get_messages(&client_para.uuid));
-                let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
                 if client_para.stream {
                     let tmp_uuid = client_para.uuid.clone();
                     let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
+                    // 检查是否服务端所在电脑发起的请求
+                    let ip = addr.ip();
+                    let is_local = is_local_request(&ip);
                     // 从openai接收stream答案，并返回完整答案字符串
                     tokio::spawn(async move {
-                        if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p).await {
+                        if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p, is_local, client_para.microphone).await {
                             event!(Level::ERROR, "{} receive stream error: {}", tmp_uuid, e);
                         }
                     });
@@ -292,6 +294,8 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         Err(e) => Err(MyError::ResponseError{uuid: client_para.uuid, error: e}),
                     }
                 } else {
+                    para_builder.messages(get_messages(&client_para.uuid));
+                    let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
                     // 从openai接收完整答案字符串
                     let (whole_answer, _) = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, true).await?;
                     // 创建stream对象，接收管道传递的数据
@@ -591,15 +595,16 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     if client_para.stream {
                         para_builder.stream_options(ChatCompletionStreamOptions{include_usage: Some(true), continuous_usage_stats: None});
                     }
-                    para_builder.messages(get_messages(&client_para.uuid));
-                    let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
                     // 提问
                     if client_para.stream {
                         let tmp_uuid = client_para.uuid.clone();
                         let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
+                        // 检查是否服务端所在电脑发起的请求
+                        let ip = addr.ip();
+                        let is_local = is_local_request(&ip);
                         // 从openai接收stream答案，并返回完整答案字符串
                         tokio::spawn(async move {
-                            if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p).await {
+                            if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p, is_local, client_para.microphone).await {
                                 event!(Level::ERROR, "{} receive stream error: {}", tmp_uuid, e);
                             }
                         });
@@ -650,6 +655,8 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             Err(e) => Err(MyError::ResponseError{uuid: client_para.uuid, error: e}),
                         }
                     } else {
+                        para_builder.messages(get_messages(&client_para.uuid));
+                        let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
                         // 从openai接收完整答案字符串
                         let (whole_answer, thinking_content) = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, true).await?;
                         // 创建stream对象，接收管道传递的数据
@@ -896,6 +903,7 @@ struct ClientPara {
     selected_skills: Option<SelectedSkills>, // selected skills
     plan_mode:       bool, // use plan mode
     compression:     bool, // summarize chat history
+    microphone:      bool, // start audio mode
 }
 
 impl ClientPara {
@@ -1219,6 +1227,17 @@ impl ClientPara {
             },
             None => false,
         };
+        // start audio mode
+        let microphone = match params.get("microphone") {
+            Some(m) => {
+                if m == "true" {
+                    true
+                } else {
+                    false
+                }
+            },
+            None => false,
+        };
         Ok(Self {
             chat_name,       // Option<String>
             api_key,         // String
@@ -1240,6 +1259,22 @@ impl ClientPara {
             selected_skills, // Option<SelectedSkills>
             plan_mode,       // use plan mode
             compression,     // summarize chat history
+            microphone,      // start audio mode
         })
+    }
+}
+
+/// 检查是否服务端所在电脑发起的请求
+fn is_local_request(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            // 本机 IPv4 地址
+            v4.is_loopback() || // 127.0.0.1
+            v4.is_private()     // 私有地址（包括 127.x.x.x）
+        },
+        IpAddr::V6(v6) => {
+            v6.is_loopback() || // ::1
+            v6.is_unicast_link_local() // 链路本地地址
+        },
     }
 }

@@ -995,9 +995,11 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             microphoneImg.src = '{}';
             microphoneDiv.title = '{}';
         }}
-        fetch('http://{}:{}{}/microphone/'+current_close_microphone).catch(error => {{
-            console.error('Failed set microphone:', error);
-        }});
+        if (!current_close_microphone) {{ // 关闭转开启不需要主动修改
+            fetch('http://{}:{}{}/microphone/'+current_close_microphone).catch(error => {{
+                console.error('Failed set microphone:', error);
+            }});
+        }}
     }}", page_data.microphone[2], ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0], PARAS.addr_str, PARAS.port, v);
     result += r###"
     // 监听点击语音模式按钮
@@ -1659,7 +1661,7 @@ print(b)
     //showApprovalWindow('是否允许运行该工具？', true);", PARAS.addr_str, PARAS.port, v);
     result += r###"
     // 获取用户发起提问时提交的信息
-    function get_url() {
+    function get_url(start_microphone) {
         var req = document.getElementById("input_query").value;
         if (req !== '') { // 输入不为空才不在界面显示输入内容
             emptyInput = false;
@@ -1721,7 +1723,7 @@ print(b)
     result += r###"
         document.getElementById('input_query').disabled = true; // 完成回复之前禁止继续提问
         // 将参数加到问题后面
-        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature+"&topp="+para_top_p+"&tools="+para_tool+"&compress="+compress+"&plan="+para_plan+"&skills="+para_skill;
+        let req2 = q+"&model="+para_model+"&chatname="+para_chat_name+"&uuid="+para_uuid+"&stream="+para_stm+"&web="+para_web+"&num="+para_num+"&prompt="+para_prompt+"&voice="+para_voice+"&effort="+para_effort+"&temp="+para_temperature+"&topp="+para_top_p+"&tools="+para_tool+"&compress="+compress+"&plan="+para_plan+"&skills="+para_skill+"&microphone="+start_microphone;
         compress = 'false';
         return [req, req2];
     }
@@ -1742,7 +1744,7 @@ print(b)
     }
     // 提交问题并获取答案
     let controller = null;
-    async function send_query_receive_answer() {
+    async function send_query_receive_answer(start_microphone) {
         // 从服务器获取stream内容
         no_message = true;
         already_clear_log = false;
@@ -1754,7 +1756,7 @@ print(b)
     result += r###"        isStopped = false;
         // 由于EventSource不支持post，因此无法将问题通过body传递，只能放到url中通过url参数传递，但url有长度限制（好像大部分浏览器是2k），因此输入内容长度不能太长
         // 这里用fetch发送post，将问题字符串通过body传递，其他简单参数通过url传递
-        let [req, req2] = get_url();
+        let [req, req2] = get_url(start_microphone);
         controller = new AbortController();
         const response = await fetch(address+req2, {
             method: 'POST',
@@ -1936,7 +1938,7 @@ print(b)
                 e.preventDefault(); // 阻止默认的换行行为
                 if (isStopped) { // 发送问题
                     del_id = '';
-                    await send_query_receive_answer();
+                    await send_query_receive_answer(false);
                 } else { // 停止接收回答
                     //if (reader) reader.cancel();
                     controller.abort();
@@ -1951,7 +1953,7 @@ print(b)
     document.getElementById("submit_span").addEventListener("click", async(e) => {
         if (isStopped) { // 发送问题
             del_id = '';
-            await send_query_receive_answer();
+            await send_query_receive_answer(false);
         } else { // 停止接收回答
             //if (reader) reader.cancel();
             controller.abort();
@@ -1969,7 +1971,7 @@ print(b)
         if (!current_close_microphone) { // 此时开启状态
             if (isStopped) { // 发送问题
                 del_id = '';
-                await send_query_receive_answer();
+                await send_query_receive_answer(true);
             } else { // 停止接收回答
                 //if (reader) reader.cancel();
                 controller.abort();
@@ -1984,7 +1986,7 @@ print(b)
         if (isStopped) { // 发送问题
             del_id = '';
             compress = 'true';
-            await send_query_receive_answer();
+            await send_query_receive_answer(false);
         } else { // 停止接收回答
             //if (reader) reader.cancel();
             controller.abort();

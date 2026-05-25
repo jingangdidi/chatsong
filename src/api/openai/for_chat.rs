@@ -48,20 +48,26 @@ const THOUGHT_END: &[&str] = &["</think>", "</thought>", "</thinking>", "</reaso
 /// uuid: 当前对话的uuid
 /// sender: 管道发送stream答案
 /// client: 创建的openai客户端
-/// parameters: 提问的参数
+/// para_builder: 创建提问参数
 /// model: 模型名称
+/// show_thought: 是否显示思考过程
+/// qa_msg_p: 上下文限制
+/// is_local: 是否服务端所在电脑发起的请求
+/// start_microphone: 是否在前端页面点击麦克风图标开启语音模式
 pub async fn use_stream(
     uuid: String,
     sender: Sender<Vec<u8>>,
     client: Client,
-    //parameters: ChatCompletionParameters,
     mut para_builder: ChatCompletionParametersBuilder,
     model: &str,
     show_thought: bool,
     qa_msg_p: Option<(usize, usize, bool)>,
+    is_local: bool,
+    start_microphone: bool,
 ) -> Result<(), MyError> {
     let mut rx_audio: Option<UnboundedReceiver<String>> = None;
-    if *START_AUDIO.lock().await {
+    if start_microphone {
+        *START_AUDIO.lock().await = true;
         // 将发送端存入全局
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         {
@@ -71,6 +77,7 @@ pub async fn use_stream(
             rx_audio = Some(rx);
         }
     } else {
+        *START_AUDIO.lock().await = false;
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         {
             let mut guard = AUDIO.lock().await;
@@ -79,6 +86,14 @@ pub async fn use_stream(
     };
 
     'outer: loop {
+        // 如果不是服务端所在电脑发起的请求，且点击了页面左下角麦克风图标，则直接退出
+        // 只有服务端所在电脑发起的请求才支持语音模式
+        // (不是本机请求 && 点击了麦克风图标) || (是本机请求 && 点击了麦克风图标 && 未开启asr)
+        if (!is_local && start_microphone) || (is_local && start_microphone && cfg!(not(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal")))) {
+            *START_AUDIO.lock().await = false;
+            event!(Level::WARN, "{} ASR not enabled, stop audio mode", uuid);
+            break
+        }
         if let Some(ref mut rx) = rx_audio {
             event!(Level::INFO, "{} waiting audio string ...", uuid);
             if let Some(msg) = rx.recv().await {
@@ -395,9 +410,10 @@ pub async fn use_stream(
     }
     if rx_audio.is_some() {
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
-        if *START_AUDIO.lock().await {
-            *START_AUDIO.lock().await = false;
-        } else {
+        {
+            if *START_AUDIO.lock().await {
+                *START_AUDIO.lock().await = false;
+            }
             let mut guard = AUDIO.lock().await;
             *guard = None;
         }
