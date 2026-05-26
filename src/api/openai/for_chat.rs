@@ -16,7 +16,7 @@ use openai_dive::v1::{
     },
 };
 use tokio::sync::mpsc::{Sender, UnboundedReceiver};
-use tokio::sync::Mutex;
+use tokio::sync::Notify;
 //use tokio::time::{sleep, Duration};
 use tracing::{event, Level};
 
@@ -39,7 +39,7 @@ use crate::asr::AUDIO;
 #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
 use tokio::sync::mpsc;
 
-pub static START_AUDIO: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
+pub static STOP_NOTIFY: Lazy<Notify> = Lazy::new(|| Notify::new());
 
 const THOUGHT_START: &[&str] = &["<think>", "<thought>", "<thinking>", "<reasoning>"];
 const THOUGHT_END: &[&str] = &["</think>", "</thought>", "</thinking>", "</reasoning>"];
@@ -67,7 +67,6 @@ pub async fn use_stream(
 ) -> Result<(), MyError> {
     let mut rx_audio: Option<UnboundedReceiver<String>> = None;
     if start_microphone {
-        *START_AUDIO.lock().await = true;
         // 将发送端存入全局
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         {
@@ -77,7 +76,6 @@ pub async fn use_stream(
             rx_audio = Some(rx);
         }
     } else {
-        *START_AUDIO.lock().await = false;
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         {
             let mut guard = AUDIO.lock().await;
@@ -90,27 +88,39 @@ pub async fn use_stream(
         // 只有服务端所在电脑发起的请求才支持语音模式
         // (不是本机请求 && 点击了麦克风图标) || (是本机请求 && 点击了麦克风图标 && 未开启asr)
         if (!is_local && start_microphone) || (is_local && start_microphone && cfg!(not(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal")))) {
-            *START_AUDIO.lock().await = false;
             event!(Level::WARN, "{} ASR not enabled, stop audio mode", uuid);
             break
         }
         if let Some(ref mut rx) = rx_audio {
             event!(Level::INFO, "{} waiting audio string ...", uuid);
-            if let Some(msg) = rx.recv().await {
-                event!(Level::INFO, "{} received audio string: {}", uuid, msg);
-                if msg == "停止对话" || msg == "stop chat" {
+            // 创建通知 future（每次进入 select! 都需重新创建，因为 Notify 是一次性的）
+            let notified = Box::pin(STOP_NOTIFY.notified());
+            tokio::pin!(notified);
+            tokio::select! {
+                msg = rx.recv() => {
+                    if let Some(msg) = msg {
+                        event!(Level::INFO, "{} received audio string: {}", uuid, msg);
+                        if msg == "停止对话" || msg == "stop chat" {
+                            break
+                        }
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, get_messages_num(&uuid), msg.replace("\n", "srxtzn"), false, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break
+                        }
+                        let message = ChatMessage::User{
+                            content: ChatMessageContent::Text(msg),
+                            name: None,
+                        };
+                        insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p.clone(), model, None);
+                    } else {
+                        break
+                    }
+                },
+                _ = &mut *notified => {
+                    // 前端主动终止
                     break
                 }
-                if let Err(e) = sender.send(MainData::prepare_sse(&uuid, get_messages_num(&uuid), msg.replace("\n", "srxtzn"), false, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
-                    event!(Level::WARN, "channel send error: {:?}", e);
-                    break
-                }
-                let message = ChatMessage::User{
-                    content: ChatMessageContent::Text(msg),
-                    name: None,
-                };
-                insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p.clone(), model, None);
-            };
+            }
         }
         // 获取当前message，创建parameters
         para_builder.messages(get_messages(&uuid));
@@ -404,16 +414,13 @@ pub async fn use_stream(
         // 将回答加到问答记录中
         insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
         // 未开启语音模式，或关闭了语音模式，则跳出循环，结束对话
-        if rx_audio.is_none() || !*START_AUDIO.lock().await {
+        if rx_audio.is_none() || !start_microphone {
             break
         }
     }
     if rx_audio.is_some() {
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         {
-            if *START_AUDIO.lock().await {
-                *START_AUDIO.lock().await = false;
-            }
             let mut guard = AUDIO.lock().await;
             *guard = None;
         }

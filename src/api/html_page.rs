@@ -983,7 +983,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         incognito_toggle(null);
     })
     // 切换语音模式，参数only_update为null表示进行toggle，为true表示更新为开启语音模式，false表示更新为关闭语音模式
-    function microphone_toggle() {
+    function close_microphone_toggle() {
         const microphoneDiv = document.getElementById('left-microphone');
         const microphoneImg = document.getElementById('microphone');
 "###;
@@ -995,16 +995,26 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             microphoneImg.src = '{}';
             microphoneDiv.title = '{}';
         }}
-        if (!current_close_microphone) {{ // 关闭转开启不需要主动修改
-            fetch('http://{}:{}{}/microphone/'+current_close_microphone).catch(error => {{
-                console.error('Failed set microphone:', error);
+        if (!current_close_microphone) {{
+            fetch('http://{}:{}{}/microphone').catch(error => {{ // 关闭语音模式
+                console.error('Failed close microphone:', error);
             }});
         }}
     }}", page_data.microphone[2], ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0], PARAS.addr_str, PARAS.port, v);
     result += r###"
-    // 监听点击语音模式按钮
+    // 监听点击关闭语音模式按钮
     document.getElementById('left-microphone').addEventListener('click', function(event) {
-        microphone_toggle();
+        close_microphone_toggle();
+    })
+    // 监听点击停止对话按钮
+    document.getElementById('submit_span').addEventListener('click', function(event) {
+        const microphoneDiv = document.getElementById('left-microphone');
+"###;
+    result += &format!("        const current_close_microphone = microphoneDiv.title.substring(0, 2) === '{}';", page_data.microphone[2]);
+    result += r###"
+        if (!current_close_microphone) {
+            close_microphone_toggle();
+        }
     })
     // 使用事件委托监听点击事件
     document.addEventListener('click', async function(event) {
@@ -1839,17 +1849,12 @@ print(b)
                         document.getElementById("show-out-token").value = jsonData.out_token;
                         document.getElementById("show-context-token").value = jsonData.context_token;
                         related_uuid(jsonData.related_uuid);
-"###;
-    result += &format!("                        // 更新语音模式图标
+                        // 更新语音模式图标
                         const microphoneDiv = document.getElementById('left-microphone');
                         const microphoneImg = document.getElementById('microphone');
-                        if (jsonData.microphone) {{ // 设为开启状态
-                            microphoneImg.src = '{}';
-                            microphoneDiv.title = '{}';
-                        }} else {{ // 设为关闭状态
-                            microphoneImg.src = '{}';
-                            microphoneDiv.title = '{}';
-                        }}", ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0]);
+"###;
+    result += &format!("microphoneImg.src = '{}';
+                        microphoneDiv.title = '{}';", ICON_MICROPHONE0, page_data.microphone[0]);
     result += r###"
                         if (autoScroll) {
                             scroll();

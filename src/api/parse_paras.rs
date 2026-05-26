@@ -128,6 +128,16 @@ struct Paras {
     #[argh(option, short = 'E')]
     role: Option<String>,
 
+    /// wake words, multiple words separated by commas, default: 你好,hello
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[argh(option, short = 'W')]
+    wake_words: Option<String>,
+
+    /// stop words, multiple words separated by commas, default: 结束,stop
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    #[argh(option, short = 'P')]
+    stop_words: Option<String>,
+
     /// skills path, default: ./skills
     #[argh(option, short = 'S')]
     skills: Option<String>,
@@ -168,6 +178,10 @@ pub struct ParsedParas {
     pub ref_audio:    Option<PathBuf>,             // omni tts语音克隆所需的参考音频文件
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal", feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
     pub role:         String,                      // asr和tts语音提问llm时prompt的身份，默认是`日常聊天助手`，可自定义身份，比如`李世民`
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    pub wake_words:       Vec<String>,                 // 语音asr唤醒词
+    #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+    pub stop_words:       Vec<String>,                 // 语音asr结束词
     pub outpath:      String,                      // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
     pub tools:        Tools,                       // all tools
     pub mcp_servers:  McpServers,                  // mcp servers
@@ -309,6 +323,16 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         role: match para.role {
             Some(r) => r,
             None => "日常聊天助手".to_string(),
+        },
+        #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        wake_words: match para.wake_words { // 语音asr唤醒词
+            Some(w) => w.split(",").map(|s| s.to_string()).collect(),
+            None => vec!["你好".to_string(), "hello".to_string()],
+        },
+        #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
+        stop_words: match para.stop_words { // 语音asr结束词
+            Some(w) => w.split(",").map(|s| s.to_string()).collect(),
+            None => vec!["结束".to_string(), "stop".to_string()],
         },
         outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
             Some(o) => get_outpath(&o),

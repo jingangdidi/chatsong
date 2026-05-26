@@ -80,7 +80,6 @@ use crate::{
         for_speech::create_speech, // 调用openai的api生成speech
         for_transcription::create_transcription, // 调用openai的api从音频提取文本
         for_translation::create_translation, // 调用openai的api将音频翻译为指定语言的文本
-        for_chat::START_AUDIO,
     },
     error::MyError,
     tools::{
@@ -126,12 +125,11 @@ pub struct MetaData {
     context_token: u32,                   // context token
     current_token: u32,                   // 当前问题或答案的token数，流式输出时该值>0，传递最终token数，问题或非流式输出的答案这里为0
     is_incognito:  bool,                  // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
-    microphone:    bool,                  // 是否语音模式
 }
 
 impl MetaData {
     /// new method
-    pub async fn new(uuid: String, current_token: Option<u32>) -> Self {
+    pub fn new(uuid: String, current_token: Option<u32>) -> Self {
         // 获取与当前uuid相关的所有uuid
         let related_uuid_prompt = get_all_related_uuid(&uuid); // Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
         // 获取当前uuid的prompt名称
@@ -152,7 +150,6 @@ impl MetaData {
                 None => get_msg_token(&uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
             },
             is_incognito:  is_incognito(&uuid),      // 是否无痕模型
-            microphone:    *START_AUDIO.lock().await,// 是否语音模式
         }
     }
 
@@ -274,7 +271,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         }
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let meta_data = MetaData::new(tmp_uuid.clone(), None).await;
+                        let meta_data = MetaData::new(tmp_uuid.clone(), None);
                         let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                         yield tmp;
                         // 结束stream
@@ -310,7 +307,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         yield tmp;
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let meta_data = MetaData::new(tmp_uuid.clone(), Some(0)).await;
+                        let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
                         let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                         yield tmp;
                         // 结束stream
@@ -429,7 +426,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     yield tmp;
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0)).await;
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                     let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
@@ -635,7 +632,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             }
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                            let meta_data = MetaData::new(tmp_uuid.clone(), None).await;
+                            let meta_data = MetaData::new(tmp_uuid.clone(), None);
                             let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                             yield tmp;
                             // 结束stream
@@ -692,7 +689,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             yield tmp;
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                            let meta_data = MetaData::new(tmp_uuid.clone(), Some(0)).await;
+                            let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
                             let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                             yield tmp;
                             // 结束stream
@@ -813,7 +810,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             yield tmp;
                         }
                     }
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0)).await;
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                 /*} else if clear_page { // 清空页面之前的chat记录，显示当前问题
@@ -838,7 +835,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     }
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0)).await;
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                 }

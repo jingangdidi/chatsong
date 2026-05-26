@@ -56,7 +56,7 @@ pub fn configure() -> Router {
         .route("/save-speech", get(save_speech)) // GET /v1/save-speech，下载生成的音频文件
         .route("/save/:id", get(save)) // GET /v1/save/:id，下载生成图片或音频文件
         .route("/delmsg/:id", get(del_msg)) // GET /v1/delmsg/:id，url指定要删除的信息id，从服务端删除
-        .route("/microphone/:id", get(microphone)) // GET /v1/microphone/:id，开启/关闭语音模式
+        .route("/microphone", get(microphone)) // GET /v1/microphone，关闭语音模式
         .route("/incognito", get(incognito)) // GET /v1/incognito，更新is_incognito
         .route("/approval", get(approval)) // GET /v1/approval，更新approval
         .route("/upload", post(upload)) // POST /v1/upload，上传文件

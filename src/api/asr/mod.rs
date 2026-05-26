@@ -88,8 +88,8 @@ use utils::read_wav_sample_resample;
 /// 全局变量，可以修改，存储当前开启语音模式的uuid
 pub static AUDIO: Lazy<Mutex<Option<(String, mpsc::UnboundedSender<String>)>>> = Lazy::new(|| Mutex::new(None));
 
-static START_WORDS: &[&str; 8] = &["你好，", "你好", "狗屁，", "狗屁", "hello,", "hello", "Hello,", "Hello"];
-static STOP_WORDS: &[&str; 8] = &["，结束。", "。结束。", "结束。", "，结束", "。结束", "结束？", "stop", "stop."];
+//static START_WORDS: &[&str; 8] = &["你好，", "你好", "狗屁，", "狗屁", "hello,", "hello", "Hello,", "Hello"];
+//static STOP_WORDS: &[&str; 8] = &["，结束。", "。结束。", "结束。", "，结束", "。结束", "结束？", "stop", "stop."];
 
 //const CHAT_PROMPT: &str = r###"你扮演严世蕃，我是《大明王朝1566》爱好者，你需要以李世民的身份与我进行日常聊天。回复时请严格遵守以下规则：
 //const CHAT_PROMPT: &str = r###"你扮演李世民，我是历史爱好者，你需要以李世民的身份与我进行日常聊天。回复时请严格遵守以下规则：
@@ -206,6 +206,10 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     // receive string from asr
     let role = format!("扮演{}", PARAS.role);
     let outpath = PARAS.outpath.clone();
+    let wake_words: Vec<String> = PARAS.wake_words.iter().flat_map(|w| format_word(w, true)).collect();
+    let stop_words: Vec<String> = PARAS.stop_words.iter().flat_map(|w| format_word(w, false)).collect();
+    event!(Level::INFO, "wake words: {}", wake_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
+    event!(Level::INFO, "stop words: {}", stop_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
     tokio::spawn(async move {
         let mut start = false;
         let mut run_llm_tts = false;
@@ -251,45 +255,45 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                 }
                 */
                 if start {
-                    for (i, w) in STOP_WORDS.iter().enumerate() {
+                    for (i, w) in stop_words.iter().enumerate() {
                         if asr_string.ends_with(w) {
                             start = false;
                             run_llm_tts = true;
                             whole_string += asr_string.strip_suffix(w).unwrap();
                             break
                         }
-                        if i+1 == STOP_WORDS.len() {
+                        if i+1 == stop_words.len() {
                             whole_string += &asr_string;
                         }
                     }
                     whole_uer_audio.extend(audio_chunk_24);
                 } else {
-                    for (i, w1) in START_WORDS.iter().enumerate() {
+                    for (i, w1) in wake_words.iter().enumerate() {
                         if asr_string.starts_with(w1) {
                             start = true;
                             whole_uer_audio = audio_chunk_24;
-                            for (j, w2) in STOP_WORDS.iter().enumerate() {
+                            for (j, w2) in stop_words.iter().enumerate() {
                                 if asr_string.ends_with(w2) {
                                     start = false;
                                     run_llm_tts = true;
                                     whole_string = asr_string.strip_prefix(w1).unwrap().strip_suffix(w2).unwrap().to_string();
                                     break
                                 }
-                                if j+1 == STOP_WORDS.len() {
+                                if j+1 == stop_words.len() {
                                     whole_string = asr_string.strip_prefix(w1).unwrap().to_string();
                                 }
                             }
                             break
                         }
-                        if i+1 == START_WORDS.len() {
+                        if i+1 == wake_words.len() {
                             event!(Level::INFO, "discard: {}", asr_string);
                         }
                     }
                     /*
-                    if START_WORDS.iter().any(|w| asr_string.starts_with(w)) {
+                    if wake_words.iter().any(|w| asr_string.starts_with(w)) {
                         start = true;
                         whole_string = asr_string;
-                        if STOP_WORDS.iter().any(|w| whole_string.ends_with(w)) {
+                        if stop_words.iter().any(|w| whole_string.ends_with(w)) {
                             start = false;
                             run_llm_tts = true;
                         }
@@ -767,4 +771,38 @@ fn append_line(file_path: &str, line: String) -> Result<(), MyError> {
 
     writeln!(file, "{}", line)?; // 自动添加换行符
     Ok(())
+}
+
+/// 英文首字母大写
+fn capitalize(s: &str) -> String {
+    let lowercase_s = s.to_lowercase();
+    let mut chars = lowercase_s.chars();
+    let first = chars.next().unwrap().to_uppercase().collect::<String>();
+    let rest = chars.collect::<String>();
+    format!("{}{}", first, rest)
+}
+
+/// 指定唤醒词或结束词加上标点
+fn format_word(word: &str, is_wake: bool) -> Vec<String> {
+    if is_wake { // 唤醒词
+        if word.chars().all(|c| c.is_ascii()) { // 英文
+            let capitalize_word = capitalize(word);
+            let mut words = vec![format!("{}, ", word), format!("{},", word)];
+            if capitalize_word != word {
+                words.push(format!("{}, ", capitalize_word));
+                words.push(format!("{},", capitalize_word));
+                words.push(word.to_string());
+                words.push(capitalize_word);
+            }
+            words
+        } else { // 中文
+            vec![format!("{}，", word), format!("{}。", word), format!("{}！", word), format!("{}？", word), word.to_string()]
+        }
+    } else { // 结束词
+        if word.chars().all(|c| c.is_ascii()) { // 英文
+            vec![format!("{}.", word), format!("{}!", word), format!("{}?", word), word.to_string()]
+        } else { // 中文
+            vec![format!("{}，", word), format!("{}。", word), format!("{}！", word), format!("{}？", word), word.to_string()]
+        }
+    }
 }
