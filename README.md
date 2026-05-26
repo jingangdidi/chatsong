@@ -231,7 +231,7 @@ cargo build --release --features asr-cuda,tts-cuda
 
 ## 🚥 Arguments
 ```
-Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-C <channels>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-A] [-k] -d <asr-dir> -D <tts-dir> [-R <ref-audio>] [-E <role>] [-S <skills>] [-b <bgc>] [-o <outpath>]
+Usage: chatsong [-c <config>] [-a <addr>] [-p <port>] [-e <engine-key>] [-s <search-key>] [-C <channels>] [-w <allowed-path>] [-g <graph>] [-m <maxage>] [-r] [-l] [-A] [-k] -d <asr-dir> -D <tts-dir> [-R <ref-audio>] [-E <role>] [-W <wake-words>] [-P <stop-words>] [-S <skills>] [-b <bgc>] [-o <outpath>]
 
 server for LLM api
 
@@ -253,6 +253,8 @@ Options:
   -D, --tts-dir       omni voice TTS model dir (config.json, tokenizer_config.json, model.safetensors, audio_tokenizer/config.json, audio_tokenizer/model.safetensors)
   -R, --ref-audio     reference audio for omni voice clone
   -E, --role          prompt role for asr and tts
+  -W, --wake-words    wake words, multiple words separated by commas, default: 你好,hello
+  -P, --stop-words    stop words, multiple words separated by commas, default: 结束,stop
   -S, --skills        skills path, default: ./skills
   -b, --bgc           background color, support specify hex color or built-in colors: 1(#E6E6E6), 2(#F5F5DC), 3(#FFFFE0), 4(#E6E6FA), default: 1
   -o, --outpath       output path, default: ./chat-log
