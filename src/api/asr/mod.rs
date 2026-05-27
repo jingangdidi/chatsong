@@ -782,27 +782,81 @@ fn capitalize(s: &str) -> String {
     format!("{}{}", first, rest)
 }
 
+// 标点
+static CH_PUNCTUATIONS: &[&str; 4] = &["，", "。", "！", "？"];
+static EN_PUNCTUATIONS: &[&str; 4] = &[",", ".", "!", "?"];
+
 /// 指定唤醒词或结束词加上标点
 fn format_word(word: &str, is_wake: bool) -> Vec<String> {
     if is_wake { // 唤醒词
         if word.chars().all(|c| c.is_ascii()) { // 英文
             let capitalize_word = capitalize(word);
-            let mut words = vec![format!("{}, ", word), format!("{},", word)];
+            let mut words = Vec::new();
+            // 后有标点
+            for suf in EN_PUNCTUATIONS {
+                words.push(format!("{}{}", word, suf));
+            }
+            // 首字母大写
             if capitalize_word != word {
-                words.push(format!("{}, ", capitalize_word));
-                words.push(format!("{},", capitalize_word));
-                words.push(word.to_string());
+                // 后有标点
+                for suf in EN_PUNCTUATIONS {
+                   words.push(format!("{}{}", capitalize_word, suf));
+                }
+                // 无标点
                 words.push(capitalize_word);
             }
+            // 无标点
+            words.push(word.to_string());
             words
         } else { // 中文
-            vec![format!("{}，", word), format!("{}。", word), format!("{}！", word), format!("{}？", word), word.to_string()]
+            let mut words = Vec::new();
+            // 后有标点
+            for suf in CH_PUNCTUATIONS {
+                words.push(format!("{}{}", word, suf));
+            }
+            // 无标点
+            words.push(word.to_string());
+            words
         }
     } else { // 结束词
         if word.chars().all(|c| c.is_ascii()) { // 英文
-            vec![format!("{}.", word), format!("{}!", word), format!("{}?", word), word.to_string()]
+            let mut words = Vec::new();
+            // 前后都有标点
+            for pre in EN_PUNCTUATIONS {
+                for suf in &EN_PUNCTUATIONS[1..] {
+                    words.push(format!("{} {}{}", pre, word, suf));
+                }
+            }
+            // 前有标点
+            for pre in EN_PUNCTUATIONS {
+                words.push(format!("{} {}", pre, word));
+            }
+            // 后有标点
+            for suf in &EN_PUNCTUATIONS[1..] {
+                words.push(format!("{}{}", word, suf));
+            }
+            // 无标点
+            words.push(word.to_string());
+            words
         } else { // 中文
-            vec![format!("{}，", word), format!("{}。", word), format!("{}！", word), format!("{}？", word), word.to_string()]
+            let mut words = Vec::new();
+            // 前后都有标点
+            for pre in CH_PUNCTUATIONS {
+                for suf in &CH_PUNCTUATIONS[1..] {
+                    words.push(format!("{}{}{}", pre, word, suf));
+                }
+            }
+            // 前有标点
+            for pre in CH_PUNCTUATIONS {
+                words.push(format!("{}{}", pre, word));
+            }
+            // 后有标点
+            for suf in &CH_PUNCTUATIONS[1..] {
+                words.push(format!("{}{}", word, suf));
+            }
+            // 无标点
+            words.push(word.to_string());
+            words
         }
     }
 }
