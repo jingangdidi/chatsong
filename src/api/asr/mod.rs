@@ -208,8 +208,8 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     let outpath = PARAS.outpath.clone();
     let wake_words: Vec<String> = PARAS.wake_words.iter().flat_map(|w| format_word(w, true)).collect();
     let stop_words: Vec<String> = PARAS.stop_words.iter().flat_map(|w| format_word(w, false)).collect();
-    event!(Level::INFO, "wake words: {}", wake_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
-    event!(Level::INFO, "stop words: {}", stop_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
+    event!(Level::INFO, "wake words: {}", PARAS.wake_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
+    event!(Level::INFO, "stop words: {}", PARAS.stop_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
     tokio::spawn(async move {
         let mut start = false;
         let mut run_llm_tts = false;
