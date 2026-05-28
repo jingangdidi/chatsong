@@ -11,6 +11,7 @@ use crate::{
         //pop_message_before_end, // 在保存指定uuid的chat记录之前，先去指定uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
         DisplayInfo, // 将之前问答记录显示到页面
         is_incognito, // 是否无痕模式
+        get_chat_name,
     },
     graph::get_all_related_uuid, // 获取与指定uuid相关的所有uuid
     parse_paras::PARAS, // 存储命令行参数的全局变量
@@ -438,6 +439,8 @@ impl PageInfo {
 /// 生成主页html字符串，css和js都写在html中
 /// v: api版本，例如：`/v1`
 pub fn create_main_page(uuid: &str, v: String) -> String {
+    // 获取当前对话名称
+    let chat_name = get_chat_name(uuid);
     // 获取当前uuid的问题和答案的总token数
     let token = get_token(uuid);
     // 获取当前uuid的prompt名称
@@ -853,7 +856,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     for log in logs.iter() {
         result += &format!("            var msg = document.getElementById('m{}');
             var tmp = `{}`; // 这里将模板中的chat内容（已将“`”做了转译，“script”结束标签去掉了“<”）存入变量中
-            if (tmp.startsWith('data:image/svg+xml;base64,')) {{ // 插入图片
+            if (tmp.startsWith('data:image/png;base64,')) {{ // 插入图片
                 let tmp_img = document.createElement('img');
                 tmp_img.src = tmp;
                 msg.appendChild(tmp_img);\n", log.id, log.content);
@@ -929,6 +932,9 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
 <!-- js -->
 <script type='module'>
 ";
+    if !chat_name.is_empty() {
+        result += &format!("    // 对话名称\n    document.getElementById('input-chat-name').value = \"{}\";\n", chat_name);
+    }
     result += &format!("    var address = 'http://{}:{}{}/chat?q='; // http://127.0.0.1:8080\n    var current_id = {}; // 当前最新message的id，之后插入新问题或答案的id会基于该值继续增加\n    var qa_num = {}; // 问答对数量\n    var m_num = {}; // 信息数\n    var last_is_answer = true; // 最后一条信息是否是回答\n", PARAS.addr_str, PARAS.port, v, next_msg_id, qa_num, m_num);
     result += r###"    var emptyInput = true; // 全局变量，存储输入问题是否为空
     var no_message = true; // 是否没有获取到效回复，没有获取到，则将添加的msg_res删掉
@@ -1716,6 +1722,9 @@ print(b)
         var para_num = document.getElementById("select-log-num").value;
         // 使用选择的prompt开启新对话
         var para_prompt = document.getElementById("select-prompt").value;
+        if (para_prompt !== '保持当前对话' && para_prompt !== 'keep current chat') {
+            para_chat_name = ''; // 开启新对话跳转时，不使用当前对话的名称
+        }
         // 使用选择生成音频的声音
         var para_voice = document.getElementById("select-voice").value;
         // 输入框无效，并显示信息
@@ -2146,7 +2155,7 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
     for log in logs.iter() {
         result += &format!("            var msg = document.getElementById('m{}');
             var tmp = `{}`; // 这里将模板中的chat内容（已将“`”做了转译，“script”结束标签去掉了“<”）存入变量中
-            if (tmp.startsWith('data:image/svg+xml;base64,')) {{ // 插入图片
+            if (tmp.startsWith('data:image/png;base64,')) {{ // 插入图片
                 let tmp_img = document.createElement('img');
                 tmp_img.src = tmp;
                 msg.appendChild(tmp_img);

@@ -607,13 +607,38 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
     match data.get_mut(uuid) {
         Some(info) => match chat_name { // update chat name
             Some(n) => {
-                if info.chat_name != n {
+                if info.chat_name.is_empty() && n.is_empty() { // 如果当前对话名为空，且没有设置对话名，则使用问题的前10个中文字符，或前5个英文单词
+                    if let ChatMessage::User{content, ..} = &message {
+                        if let ChatMessageContent::Text(t) = content {
+                            info.chat_name = extract_prefix(&t, 10);
+                        }
+                    }
+                } else if info.chat_name != n {
                     info.chat_name = n;
                 }
             },
-            None => (),
+            None => if info.chat_name.is_empty() { // 如果当前对话名为空，则使用问题的前10个中文字符，或前5个英文单词
+                if let ChatMessage::User{content, ..} = &message {
+                    if let ChatMessageContent::Text(t) = content {
+                        info.chat_name = extract_prefix(&t, 10);
+                    }
+                }
+            },
         },
         None => {
+            let chat_name = if chat_name == None {
+                if let ChatMessage::User{content, ..} = &message {
+                    if let ChatMessageContent::Text(t) = content {
+                        Some(extract_prefix(&t, 10))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                chat_name
+            };
             // 从本地log文件加载或创建新Info对象
             data.insert(uuid.to_string(), Info::load_or_init(uuid, chat_name));
             // 更新刚插入的uuid的prompt，以及名称和内容
@@ -1822,4 +1847,67 @@ pub fn get_file_for_download(uuid: &str, idx: usize) -> Option<(String, bool)> {
     } else { // 索引出界
         None
     }
+}
+
+/// 判断字符是否为中文（CJK统一表意文字范围）
+fn is_chinese_char(c: char) -> bool {
+    matches!(c,
+        '\u{3400}'..='\u{4dbf}' | // CJK扩展A
+        '\u{4e00}'..='\u{9fff}' | // CJK统一表意文字
+        '\u{f900}'..='\u{faff}' | // CJK兼容表意文字
+        '\u{20000}'..='\u{2a6df}' // CJK扩展B
+    )
+}
+
+/// 判断字符是否为英文字母或数字
+fn is_ascii_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+}
+
+/// 提取前N个单位（中文字符或英文单词），总数不超过limit
+/// 用户没有设置对话名称，则自动从的输入的问题中提取
+fn extract_prefix(s: &str, limit: usize) -> String {
+    if limit == 0 || s.is_empty() {
+        return "".to_string()
+    }
+
+    let mut count = 0;               // 已提取的单位数
+    let mut result = String::new();  // 结果字符串
+    let mut in_english_word = false; // 是否在英文单词内
+
+    for ch in s.chars() {
+        if is_chinese_char(ch) {
+            // 中文：结束可能的英文单词，增加计数
+            if in_english_word {
+                in_english_word = false;
+            }
+
+            if count >= limit {
+                break
+            }
+
+            count += 1;
+            result.push(ch);
+        } else if is_ascii_word_char(ch) {
+            // 英文字符：新单词开始时增加计数
+            if !in_english_word {
+                if count >= limit {
+                    break
+                }
+                count += 1;
+                in_english_word = true;
+            }
+            // 添加到结果
+            result.push(ch);
+        } else {
+            // 分隔符：结束英文单词
+            if in_english_word {
+                in_english_word = false;
+            }
+            // 保留分隔符到结果
+            result.push(ch);
+        }
+    }
+
+    result
 }

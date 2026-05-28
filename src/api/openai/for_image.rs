@@ -123,7 +123,7 @@ pub async fn create_image(uuid: &str, q: &str, model: String, endpoint: &str, ap
         let name = paths[0].replace(&format!("{}/{}/", PARAS.outpath, uuid), "");
         match &result.data[0] { // 因为只绘制一张图，所以选第一个即可
             ImageData::Url{url, ..} => Ok((name, url.clone())),
-            ImageData::B64Json{b64_json, ..} => Ok((name, format!("data:image/svg+xml;base64,{b64_json}"))),
+            ImageData::B64Json{b64_json, ..} => Ok((name, format!("data:image/png;base64,{b64_json}"))),
         }
     } else {
         Err(MyError::ParaError{para: "save created image failed".to_string()})
@@ -202,7 +202,7 @@ pub async fn create_edit_image(uuid: &str, uploaded_image: Option<String>, q: St
         let name = paths[0].replace(&format!("{}/{}/", PARAS.outpath, uuid), "");
         match &result.data[0] { // 因为只绘制一张图，所以选第一个即可
             ImageData::Url{url, ..} => Ok((name, url.clone())),
-            ImageData::B64Json{b64_json, ..} => Ok((name, format!("data:image/svg+xml;base64,{b64_json}"))),
+            ImageData::B64Json{b64_json, ..} => Ok((name, format!("data:image/png;base64,{b64_json}"))),
         }
     } else {
         Err(MyError::ParaError{para: "save created image failed".to_string()})
@@ -214,7 +214,7 @@ pub async fn create_edit_image(uuid: &str, uploaded_image: Option<String>, q: St
 pub fn image_to_base64(uuid: &str, image_name: &str) -> Result<String, MyError> {
     let image_file = format!("{}/{}/{}", PARAS.outpath, uuid, image_name);
     let data: Vec<u8> = read(image_file)?; // 相当于`File::open`+`read_to_end`，返回`Result<Vec<u8>>`
-    Ok(format!("data:image/svg+xml;base64,{}", general_purpose::STANDARD.encode(data)))
+    Ok(format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(data)))
 }
 
 /// base64转回图片，返回保存的图片路径
@@ -222,8 +222,8 @@ pub fn image_to_base64(uuid: &str, image_name: &str) -> Result<String, MyError> 
 pub fn base64_to_png(uuid: &str, b64: &str) -> Result<String, MyError> {
     let uuid_path = format!("{}/{}", PARAS.outpath, uuid);
     let full_path = generate_file_name(&uuid_path, 16, "png"); // 生成由大写英文字母构成的指定长度随机文件名
-    let bytes = if b64.starts_with("data:image/svg+xml;base64,") {
-        general_purpose::STANDARD.decode(b64.strip_prefix("data:image/svg+xml;base64,").unwrap()).map_err(|e| MyError::Base64DecodeError{file: full_path.clone(), error: e})?
+    let bytes = if b64.starts_with("data:image/png;base64,") {
+        general_purpose::STANDARD.decode(b64.strip_prefix("data:image/png;base64,").unwrap()).map_err(|e| MyError::Base64DecodeError{file: full_path.clone(), error: e})?
     } else {
         general_purpose::STANDARD.decode(b64).map_err(|e| MyError::Base64DecodeError{file: full_path.clone(), error: e})?
     };
