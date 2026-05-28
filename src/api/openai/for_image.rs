@@ -1,4 +1,5 @@
 use std::fs::{read, write};
+use std::path::Path;
 
 use base64::{engine::general_purpose, Engine as _};
 use openai_dive::v1::{
@@ -209,12 +210,17 @@ pub async fn create_edit_image(uuid: &str, uploaded_image: Option<String>, q: St
     }
 }
 
+/// 文件转base64
+pub fn image_to_base64_helper(file: impl AsRef<Path>) -> Result<String, MyError> {
+    let data: Vec<u8> = read(file)?; // 相当于`File::open`+`read_to_end`，返回`Result<Vec<u8>>`
+    Ok(format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(data)))
+}
+
 /// 图片转base64，返回base64编码的字符串
 /// openai_dive 1.0.0使用的是base64 0.22
 pub fn image_to_base64(uuid: &str, image_name: &str) -> Result<String, MyError> {
     let image_file = format!("{}/{}/{}", PARAS.outpath, uuid, image_name);
-    let data: Vec<u8> = read(image_file)?; // 相当于`File::open`+`read_to_end`，返回`Result<Vec<u8>>`
-    Ok(format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(data)))
+    image_to_base64_helper(&image_file)
 }
 
 /// base64转回图片，返回保存的图片路径

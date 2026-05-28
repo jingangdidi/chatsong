@@ -13,6 +13,9 @@ use openai_dive::v1::{
         ChatCompletionToolType,
         ChatMessage,
         ChatMessageContent,
+        ChatMessageContentPart,
+        ChatMessageImageContentPart,
+        ImageUrlType,
     },
 };
 use regex::Regex;
@@ -422,12 +425,16 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     }
                     //println!("raw  args: {:?}", j.1);
                     //println!("safe args: {:?}", safe_args);
-                    let (result, language) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
+                    let (result, language, is_image) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
                         Ok(inner_result) => {
                             match inner_result {
                                 Ok((result, file_option)) => {
                                     try_count = 0;
-                                    (result, get_file_language(file_option))
+                                    if name_id[0].starts_with("load_image") {
+                                        (result, get_file_language(file_option), true)
+                                    } else {
+                                        (result, get_file_language(file_option), false)
+                                    }
                                 },
                                 Err(e) => {
                                     try_count += 1;
@@ -441,7 +448,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                                     } else {
                                         event!(Level::WARN, "{} call tool {} error, not try again, return to model\n{}\n\nraw args: {}\n\nsafe args: {}", uuid, name_id[0], try_count, j.1, safe_args);
                                         try_count = 0;
-                                        (format!("call tool {} error: {}", name_id[0], e), "text".to_string())
+                                        (format!("call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                     }
                                 },
                             }
@@ -457,7 +464,9 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     // 1. send call tool result to user page
                     let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
                     // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
-                    let test_result = if result.contains("```") {
+                    let test_result = if is_image {
+                        "load image successful".to_string()
+                    } else if result.contains("```") {
                         result.clone()
                     } else {
                         format!("```{}\n{}\n```", language, result)
@@ -500,7 +509,22 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                         history_messages.push(raw_message.clone());
                         is_first = false;
                     }
-                    history_messages.push(ChatMessage::Tool{content: ChatMessageContent::Text(result), tool_call_id: j.2});
+                    if is_image {
+                        history_messages.push(ChatMessage::Tool{
+                            content: ChatMessageContent::ContentPart(vec![ChatMessageContentPart::Image(
+                                ChatMessageImageContentPart {
+                                    r#type: "image_url".to_string(),
+                                    image_url: ImageUrlType {
+                                        url: result, // Either a URL of the image or the base64 encoded image data
+                                        detail: None,
+                                    },
+                                },
+                            )]),
+                            tool_call_id: j.2,
+                        });
+                    } else {
+                        history_messages.push(ChatMessage::Tool{content: ChatMessageContent::Text(result), tool_call_id: j.2});
+                    }
                 }
             },
             CallToolResult::Text(test_result) => { // normal text result, not call tool
