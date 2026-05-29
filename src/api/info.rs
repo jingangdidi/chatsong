@@ -608,36 +608,27 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
         Some(info) => match chat_name { // update chat name
             Some(n) => {
                 if info.chat_name.is_empty() && n.is_empty() { // 如果当前对话名为空，且没有设置对话名，则使用问题的前10个中文字符，或前5个英文单词
-                    if let ChatMessage::User{content, ..} = &message {
-                        if let ChatMessageContent::Text(t) = content {
-                            info.chat_name = extract_prefix(&t, 10);
-                        }
+                    if let Some(name) = get_chat_name_from_user_msg(&message) {
+                        info.chat_name = name;
                     }
-                } else if info.chat_name != n {
+                } else if info.chat_name != n && !n.is_empty() {
                     info.chat_name = n;
                 }
             },
             None => if info.chat_name.is_empty() { // 如果当前对话名为空，则使用问题的前10个中文字符，或前5个英文单词
-                if let ChatMessage::User{content, ..} = &message {
-                    if let ChatMessageContent::Text(t) = content {
-                        info.chat_name = extract_prefix(&t, 10);
-                    }
+                if let Some(name) = get_chat_name_from_user_msg(&message) {
+                    info.chat_name = name;
                 }
             },
         },
         None => {
-            let chat_name = if chat_name == None {
-                if let ChatMessage::User{content, ..} = &message {
-                    if let ChatMessageContent::Text(t) = content {
-                        Some(extract_prefix(&t, 10))
-                    } else {
-                        None
-                    }
+            let chat_name = match chat_name {
+                Some(n) => if n.is_empty() {
+                    get_chat_name_from_user_msg(&message)
                 } else {
-                    None
-                }
-            } else {
-                chat_name
+                    Some(n)
+                },
+                None => get_chat_name_from_user_msg(&message),
             };
             // 从本地log文件加载或创建新Info对象
             data.insert(uuid.to_string(), Info::load_or_init(uuid, chat_name));
@@ -703,6 +694,19 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
     }
     // 插入message
     info.messages.push(chat_data);
+}
+
+/// get chat name from user message
+fn get_chat_name_from_user_msg(msg: &ChatMessage) -> Option<String> {
+    if let ChatMessage::User{content, ..} = &msg {
+        if let ChatMessageContent::Text(t) = content {
+            Some(extract_prefix(&t, 10))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 /// update approval for call tools
