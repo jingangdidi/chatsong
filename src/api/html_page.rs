@@ -160,7 +160,7 @@ impl PageInfo {
                     label:       "contextual messages".to_string(),
                     title:       "Opting to include the maximum number of Q&A pairs or messages in each inquiry can conserve tokens".to_string(),
                     disabled:    Some("select number".to_string()),
-                    option:      Some(vec![("unlimit".to_string(), None), ("1 Q&A pair".to_string(), None), ("2 Q&A pairs".to_string(), None), ("3 Q&A pairs".to_string(), None), ("4 Q&A pairs".to_string(), None), ("5 Q&A pairs".to_string(), None), ("prompt + 1 Q&A pair".to_string(), None), ("prompt + 2 Q&A pairs".to_string(), None), ("prompt + 3 Q&A pairs".to_string(), None), ("prompt + 4 Q&A pairs".to_string(), None), ("prompt + 5 Q&A pairs".to_string(), None), ("1 message".to_string(), None), ("2 messages".to_string(), None), ("3 messages".to_string(), None), ("4 messages".to_string(), None), ("5 messages".to_string(), None), ("prompt + 1 message".to_string(), None), ("prompt + 2 messages".to_string(), None), ("prompt + 3 messages".to_string(), None), ("prompt + 4 messages".to_string(), None), ("prompt + 5 messages".to_string(), None)]),
+                    option:      Some(vec![("anchored expanding window".to_string(), None), ("unlimit".to_string(), None), ("1 Q&A pair".to_string(), None), ("2 Q&A pairs".to_string(), None), ("3 Q&A pairs".to_string(), None), ("4 Q&A pairs".to_string(), None), ("5 Q&A pairs".to_string(), None), ("prompt + 1 Q&A pair".to_string(), None), ("prompt + 2 Q&A pairs".to_string(), None), ("prompt + 3 Q&A pairs".to_string(), None), ("prompt + 4 Q&A pairs".to_string(), None), ("prompt + 5 Q&A pairs".to_string(), None), ("1 message".to_string(), None), ("2 messages".to_string(), None), ("3 messages".to_string(), None), ("4 messages".to_string(), None), ("5 messages".to_string(), None), ("prompt + 1 message".to_string(), None), ("prompt + 2 messages".to_string(), None), ("prompt + 3 messages".to_string(), None), ("prompt + 4 messages".to_string(), None), ("prompt + 5 messages".to_string(), None)]),
                     placeholder: None,
                 },
                 web: LeftInfo{ // 网络搜索
@@ -320,7 +320,7 @@ impl PageInfo {
                     label:       "上下文消息数".to_string(),
                     title:       "选择每次提问包含的最多问答对或消息数量，可以节省token".to_string(),
                     disabled:    Some("选择数量".to_string()),
-                    option:      Some(vec![("不限制".to_string(), None), ("1对Q&A".to_string(), None), ("2对Q&A".to_string(), None), ("3对Q&A".to_string(), None), ("4对Q&A".to_string(), None), ("5对Q&A".to_string(), None), ("prompt + 1对Q&A".to_string(), None), ("prompt + 2对Q&A".to_string(), None), ("prompt + 3对Q&A".to_string(), None), ("prompt + 4对Q&A".to_string(), None), ("prompt + 5对Q&A".to_string(), None), ("1条信息".to_string(), None), ("2条信息".to_string(), None), ("3条信息".to_string(), None), ("4条信息".to_string(), None), ("5条信息".to_string(), None), ("prompt + 1条信息".to_string(), None), ("prompt + 2条信息".to_string(), None), ("prompt + 3条信息".to_string(), None), ("prompt + 4条信息".to_string(), None), ("prompt + 5条信息".to_string(), None)]),
+                    option:      Some(vec![("锚定扩展".to_string(), None), ("不限制".to_string(), None), ("1对Q&A".to_string(), None), ("2对Q&A".to_string(), None), ("3对Q&A".to_string(), None), ("4对Q&A".to_string(), None), ("5对Q&A".to_string(), None), ("prompt + 1对Q&A".to_string(), None), ("prompt + 2对Q&A".to_string(), None), ("prompt + 3对Q&A".to_string(), None), ("prompt + 4对Q&A".to_string(), None), ("prompt + 5对Q&A".to_string(), None), ("1条信息".to_string(), None), ("2条信息".to_string(), None), ("3条信息".to_string(), None), ("4条信息".to_string(), None), ("5条信息".to_string(), None), ("prompt + 1条信息".to_string(), None), ("prompt + 2条信息".to_string(), None), ("prompt + 3条信息".to_string(), None), ("prompt + 4条信息".to_string(), None), ("prompt + 5条信息".to_string(), None)]),
                     placeholder: None,
                 },
                 web: LeftInfo{ // 网络搜索
@@ -557,13 +557,14 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <label>{}</label>
             <select id='select-log-num' class='left_para for_focus' name='num'>
                 <option disabled>--{}--</option>
+                <option value='expanding selected'>{}</option>
                 <option value='unlimit'>{}</option>
                 <option value='1qa'>{}</option>
                 <option value='2qa'>{}</option>
                 <option value='3qa'>{}</option>
                 <option value='4qa'>{}</option>
                 <option value='5qa'>{}</option>
-                <option value='p1qa' selected>{}</option>
+                <option value='p1qa'>{}</option>
                 <option value='p2qa'>{}</option>
                 <option value='p3qa'>{}</option>
                 <option value='p4qa'>{}</option>
@@ -652,7 +653,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <select id='select-related-uuid' class='left_para for_focus' name='related-uuid'>
-                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
+                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, tmp_option[21].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
     for i in related_uuid_prompt {
         result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
     }

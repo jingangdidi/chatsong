@@ -371,7 +371,7 @@ impl Info {
                             keep_qa_num += 1; // 一对完整问答只统计最后一个回答，中间其他回答不统计
                         }
                     }
-                    if keep_qa_num > self.qa_msg_p.0 {
+                    if keep_qa_num > self.qa_msg_p.0 || keep_qa_num > usize::MAX - self.qa_msg_p.0 { // ‵usize::MAX - self.qa_msg_p.0`表示向下扩展模式
                         break
                     }
                     if !is_answer && !m.data.is_hide() {
@@ -647,7 +647,13 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
     // 在插入新message之前先更新限制的问答对数量、限制的消息数量、提问是否包含prompt
     if let Some((qa, msg, with_prompt)) = qa_msg_p {
         // 更新限制的问答对数量
-        if qa != info.qa_msg_p.0 {
+        if qa == usize::MAX && msg == 0 { // 固定起始，向下扩展，为了与固定的窗口大小进行区分，这种模式用`最大值 - 当前值`作为要获取的窗口大小，并且每次加1
+            if info.qa_msg_p.0 == usize::MAX || info.qa_msg_p.0 < 1000000 {
+                info.qa_msg_p.0 = usize::MAX - 1; // 实际窗口大小是: usize::MAX - (usize::MAX - 1) = 1
+            } else {
+                info.qa_msg_p.0 -= 1;
+            }
+        } else if qa != info.qa_msg_p.0 {
             info.qa_msg_p.0 = qa;
         }
         // 更新限制的限制的消息数量
@@ -758,7 +764,11 @@ pub fn update_qa_msg_num(uuid: &str, qa_msg_p: Option<(usize, usize, bool)>) {
     if let Some(info) = data.get_mut(uuid) {
         if let Some((qa, msg, with_prompt)) = qa_msg_p {
             // 更新限制的问答对数量
-            if qa != info.qa_msg_p.0 {
+            if qa == usize::MAX && msg == 0 { // 固定起始，向下扩展，为了与固定的窗口大小进行区分，这种模式用`最大值 - 当前值`作为要获取的窗口大小，并且每次加1
+                if info.qa_msg_p.0 == usize::MAX || info.qa_msg_p.0 < 1000000 {
+                    info.qa_msg_p.0 = usize::MAX - 1; // 实际窗口大小是: usize::MAX - (usize::MAX - 1) = 1
+                }
+            } else if qa != info.qa_msg_p.0 {
                 info.qa_msg_p.0 = qa;
             }
             // 更新限制的限制的消息数量

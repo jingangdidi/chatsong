@@ -941,6 +941,7 @@ impl ClientPara {
         // 返回(问答对数量, 消息数量, 是否包含prompt)
         let qa_msg_p: Option<(usize, usize, bool)> = match params.get("num") {
             Some(n) => match n.as_str() {
+                "expanding" => Some((usize::MAX, 0, true)), // Some((无限制, 0, 包含prompt))
                 "unlimit" => Some((usize::MAX, usize::MAX, true)), // Some((无限制, 无限制, 包含prompt))
                 p_num_qa_msg => { // 格式：`数量qa`（指定数量个问答对，不包含prompt）、`p数量qa`（指定数量个问答对，包含prompt）、`数量`（指定数量个消息，不包含prompt）、`p数量`（指定数量个消息，包含prompt）
                     if p_num_qa_msg.ends_with("qa") { // 问答对
