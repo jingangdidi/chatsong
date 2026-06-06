@@ -61,6 +61,7 @@ use crate::{
         is_incognito, // 是否无痕模式
         get_chat_name,
         get_context_token,
+        get_context_start_end,
     },
     graph::{
         add_edge, // 将旧uuid与新uuid建立直接或间接关系
@@ -125,17 +126,21 @@ pub struct MetaData {
     context_token: u32,                   // context token
     current_token: u32,                   // 当前问题或答案的token数，流式输出时该值>0，传递最终token数，问题或非流式输出的答案这里为0
     is_incognito:  bool,                  // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
+    context_start: usize,                 // 上下文起始
+    context_end:   usize,                 // 上下文终止
 }
 
 impl MetaData {
     /// new method
-    pub fn new(uuid: String, current_token: Option<u32>) -> Self {
+    pub fn new(uuid: String, current_token: Option<u32>, is_q: bool) -> Self {
         // 获取与当前uuid相关的所有uuid
         let related_uuid_prompt = get_all_related_uuid(&uuid); // Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
         // 获取当前uuid的prompt名称
         let prompt_name = get_prompt_name(&uuid);
         // 获取当前uuid的问题和答案的总token数
         let token = get_token(&uuid);
+        // 获取当前上下文窗口的起始和终止索引
+        let (context_start, context_end) = get_context_start_end(&uuid, is_q);
         // MetaData
         Self {
             chat_name:     get_chat_name(&uuid),     // chat name
@@ -150,6 +155,8 @@ impl MetaData {
                 None => get_msg_token(&uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
             },
             is_incognito:  is_incognito(&uuid),      // 是否无痕模型
+            context_start,                           // 上下文起始
+            context_end,                             // 上下文终止
         }
     }
 
@@ -271,7 +278,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         }
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let meta_data = MetaData::new(tmp_uuid.clone(), None);
+                        let meta_data = MetaData::new(tmp_uuid.clone(), None, false);
                         let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                         yield tmp;
                         // 结束stream
@@ -307,7 +314,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         yield tmp;
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
+                        let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
                         let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                         yield tmp;
                         // 结束stream
@@ -426,7 +433,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     yield tmp;
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                     let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
@@ -632,7 +639,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             }
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                            let meta_data = MetaData::new(tmp_uuid.clone(), None);
+                            let meta_data = MetaData::new(tmp_uuid.clone(), None, false);
                             let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                             yield tmp;
                             // 结束stream
@@ -689,7 +696,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             yield tmp;
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                            let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
+                            let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
                             let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                             yield tmp;
                             // 结束stream
@@ -810,7 +817,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             yield tmp;
                         }
                     }
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                 /*} else if clear_page { // 清空页面之前的chat记录，显示当前问题
@@ -835,7 +842,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     }
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0));
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), true);
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                 }
@@ -967,14 +974,14 @@ impl ClientPara {
                             if compression { // 总结压缩的prompt占1个消息，因此这里加1
                                 Some((0, num+1, true)) // Some((0, 指定消息数量, 包含prompt))
                             } else {
-                                Some((0, num+1, true)) // Some((0, 指定消息数量, 包含prompt))
+                                Some((0, num, true)) // Some((0, 指定消息数量, 包含prompt))
                             }
                         } else { // `数量`（指定数量个消息，不包含prompt），例如：`1`
                             let num = p_num_qa_msg.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.to_string(), to: "usize".to_string(), error: e})?;
                             if compression { // 总结压缩的prompt占1个消息，因此这里加1
                                 Some((0, num+1, false)) // Some((0, 指定消息数量, 不包含prompt))
                             } else {
-                                Some((0, num+1, false)) // Some((0, 指定消息数量, 不包含prompt))
+                                Some((0, num, false)) // Some((0, 指定消息数量, 不包含prompt))
                             }
                         }
                     }

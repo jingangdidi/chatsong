@@ -557,8 +557,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <label>{}</label>
             <select id='select-log-num' class='left_para for_focus' name='num'>
                 <option disabled>--{}--</option>
-                <option value='expanding selected'>{}</option>
-                <option value='unlimit'>{}</option>
+                <option value='expanding'>{}</option>
+                <option value='unlimit' selected>{}</option>
                 <option value='1qa'>{}</option>
                 <option value='2qa'>{}</option>
                 <option value='3qa'>{}</option>
@@ -1677,6 +1677,44 @@ print(b)
     }}
     //showApprovalWindow('是否允许运行该工具？', true);", PARAS.addr_str, PARAS.port, v);
     result += r###"
+    // 高亮指定序号范围内的消息头像
+    function highlightMessageAvatars(start, end, highlightClass = 'avatar-highlight') {
+        // 确保输入是数字
+        start = parseInt(start);
+        end = parseInt(end);
+
+        if (isNaN(start) || isNaN(end) || start > end) {
+            console.error('无效的序号范围');
+            return;
+        }
+
+        for (let i = start; i <= end; i++) {
+            // 1. 尝试获取消息内容 div (id="m" + 序号)
+            const msgDiv = document.getElementById('m' + i);
+            // 2. 如果该消息存在 (处理序号不连续的情况)
+            if (msgDiv) {
+                // 3. 寻找对应的头像 img
+                // 根据你提供的 HTML 结构：
+                // .q_icon_query 是父容器，里面包含 #m0 和 .chat-icon > .chatgpt-icon
+                // 使用 closest 确保即使嵌套层级微调也能找到容器
+                const container = msgDiv.closest('.q_icon_query, .gpt-chat-box');
+                if (container) {
+                    const avatarImg = container.querySelector('.chatgpt-icon');
+                    // 4. 如果头像存在，添加高亮类
+                    if (avatarImg) {
+                        avatarImg.classList.add(highlightClass);
+                    }
+                }
+            }
+        }
+    }
+    // 取消高亮
+    function clearAvatarHighlight(highlightClass = 'avatar-highlight') {
+        const avatars = document.querySelectorAll(`.chatgpt-icon.${highlightClass}`);
+        avatars.forEach(img => {
+            img.classList.remove(highlightClass);
+        });
+    }
     // 获取用户发起提问时提交的信息
     function get_url(start_microphone) {
         var req = document.getElementById("input_query").value;
@@ -1859,6 +1897,9 @@ print(b)
                         document.getElementById("show-out-token").value = jsonData.out_token;
                         document.getElementById("show-context-token").value = jsonData.context_token;
                         related_uuid(jsonData.related_uuid);
+                        // 将窗口范围内的消息的头像border高亮
+                        clearAvatarHighlight();
+                        highlightMessageAvatars(jsonData.context_start, jsonData.context_end);
                         // 更新语音模式图标
                         const microphoneDiv = document.getElementById('left-microphone');
                         const microphoneImg = document.getElementById('microphone');

@@ -547,6 +547,14 @@
         box-shadow: 0 4px 3px 1px #FCFCFC, 0 6px 8px #D6D7D9, 0 -4px 4px #CECFD1, 0 -6px 4px #FEFEFE, inset 0 0 10px 0px var(--textarea-border-color);
     }
 
+    /* 窗口范围内的消息头像高亮样式 */
+    .chatgpt-icon.avatar-highlight {
+        border-color: var(--textarea-border-color) !important; /* 高亮边框颜色 */
+        box-shadow: 0 0 8px 2px rgba(113, 158, 206, 0.8) !important; /* 发光效果，这里的rgb颜色就是var(--textarea-border-color) */
+        z-index: 10; /* 确保层级在上面 */
+        position: relative;
+    }
+
     /* 提问 */
     .user-chat-box {
         max-width: 80%; /* 显示内容的宽度 */

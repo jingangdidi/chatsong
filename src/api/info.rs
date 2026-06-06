@@ -304,7 +304,7 @@ impl Info {
         }
     }
 
-    /// 根据限制的问答对数量，获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
+    /// 根据限制的问答对数量，获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数, skip_last_answer_num)
     /// 一对问答对可以有连续多个问题，以及连续多条答案，例如下面的示例，question1和answer4之间的多个消息都属于一对问答：
     /// +----------------------+
     /// |            question1 | 可能一条信息没有把问题描述完
@@ -338,9 +338,9 @@ impl Info {
     /// 正常情况0有3对问答对话：第1对（question1 + answer1）、第2对（question2 + answer2）、第3对（question3）
     /// 特殊情况1有2对问答对话：第1对（question1 + answer1）、第2对（question2 + answer2 + answer3 + answer4）
     /// 特殊情况2有3对问答对话：第1对（question1 + answer1）、第2对（question2 + answer2 + answer3 + answer4）、第3对（question3）
-    fn context_msg_num_by_qa(&self) -> (usize, usize, usize) {
+    fn context_msg_num_by_qa(&self) -> (usize, usize, usize, usize) {
         if self.qa_msg_p.0 == 0 || self.qa_msg_p.0 == usize::MAX { // 不通过问答对限制，或不限制问答对
-            (0, self.messages.len(), 0)
+            (0, self.messages.len(), 0, 0)
         } else {
             let mut keep_qa_num = 0; // 要保留的问答对数量
             let mut is_answer = false; // 是否是回答
@@ -386,11 +386,11 @@ impl Info {
                     keep_msg_num += 1;
                 }
             }
-            (self.messages.len() - keep_msg_num - keep_msg_hide_num - skip_last_answer_num - skip_last_answer_hide_num, keep_msg_num + keep_msg_hide_num, skip_last_answer_num + skip_last_answer_hide_num)
+            (self.messages.len() - keep_msg_num - keep_msg_hide_num - skip_last_answer_num - skip_last_answer_hide_num, keep_msg_num + keep_msg_hide_num, skip_last_answer_num + skip_last_answer_hide_num, skip_last_answer_num)
         }
     }
 
-    /// 根据限制的消息数量，获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
+    /// 根据限制的消息数量，获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数, skip_last_answer_num)
     /// 直接按照消息数统计，就没有按照问答对那么麻烦了，有1点需要注意：
     /// 最后一个信息不是问题而是回答：说明上次回答之后，用户没有输入新问题，而是直接又发起请求，此时将忽略最后1个回答或连续的多个回答，用最后一个问题继续提问。比如用户对答案不满意，更换了模型基于同一问题再问一次，这样就省去再输入一次问题
     /// 比如下面示例：
@@ -408,9 +408,9 @@ impl Info {
     /// | +----------------------| answer4              | |
     /// |                        +----------------------+ |
     /// +-------------------------------------------------+
-    fn context_msg_num(&self) -> (usize, usize, usize) {
+    fn context_msg_num(&self) -> (usize, usize, usize, usize) {
         if self.qa_msg_p.1 == 0 || self.qa_msg_p.1 == usize::MAX { // 不通过消息数限制，或不限制消息数
-            (0, self.messages.len(), 0)
+            (0, self.messages.len(), 0, 0)
         } else {
             let mut keep_msg_num = 0; // 要保留的消息数量
             let mut keep_msg_hide_num = 0; // 要保留的消息数量对应的隐藏信息数
@@ -438,7 +438,7 @@ impl Info {
                     break
                 }
             }
-            (self.messages.len() - keep_msg_num - keep_msg_hide_num - skip_last_answer_num - skip_last_answer_hide_num, keep_msg_num + keep_msg_hide_num, skip_last_answer_num + skip_last_answer_hide_num)
+            (self.messages.len() - keep_msg_num - keep_msg_hide_num - skip_last_answer_num - skip_last_answer_hide_num, keep_msg_num + keep_msg_hide_num, skip_last_answer_num + skip_last_answer_hide_num, skip_last_answer_num)
         }
     }
 
@@ -702,6 +702,41 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
     info.messages.push(chat_data);
 }
 
+/// 获取当前上下文窗口的起始和终止索引
+pub fn get_context_start_end(uuid: &str, is_q: bool) -> (usize, usize) {
+    let data = DATA.lock().unwrap();
+    if let Some(info) = data.get(uuid) {
+        let total_num = info.messages.len();
+        if info.qa_msg_p.0 != 0 { // 根据QA进行了限制
+            if info.qa_msg_p.0 == usize::MAX { // 不限制
+                (0, total_num)
+            } else { // 固定窗口大小，或动态扩展
+                let (skip_msg_num, _keep_msg_num, skip_last_answer_num, _skip_last_show_answer_num) = info.context_msg_num_by_qa();
+                if is_q {
+                    (skip_msg_num, total_num - skip_last_answer_num)
+                } else {
+                    (skip_msg_num, total_num)
+                }
+            }
+        } else if info.qa_msg_p.1 != 0 { // 根据message进行了限制
+            if info.qa_msg_p.1 == usize::MAX { // 不限制
+                (0, total_num)
+            } else { // 固定窗口大小
+                let (skip_msg_num, _keep_msg_num, skip_last_answer_num, skip_last_show_answer_num) = info.context_msg_num();
+                if is_q {
+                    (skip_msg_num, total_num - skip_last_answer_num)
+                } else {
+                    (skip_msg_num + skip_last_show_answer_num, total_num)
+                }
+            }
+        } else {
+            unreachable!()
+        }
+    } else {
+        unreachable!()
+    }
+}
+
 /// get chat name from user message
 fn get_chat_name_from_user_msg(msg: &ChatMessage) -> Option<String> {
     if let ChatMessage::User{content, ..} = &msg {
@@ -865,7 +900,7 @@ pub fn get_messages(uuid: &str) -> Vec<ChatMessage> {
                 let total_num = info.messages.len();
                 // 获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
                 // 理论上`skip_msg_num`可能为0，但不可能等于总消息数，`keep_msg_num`肯定大于0，最大就是总消息数
-                let (skip_msg_num, keep_msg_num, skip_last_answer_num) = if info.qa_msg_p.0 > 0 && info.qa_msg_p.0 < usize::MAX { // 对问答对数量进行限制
+                let (skip_msg_num, keep_msg_num, skip_last_answer_num, _) = if info.qa_msg_p.0 > 0 && info.qa_msg_p.0 < usize::MAX { // 对问答对数量进行限制
                     info.context_msg_num_by_qa()
                 } else if info.qa_msg_p.1 > 0 && info.qa_msg_p.1 < usize::MAX { // 对消息数量进行限制
                     info.context_msg_num()

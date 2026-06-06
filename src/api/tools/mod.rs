@@ -498,7 +498,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     insert_message(&uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
 
                     // 3. 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
-                    let meta_data = MetaData::new(uuid.clone(), None);
+                    let meta_data = MetaData::new(uuid.clone(), None, false);
                     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break
@@ -555,7 +555,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
         }
     }
     // page left info
-    let meta_data = MetaData::new(uuid.clone(), None);
+    let meta_data = MetaData::new(uuid.clone(), None, false);
     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "channel send error: {:?}", e);
     }
@@ -1387,7 +1387,7 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
     insert_message(uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
 
     // 3. page left info
-    let meta_data = MetaData::new(uuid.to_string(), None);
+    let meta_data = MetaData::new(uuid.to_string(), None, false);
     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "step {} channel send error: {:?}", step_num, e);
         return Err(MyError::PlanModeError{info: format!("step {} channel send error: {:?}", step_num, e)})
