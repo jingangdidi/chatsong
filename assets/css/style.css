@@ -555,6 +555,16 @@
         position: relative;
     }
 
+    /* 窗口范围内的消息文本框的高亮样式 */
+    .chat-txt.avatar-highlight {
+        border: 1px solid var(--textarea-border-color) !important;
+        /*box-shadow: 0 0 8px 4px rgba(113, 158, 206, 0.5) !important;*/
+        box-shadow:
+            0 0 8px 4px rgba(113, 158, 206, 0.5), /* 外侧阴影 */
+            inset 4px 4px 4px #cbced1,            /* 内侧阴影1 */
+            inset -4px -4px 4px white;            /* 内侧阴影2 */
+    }
+
     /* 提问 */
     .user-chat-box {
         max-width: 80%; /* 显示内容的宽度 */

@@ -1704,13 +1704,18 @@ print(b)
                     if (avatarImg) {
                         avatarImg.classList.add(highlightClass);
                     }
+                    // 高亮文本框
+                    const avatarTxt = container.querySelector('.chat-txt');
+                    if (avatarTxt) {
+                        avatarTxt.classList.add(highlightClass);
+                    }
                 }
             }
         }
     }
     // 取消高亮
     function clearAvatarHighlight(highlightClass = 'avatar-highlight') {
-        const avatars = document.querySelectorAll(`.chatgpt-icon.${highlightClass}`);
+        const avatars = document.querySelectorAll(`.chatgpt-icon.${highlightClass}, .chat-txt.${highlightClass}`);
         avatars.forEach(img => {
             img.classList.remove(highlightClass);
         });
