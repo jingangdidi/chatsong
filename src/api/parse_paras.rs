@@ -835,4 +835,13 @@ impl Api {
     pub fn get_default_model(&self) -> Result<(String, String, String, bool), MyError> {
         self.get_model_by_usize(self.default)
     }
+
+    /// 根据指定模型名称字符串，获取模型，返回(api_key, endpoint, 模型名称, 是否支持深度思考)
+    pub fn get_model_by_name(&self, name: &str) -> Result<(String, String, String, bool), MyError> {
+        if let Some(n) = self.models.iter().find(|(_, v)| v.1 == name).map(|(k, _)| *k) {
+            self.get_model_by_usize(n)
+        } else {
+            self.get_default_model()
+        }
+    }
 }

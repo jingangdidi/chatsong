@@ -46,6 +46,8 @@ image = { version = "0.25.8" }
 walkdir = { version = "2.5.0" }
 grep = { version = "0.4.1" }
 similar = { version = "2.7.0" }
+html-escape = { version = "0.2" }
+url = { version = "2.5.8" }
 
 # Tree-sitter
 tree-sitter = { version = "0.26" }

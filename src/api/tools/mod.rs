@@ -60,7 +60,7 @@ use crate::{
 pub mod built_in_tools;
 pub mod external_tools;
 
-use built_in_tools::{BuiltInTools, Group, filesystem::edit_file::Params};
+use built_in_tools::{BuiltInTools, Group, filesystem::edit_file::Params, hacker_news::hacker_news_summaries};
 use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
@@ -606,7 +606,19 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                         return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
                     }
                 },
-                None => Ok(PARAS.tools.run(name_id[1], paras)),
+                None => if name_id[0] == "hacker_news" {
+                    match PARAS.tools.run(name_id[1], paras) {
+                        Ok((save_html, _)) => {
+                            match hacker_news_summaries(&uuid, save_html == "true").await {
+                                Ok(hn_summaries) => Ok(Ok((hn_summaries, None))),
+                                Err(e) => Ok(Err(e)),
+                            }
+                        },
+                        Err(e) => Ok(Err(e)),
+                    }
+                } else {
+                    Ok(PARAS.tools.run(name_id[1], paras))
+                }
             }
         }
     } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {

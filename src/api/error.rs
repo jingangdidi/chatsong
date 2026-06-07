@@ -44,6 +44,7 @@ use regex::Error as regex_error;
 use serde_json::Error as json_error;
 use thiserror::Error;
 use tree_sitter::QueryError;
+use url::ParseError;
 use zip::result::ZipError;
 
 /// srx添加，自定义的错误类型，方便传递错误
@@ -297,6 +298,14 @@ pub enum MyError {
     // regex error
     #[error("Error - An error that occurred during parsing or compiling a regular expression: {error}")]
     RegexError{error: regex_error},
+
+    // url parse error
+    #[error("Error - url parse error: {error}")]
+    UrlParseError{error: ParseError},
+
+    // Selector parse error
+    #[error("Error - {info}")]
+    SelectorParseError{info: String},
 
     // other error
     #[error("Error - {info}")]

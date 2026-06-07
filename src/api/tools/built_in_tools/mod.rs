@@ -14,6 +14,7 @@ pub mod filesystem;
 pub mod codebase;
 pub mod web;
 pub mod run_x;
+pub mod hacker_news;
 
 //use sum::Sum;
 use filesystem::{
@@ -51,6 +52,7 @@ use run_x::{
     RunCommand,
     RunScript,
 };
+use hacker_news::HackerNews;
 
 /// trait for built-in tools
 pub trait BuiltIn: Send + Sync {
@@ -77,6 +79,7 @@ pub enum Group {
     Codebase,
     Web,
     RunX,
+    HackerNews,
 }
 
 impl Group {
@@ -86,6 +89,7 @@ impl Group {
             Group::Codebase => "codebase".to_string(),
             Group::Web => "web".to_string(),
             Group::RunX => "run_x".to_string(),
+            Group::HackerNews => "Hacker News".to_string(),
         }
     }
 
@@ -95,6 +99,7 @@ impl Group {
             "codebase" => Ok(Group::Codebase),
             "web" => Ok(Group::Web),
             "run_x" => Ok(Group::RunX),
+            "Hacker News" => Ok(Group::HackerNews),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
         }
     }
@@ -151,6 +156,8 @@ impl BuiltInTools {
             // run_x
             (Arc::new(RunCommand::new()), Group::RunX),
             (Arc::new(RunScript::new()), Group::RunX),
+            // Hacker News
+            (Arc::new(HackerNews::new()), Group::HackerNews),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool
         let mut groups: HashSet<Group> = HashSet::new(); // tool groups
