@@ -47,6 +47,7 @@ use crate::{
             CallToolResult,
         },
         for_chat::not_use_stream,
+        for_image::image_to_base64, // 图片转base64，返回base64编码的字符串
     },
     parse_paras::PARAS,
     error::MyError,
@@ -60,7 +61,16 @@ use crate::{
 pub mod built_in_tools;
 pub mod external_tools;
 
-use built_in_tools::{BuiltInTools, Group, filesystem::edit_file::Params, hacker_news::hacker_news_summaries};
+use built_in_tools::{
+    BuiltInTools,
+    Group,
+    filesystem::{
+        edit_file::Params,
+        image_generation::image_generation,
+        edit_image::edit_image,
+    },
+    hacker_news::hacker_news_summaries,
+};
 use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
@@ -425,7 +435,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     }
                     //println!("raw  args: {:?}", j.1);
                     //println!("safe args: {:?}", safe_args);
-                    let (result, language, is_image) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
+                    let (mut result, language, is_image) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
                         Ok(inner_result) => {
                             match inner_result {
                                 Ok((result, file_option)) => {
@@ -496,6 +506,35 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     };
                     let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
                     insert_message(&uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
+
+                    // 如果是绘图，则把图片显示在页面
+                    if name_id[0] == "image_generation" || name_id[0] == "edit_image" {
+                        let img_name = result.split("/").last().unwrap();
+                        let image_b64 = image_to_base64(&uuid, img_name)?;
+                        if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num+1, image_b64.clone(), true, true, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                            event!(Level::WARN, "channel send error: {:?}", e);
+                            break
+                        }
+
+                        let message = ChatMessage::Assistant{
+                            content: Some(ChatMessageContent::Text(result.clone())),
+                            reasoning_content: None,
+                            refusal: None,
+                            name: None,
+                            audio: None,
+                            tool_calls: None,
+                        };
+                        let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
+                        insert_message(&uuid, message, None, tmp_time, false, DataType::Image(image_b64), None, model, None);
+
+                        result = if name_id[0] == "image_generation" {
+                            format!("create image successfull: {}", result)
+                        } else if name_id[0] == "edit_image" {
+                            format!("edit image successfull: {}", result)
+                        } else {
+                            result
+                        };
+                    }
 
                     // 3. 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     let meta_data = MetaData::new(uuid.clone(), None, false);
@@ -601,7 +640,30 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                         approval_msg
                     };
                     if ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await? {
-                        Ok(PARAS.tools.run(name_id[1], paras))
+                        if name_id[0] == "image_generation" {
+                            match PARAS.tools.run(name_id[1], paras) {
+                                Ok((image_prompt, _)) => {
+                                    match image_generation(&uuid, image_prompt, "gpt-image-2").await {
+                                        Ok(image_path) => Ok(Ok((image_path, None))),
+                                        Err(e) => Ok(Err(e)),
+                                    }
+                                },
+                                Err(e) => Ok(Err(e)),
+                            }
+                        } else if name_id[0] == "edit_image" {
+                            match PARAS.tools.run(name_id[1], paras) {
+                                Ok((image_prompt, _)) => {
+                                    let (raw_image, prompt) = image_prompt.split_once("---srx---").unwrap();
+                                    match edit_image(&uuid, raw_image, prompt, "gpt-image-2").await {
+                                        Ok(image_path) => Ok(Ok((image_path, None))),
+                                        Err(e) => Ok(Err(e)),
+                                    }
+                                },
+                                Err(e) => Ok(Err(e)),
+                            }
+                        } else {
+                            Ok(PARAS.tools.run(name_id[1], paras))
+                        }
                     } else {
                         return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
                     }
