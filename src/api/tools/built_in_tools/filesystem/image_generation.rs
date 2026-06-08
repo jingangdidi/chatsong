@@ -6,7 +6,7 @@ use openai_dive::v1::{
         image::{
             CreateImageParametersBuilder,
             //ImageQuality, // Standard, Hd
-            //ImageSize, // Size256X256, Size512X512, Size1024X1024, Size1792X1024, Size1024X1792，dall-e-2支持256x256、512x512、1024x1024，dall-e-3支持1024x1024、1792x1024、1024x1792
+            ImageSize, // Size256X256, Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792, Auto
             //ImageStyle, // Vivid, Natural
             //ImageResponse,
             //ResponseFormat, // Url, B64Json
@@ -93,7 +93,7 @@ pub async fn image_generation(uuid: &str, prompt: String, m: &str) -> Result<Str
     para_builder.n(1u32); // 生成图片的数量，dall-e-2可以指定1~10，dall-e-3只能是1
     //para_builder.quality(ImageQuality::Standard); // Standard, Hd, High, Medium, Low
     //para_builder.style(ImageStyle::Natural); // Vivid, Natural
-    //para_builder.size(ImageSize::Size1024X1024); // 图片大小，Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792。gpt-image-2 和 gpt-image-2-2026-04-21 支持任意分辨率，但长宽都要能被 16 整除，宽高比要在 1:3 和 3:1 之间，分辨率 > 2560x1440 处于试验阶段，最大 3840x2160
+    para_builder.size(ImageSize::Auto); // 图片大小，Size256X256, Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792, Auto。gpt-image-2 和 gpt-image-2-2026-04-21 支持任意分辨率，但长宽都要能被 16 整除，宽高比要在 1:3 和 3:1 之间，分辨率 > 2560x1440 处于试验阶段，最大 3840x2160
     //para_builder.response_format(ResponseFormat::B64Json); // Url或B64Json，gpt-image-2 模型不支持 response_format 参数
     let parameters = para_builder.build().map_err(|e| MyError::CreateImageError{error: e})?;
     // 生成图片

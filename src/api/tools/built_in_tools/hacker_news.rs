@@ -92,7 +92,7 @@ Here are the comments:
 "###;
 
 /// 爬取 hacker news 的文章标题、链接、comment总结
-pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String, MyError> {
+pub async fn hacker_news_summaries(uuid: &str, save_html: bool, model: &str) -> Result<String, MyError> {
     let base_url = Url::parse("https://news.ycombinator.com").map_err(|e| MyError::UrlParseError{error: e})?;
 
     let client = reqwest::Client::builder()
@@ -168,7 +168,6 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
     let delay = Duration::from_secs_f64(2.0);
 
     for (idx, (_, _, comment_url)) in articles.iter().enumerate() {
-        println!("正在处理第 {} 篇文章...", idx + 1);
         event!(Level::INFO, "{} parse article {} ...", uuid, idx+1);
 
         let summary = match comment_url {
@@ -188,29 +187,28 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
                             if status == 503 || status == 429 {
                                 retries += 1;
                                 if retries > max_retries {
-                                    event!(Level::INFO, "   {} {}. skip {}", uuid, idx+1, abs_url);
+                                    event!(Level::INFO, "{} {}. skip {}", uuid, idx+1, abs_url);
                                     break None;
                                 }
                                 let wait = Duration::from_secs(retries as u64 * 2);
-                                event!(Level::INFO, "   {} {}. HTTP {} for {}, try again ({}/{})", uuid, idx+1, status, abs_url, retries, max_retries);
+                                event!(Level::INFO, "{} {}. HTTP {} for {}, try again ({}/{})", uuid, idx+1, status, abs_url, retries, max_retries);
                                 sleep(wait).await;
                                 continue;
                             }
                             if !status.is_success() {
                                 eprintln!("   {}. HTTP {} for {}，跳过", idx+1, status, abs_url);
-                                event!(Level::INFO, "   {} {}. HTTP {} for {}, skip", uuid, idx+1, status, abs_url);
+                                event!(Level::INFO, "{} {}. HTTP {} for {}, skip", uuid, idx+1, status, abs_url);
                                 break None;
                             }
                             let body = match resp.text().await {
                                 Ok(b) => b,
                                 Err(e) => {
-                                    event!(Level::INFO, "   {} {}. body failed: {}: {:?}", uuid, idx+1, abs_url, e);
+                                    event!(Level::INFO, "{} {}. body failed: {}: {:?}", uuid, idx+1, abs_url, e);
                                     break None;
                                 }
                             };
                             if !body.contains("commtext") {
-                                eprintln!("   {}. 页面无commtext: {}", idx+1, abs_url);
-                                event!(Level::INFO, "   {} {}. no comment: {}", uuid, idx+1, abs_url);
+                                event!(Level::INFO, "{} {}. no comment: {}", uuid, idx+1, abs_url);
                                 break None;
                             }
                             let doc = Html::parse_document(&body);
@@ -223,8 +221,7 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
                                 })
                                 .collect();
                             if comments.is_empty() {
-                                eprintln!("   {}. 发现commtext但空: {}", idx+1, abs_url);
-                                event!(Level::INFO, "   {} {}. comment is empty: {}", uuid, idx+1, abs_url);
+                                event!(Level::INFO, "{} {}. comment is empty: {}", uuid, idx+1, abs_url);
                                 break None;
                             } else {
                                 let numbered: Vec<String> = comments
@@ -238,11 +235,11 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
                         Err(e) => {
                             retries += 1;
                             if retries > max_retries {
-                                event!(Level::INFO, "   {} {}. request failed: {}: {}", uuid, idx+1, abs_url, e);
+                                event!(Level::INFO, "{} {}. request failed: {}: {}", uuid, idx+1, abs_url, e);
                                 break None;
                             }
                             let wait = Duration::from_secs(retries as u64 * 2);
-                            event!(Level::INFO, "   {} {}. request failed: {}: {}, try again ({}/{})", uuid, idx+1, abs_url, e, retries, max_retries);
+                            event!(Level::INFO, "{} {}. request failed: {}: {}, try again ({}/{})", uuid, idx+1, abs_url, e, retries, max_retries);
                             sleep(wait).await;
                         }
                     }
@@ -252,17 +249,6 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
         };
 
         summaries.push(summary);
-    }
-
-    // Markdown 表格
-    let mut content = "\n| Title | Summary |\n|-------|---------|\n".to_string();
-    for ((title, url, _), summary_opt) in articles.iter().zip(summaries.iter()) {
-        let escaped_title = title.replace('|', "\\|");
-        let summary = summary_opt.as_deref().unwrap_or("(no comment)");
-        let escaped_summary = summary
-            .replace('|', "\\|")
-            .replace('\n', "<br>");
-        content += &format!("| [{}]({}) | {} |", escaped_title, url, escaped_summary);
     }
 
     // 生成 HTML 文件
@@ -286,7 +272,7 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
         for ((title, url, _), summary_opt) in articles.iter().zip(summaries.iter()) {
             let escaped_title = html_escape::encode_text(title);
             let summary = match summary_opt {
-                Some(s) => run_single_llm(uuid, &s, "deepseek-v4-flash").await?,
+                Some(s) => run_single_llm(uuid, &s, model).await?,
                 None => "no comment".to_string(),
             };
             let escaped_summary = html_escape::encode_text(&summary);
@@ -304,8 +290,27 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool) -> Result<String
         event!(Level::INFO, "{} save hacker_news_summaries.html successfully ({} articles)", uuid, articles.len());
         Ok("save hacker news to hacker_news_summaries.html successfully".to_string())
     } else {
-        //Ok(content)
-        Ok("get hacker news successfully".to_string())
+        // Markdown 表格
+        let mut content = "Here is the markdown table summarizing the comments for each article, :\n| Title | Summary |\n|-------|---------|\n".to_string();
+        for ((title, url, _), summary_opt) in articles.iter().zip(summaries.iter()) {
+            let escaped_title = title.replace('|', "\\|");
+            let summary = match summary_opt {
+                Some(s) => run_single_llm(uuid, &s, model).await?,
+                None => "no comment".to_string(),
+            };
+            let escaped_summary = summary
+                .replace('|', "\\|")
+                .replace('\n', "<br>");
+            content += &format!("| [{}]({}) | {} |\n", escaped_title, url, escaped_summary);
+        }
+        if PARAS.english {
+            content += "Display each article's summary one by one.";
+        } else {
+            content += "展示每个文章的总结（不需要再次总结），并把标题翻译为中文";
+        }
+
+        Ok(content)
+        //Ok("get hacker news successfully".to_string())
     }
 }
 

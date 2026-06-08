@@ -435,7 +435,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     }
                     //println!("raw  args: {:?}", j.1);
                     //println!("safe args: {:?}", safe_args);
-                    let (mut result, language, is_image) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone()).await {
+                    let (mut result, language, is_image) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone(), model).await {
                         Ok(inner_result) => {
                             match inner_result {
                                 Ok((result, file_option)) => {
@@ -608,7 +608,7 @@ struct SkillParams {
 }
 
 /// try run tool, if error not from call tool, return Err(), else return Ok(Ok()) or Ok(Err())
-async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>) -> Result<Result<(String, Option<String>), MyError>, MyError> {
+async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>, model: &str) -> Result<Result<(String, Option<String>), MyError>, MyError> {
     if name_id[0] == "activate_skill" {
         let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         Ok(Ok((PARAS.skills.get_skill_full_content(&params.skill_name)?, None)))
@@ -652,9 +652,9 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                             }
                         } else if name_id[0] == "edit_image" {
                             match PARAS.tools.run(name_id[1], paras) {
-                                Ok((image_prompt, _)) => {
-                                    let (raw_image, prompt) = image_prompt.split_once("---srx---").unwrap();
-                                    match edit_image(&uuid, raw_image, prompt, "gpt-image-2").await {
+                                Ok((prompt_image, _)) => {
+                                    let (prompt, raw_images) = prompt_image.split_once("---srx---").unwrap();
+                                    match edit_image(&uuid, raw_images.split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), prompt, "gpt-image-2").await {
                                         Ok(image_path) => Ok(Ok((image_path, None))),
                                         Err(e) => Ok(Err(e)),
                                     }
@@ -671,7 +671,7 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                 None => if name_id[0] == "hacker_news" {
                     match PARAS.tools.run(name_id[1], paras) {
                         Ok((save_html, _)) => {
-                            match hacker_news_summaries(&uuid, save_html == "true").await {
+                            match hacker_news_summaries(&uuid, save_html == "true", model).await {
                                 Ok(hn_summaries) => Ok(Ok((hn_summaries, None))),
                                 Err(e) => Ok(Err(e)),
                             }

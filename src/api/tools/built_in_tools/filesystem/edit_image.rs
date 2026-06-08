@@ -8,7 +8,7 @@ use openai_dive::v1::{
         image::{
             EditImageParametersBuilder,
             //ImageQuality, // Standard, Hd
-            ImageSize, // Size256X256, Size512X512, Size1024X1024, Size1792X1024, Size1024X1792，dall-e-2支持256x256、512x512、1024x1024，dall-e-3支持1024x1024、1792x1024、1024x1792
+            ImageSize, // Size256X256, Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792, Auto
             //ImageStyle, // Vivid, Natural
             //ImageResponse,
             //ResponseFormat, // Url, B64Json
@@ -27,7 +27,7 @@ use crate::{
 /// params for image generation
 #[derive(Deserialize)]
 struct Params {
-    image_path: String,
+    image_path: Vec<String>,
     prompt: String,
 }
 
@@ -49,7 +49,7 @@ impl BuiltIn for EditImage {
 
     /// get tool description
     fn description(&self) -> String {
-        "Edits an image according to a descriptive text prompt. It takes an original image and a user‑supplied description of the desired changes, then applies AI‑powered editing to produce a transformed version. The resulting image is automatically saved to a local file.".to_string()
+        "Edits image(s) according to a descriptive text prompt. It takes a list of original images and a user‑supplied description of the desired changes, then applies AI‑powered editing to produce a transformed version. The resulting image is automatically saved to a local file.".to_string()
     }
 
     /// get tool schema
@@ -57,12 +57,12 @@ impl BuiltIn for EditImage {
         json!({
             "properties": {
                 "image_path": {
-                    "type": "string",
-                    "description": "A string that describes the intended modification to the image.",
+                    "type": "array",
+                    "description": "The list of file path(s) to the source image(s) that will be edited.",
                 },
                 "prompt": {
                     "type": "string",
-                    "description": "The file path (string) to the source image that will be edited.",
+                    "description": "A string that describes the intended modification to the image.",
                 },
             },
             "required": ["image_path", "prompt"],
@@ -73,12 +73,16 @@ impl BuiltIn for EditImage {
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let tmp_path = Path::new(&params.image_path);
-        if tmp_path.exists() && tmp_path.is_file() {
-            Ok((format!("{}---srx---{}", params.image_path, params.prompt), None))
-        } else {
-            Err(MyError::FileNotExistError{file: params.image_path})
+        let mut result = vec![params.prompt];
+        for p in params.image_path {
+            let tmp_path = Path::new(&p);
+            if tmp_path.exists() && tmp_path.is_file() {
+                result.push(p);
+            } else {
+                return Err(MyError::FileNotExistError{file: p})
+            }
         }
+        Ok((result.join("---srx---"), None))
     }
 
     /// get approval message
@@ -93,8 +97,8 @@ impl BuiltIn for EditImage {
 }
 
 /// 调用模型绘图
-/// https://developers.openai.com/api/reference/resources/images/methods/generate
-pub async fn edit_image(uuid: &str, image_path: &str, prompt: &str, m: &str) -> Result<String, MyError> {
+/// https://developers.openai.com/api/reference/python/resources/images/methods/edit
+pub async fn edit_image(uuid: &str, image_path: Vec<String>, prompt: &str, m: &str) -> Result<String, MyError> {
     // 根据模型名称获取(api_key, endpoint, 模型名称, 是否支持深度思考)
     let (api_key, endpoint, model, _) = PARAS.api.get_model_by_name(m)?;
     // 使用api key初始化
@@ -103,11 +107,15 @@ pub async fn edit_image(uuid: &str, image_path: &str, prompt: &str, m: &str) -> 
 
     let parameters = EditImageParametersBuilder::default()
         .prompt(prompt.to_string()) // 描述图片的文本，gpt-image-1最多32000个字符
-        .image(FileUpload::File(image_path.to_string())) // 格式：png、webp、jpg，大小：<25MB，形状：不需要是正方形
-        .model(&model) // 选择模型，这里固定为gpt-image-1
+        .image(if image_path.len() == 1 {
+            FileUpload::File(image_path[0].clone()) // 单张图
+        } else {
+            FileUpload::FileArray(image_path) // 多张图
+        }) // 格式：png、webp、jpg，大小：<25MB
+        .model(&model) // 选择模型
         .n(1u32) // 生成图片的数量，默认1
         //.quality(tmp_quality) // gpt-image-1支持：high、medium、low，auto表示自动选择最高质量
-        .size(ImageSize::Size1024X1792) // 图片大小，gpt-image-1支持1024x1024、1536x1024、1024x1536
+        .size(ImageSize::Auto) // 图片大小，Size256X256, Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792, Auto。gpt-image-2 和 gpt-image-2-2026-04-21 支持任意分辨率，但长宽都要能被 16 整除，宽高比要在 1:3 和 3:1 之间，分辨率 > 2560x1440 处于试验阶段，最大 3840x2160
         .build().map_err(|e| MyError::EditImageError{error: e})?;
     let result = client.images().edit(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.to_string(), error: e})?;
 
