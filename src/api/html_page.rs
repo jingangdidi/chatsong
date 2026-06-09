@@ -1543,6 +1543,20 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 Con2.appendChild(msg_lr);
                 /* 提问的当前时间 */
                 message.appendChild(Con2);
+                // 当前回答头像和边框高亮
+                const container = msg_lr.closest('.q_icon_query, .gpt-chat-box');
+                if (container) {{
+                    const avatarImg = container.querySelector('.chatgpt-icon');
+                    // 4. 如果头像存在，添加高亮类
+                    if (avatarImg) {{
+                        avatarImg.classList.add('avatar-highlight');
+                    }}
+                    // 高亮文本框
+                    const avatarTxt = container.querySelector('.chat-txt');
+                    if (avatarTxt) {{
+                        avatarTxt.classList.add('avatar-highlight');
+                    }}
+                }}
             }} else {{
                 if (last_is_answer) {{
                     qa_num += 1;
