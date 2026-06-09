@@ -418,6 +418,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 };
                 let message = ChatMessage::Assistant{
                     content: Some(ChatMessageContent::Text(res)),
+                    reasoning: None,
                     reasoning_content: None,
                     refusal: None,
                     name: None,
@@ -542,6 +543,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 // 2. add result to main message history
                                 let message = ChatMessage::Assistant{
                                     content: Some(ChatMessageContent::Text(format!("{}", e))),
+                                    reasoning: None,
                                     reasoning_content: None,
                                     refusal: None,
                                     name: None,
@@ -789,6 +791,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 // 插入错误提示
                 let m = ChatMessage::Assistant{
                     content: Some(ChatMessageContent::Text(err_msg.clone())),
+                    reasoning: None,
                     reasoning_content: None,
                     refusal: None,
                     name: None,

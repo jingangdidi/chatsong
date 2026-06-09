@@ -189,8 +189,14 @@ pub async fn use_stream(
                         //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                     },
                     */
-                    DeltaChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
-                        let c = match (tmp_content, tmp_reasoning_content) {
+                    DeltaChatMessage::Assistant{content: tmp_content, reasoning: tmp_reasoning_content, reasoning_content: tmp_reasoning_content_deepseek, ..} => {
+                        let tmp_reasoning_content_merge = match (tmp_reasoning_content.is_some(), tmp_reasoning_content_deepseek.is_some()) {
+                            (true, true) => tmp_reasoning_content,
+                            (true, false) => tmp_reasoning_content,
+                            (false, true) => tmp_reasoning_content_deepseek,
+                            (false, false) => tmp_reasoning_content_deepseek,
+                        };
+                        let c = match (tmp_content, tmp_reasoning_content_merge) {
                             (Some(ChatMessageContent::Text(c)), None) => { // 答案
                                 if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
                                     think = true;
@@ -396,6 +402,7 @@ pub async fn use_stream(
             },
             3 => ChatMessage::Assistant{
                 content: Some(ChatMessageContent::Text(whole_answer.clone())),
+                reasoning: None,
                 reasoning_content: None,
                 refusal: None,
                 name: None,
@@ -489,9 +496,11 @@ pub async fn not_use_stream(
                     }
                 },
                 */
-                ChatMessage::Assistant{content: tmp_content, reasoning_content: tmp_reasoning_content, ..} => {
+                ChatMessage::Assistant{content: tmp_content, reasoning: tmp_reasoning_content, reasoning_content: tmp_reasoning_content_deepseek, ..} => {
                     role = 3;
                     if let Some(c) = tmp_reasoning_content {
+                        thinking = format!("<div class='think'>thinking ...<br>{}srxtzn</div>srxtznsrxtzn---srxtznsrxtzn", c);
+                    } else if let Some(c) = tmp_reasoning_content_deepseek {
                         thinking = format!("<div class='think'>thinking ...<br>{}srxtzn</div>srxtznsrxtzn---srxtznsrxtzn", c);
                     }
                     match tmp_content {
@@ -556,6 +565,7 @@ pub async fn not_use_stream(
         },
         3 => ChatMessage::Assistant{
             content: Some(ChatMessageContent::Text(whole_answer.clone())),
+            reasoning: None,
             reasoning_content: None,
             refusal: None,
             name: None,

@@ -498,6 +498,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     // 2. add result to main message history
                     let message = ChatMessage::Assistant{
                         content: Some(ChatMessageContent::Text(test_result)),
+                        reasoning: None,
                         reasoning_content: None,
                         refusal: None,
                         name: None,
@@ -518,6 +519,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
 
                         let message = ChatMessage::Assistant{
                             content: Some(ChatMessageContent::Text(result.clone())),
+                            reasoning: None,
                             reasoning_content: None,
                             refusal: None,
                             name: None,
@@ -576,6 +578,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                 // 2. add result to main message history
                 let message = ChatMessage::Assistant{
                     content: Some(ChatMessageContent::Text(test_result)),
+                    reasoning: None,
                     reasoning_content: None,
                     refusal: None,
                     name: None,
@@ -1451,6 +1454,7 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
     // 2. add result to main message history
     let message = ChatMessage::Assistant{
         content: Some(ChatMessageContent::Text(msg)),
+        reasoning: None,
         reasoning_content: None,
         refusal: None,
         name: None,
