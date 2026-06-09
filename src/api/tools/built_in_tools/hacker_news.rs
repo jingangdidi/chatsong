@@ -291,7 +291,7 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool, model: &str) -> 
         Ok("save hacker news to hacker_news_summaries.html successfully".to_string())
     } else {
         // Markdown 表格
-        let mut content = "Here is the markdown table summarizing the comments for each article, :\n| Title | Summary |\n|-------|---------|\n".to_string();
+        let mut content = "Here is the markdown table summarizing the comments for each article:\n| Title | Summary |\n|-------|---------|\n".to_string();
         for ((title, url, _), summary_opt) in articles.iter().zip(summaries.iter()) {
             let escaped_title = title.replace('|', "\\|");
             let summary = match summary_opt {
