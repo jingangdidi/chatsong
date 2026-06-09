@@ -655,9 +655,9 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                             }
                         } else if name_id[0] == "edit_image" {
                             match PARAS.tools.run(name_id[1], paras) {
-                                Ok((prompt_image, _)) => {
-                                    let (prompt, raw_images) = prompt_image.split_once("---srx---").unwrap();
-                                    match edit_image(&uuid, raw_images.split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), prompt, "gpt-image-2").await {
+                                Ok((facial_prompt_image, _)) => {
+                                    let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
+                                    match edit_image(&uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
                                         Ok(image_path) => Ok(Ok((image_path, None))),
                                         Err(e) => Ok(Err(e)),
                                     }

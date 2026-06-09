@@ -12,6 +12,7 @@ use openai_dive::v1::{
             //ImageStyle, // Vivid, Natural
             //ImageResponse,
             //ResponseFormat, // Url, B64Json
+            InputFidelity, // High, Low
             ImageData,
         },
         shared::FileUpload,
@@ -29,6 +30,8 @@ use crate::{
 struct Params {
     image_path: Vec<String>,
     prompt: String,
+    #[serde(default)]
+    facial_feature: bool,
 }
 
 /// built-in tool
@@ -64,6 +67,10 @@ impl BuiltIn for EditImage {
                     "type": "string",
                     "description": "A string that describes the intended modification to the image.",
                 },
+                "facial_feature": {
+                    "type": ["boolean", "null"],
+                    "description": "Set to true only when the user explicitly requires preserving facial features (e.g., identity, likeness, or face structure) from the input image. Otherwise set to false.",
+                },
             },
             "required": ["image_path", "prompt"],
             "type": "object",
@@ -71,9 +78,10 @@ impl BuiltIn for EditImage {
     }
 
     /// run tool
+    /// 返回的字符串以`---srx---`间隔，第一项表示是否设置`input_fidelity`，第二项表示绘图prompt，其余项表示要用的图片
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
         let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
-        let mut result = vec![params.prompt];
+        let mut result = vec![format!("{}", if params.facial_feature { "true" } else { "false" }), params.prompt];
         for p in params.image_path {
             let tmp_path = Path::new(&p);
             if tmp_path.exists() && tmp_path.is_file() {
@@ -98,25 +106,26 @@ impl BuiltIn for EditImage {
 
 /// 调用模型绘图
 /// https://developers.openai.com/api/reference/python/resources/images/methods/edit
-pub async fn edit_image(uuid: &str, image_path: Vec<String>, prompt: &str, m: &str) -> Result<String, MyError> {
+pub async fn edit_image(uuid: &str, facial_feature: bool, image_path: Vec<String>, prompt: &str, m: &str) -> Result<String, MyError> {
     // 根据模型名称获取(api_key, endpoint, 模型名称, 是否支持深度思考)
     let (api_key, endpoint, model, _) = PARAS.api.get_model_by_name(m)?;
     // 使用api key初始化
     let mut client = Client::new(api_key);
     client.set_base_url(&endpoint); // 从0.7.0开始舍弃了new_with_base
 
-    let parameters = EditImageParametersBuilder::default()
-        .prompt(prompt.to_string()) // 描述图片的文本，gpt-image-1最多32000个字符
-        .image(if image_path.len() == 1 {
-            FileUpload::File(image_path[0].clone()) // 单张图
-        } else {
-            FileUpload::FileArray(image_path) // 多张图
-        }) // 格式：png、webp、jpg，大小：<25MB
-        .model(&model) // 选择模型
-        .n(1u32) // 生成图片的数量，默认1
-        //.quality(tmp_quality) // gpt-image-1支持：high、medium、low，auto表示自动选择最高质量
-        .size(ImageSize::Auto) // 图片大小，Size256X256, Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792, Auto。gpt-image-2 和 gpt-image-2-2026-04-21 支持任意分辨率，但长宽都要能被 16 整除，宽高比要在 1:3 和 3:1 之间，分辨率 > 2560x1440 处于试验阶段，最大 3840x2160
-        .build().map_err(|e| MyError::EditImageError{error: e})?;
+    let mut para_builder = EditImageParametersBuilder::default();
+    para_builder.prompt(prompt.to_string()); // 描述图片的文本，gpt-image-1最多32000个字符
+    para_builder.image(if image_path.len() == 1 {
+        FileUpload::File(image_path[0].clone()) // 单张图
+    } else {
+        FileUpload::FileArray(image_path) // 多张图
+    }); // 格式：png、webp、jpg，大小：<25MB
+    para_builder.model(&model); // 选择模型
+    para_builder.n(1u32); // 生成图片的数量，默认1
+    //para_builder.quality(tmp_quality); // gpt-image-1支持：high、medium、low，auto表示自动选择最高质量
+    para_builder.input_fidelity(if facial_feature { InputFidelity::High } else { InputFidelity::Low }); // InputFidelity: High, Low, 面部特征，默认Low
+    para_builder.size(ImageSize::Auto); // 图片大小，Size256X256, Size512X512, Size1024X1024, Size1024X1536, Size1536X1024, Size1792X1024, Size1024X1792, Auto。gpt-image-2 和 gpt-image-2-2026-04-21 支持任意分辨率，但长宽都要能被 16 整除，宽高比要在 1:3 和 3:1 之间，分辨率 > 2560x1440 处于试验阶段，最大 3840x2160
+    let parameters = para_builder.build().map_err(|e| MyError::EditImageError{error: e})?;
     let result = client.images().edit(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.to_string(), error: e})?;
 
     // 保存至本地指定路径下的uuid文件夹中，路径不存在则不保存，不会报错，需要在Cargo.toml中指定`features=["download"]`
