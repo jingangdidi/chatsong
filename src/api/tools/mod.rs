@@ -464,9 +464,19 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                             }
                         },
                         Err(e) => {
-                            event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
-                            event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
-                            return Err(e)
+                            if let MyError::PlanModeError{ref info} = e {
+                                if info.starts_with("skip call this tool: ") {
+                                    (format!("skip call this tool: {}", name_id[0]), "text".to_string(), false)
+                                } else {
+                                    event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
+                                    event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                                    return Err(e)
+                                }
+                            } else {
+                                event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
+                                event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                                return Err(e)
+                            }
                         },
                     };
                     call_tool_count += 1;
@@ -642,33 +652,36 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                     } else {
                         approval_msg
                     };
-                    if ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await? {
-                        if name_id[0] == "image_generation" {
-                            match PARAS.tools.run(name_id[1], paras) {
-                                Ok((image_prompt, _)) => {
-                                    match image_generation(&uuid, image_prompt, "gpt-image-2").await {
-                                        Ok(image_path) => Ok(Ok((image_path, None))),
-                                        Err(e) => Ok(Err(e)),
-                                    }
-                                },
-                                Err(e) => Ok(Err(e)),
+                    match ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await? {
+                        1 => { // 允许
+                            if name_id[0] == "image_generation" {
+                                match PARAS.tools.run(name_id[1], paras) {
+                                    Ok((image_prompt, _)) => {
+                                        match image_generation(&uuid, image_prompt, "gpt-image-2").await {
+                                            Ok(image_path) => Ok(Ok((image_path, None))),
+                                            Err(e) => Ok(Err(e)),
+                                        }
+                                    },
+                                    Err(e) => Ok(Err(e)),
+                                }
+                            } else if name_id[0] == "edit_image" {
+                                match PARAS.tools.run(name_id[1], paras) {
+                                    Ok((facial_prompt_image, _)) => {
+                                        let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
+                                        match edit_image(&uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
+                                            Ok(image_path) => Ok(Ok((image_path, None))),
+                                            Err(e) => Ok(Err(e)),
+                                        }
+                                    },
+                                    Err(e) => Ok(Err(e)),
+                                }
+                            } else {
+                                Ok(PARAS.tools.run(name_id[1], paras))
                             }
-                        } else if name_id[0] == "edit_image" {
-                            match PARAS.tools.run(name_id[1], paras) {
-                                Ok((facial_prompt_image, _)) => {
-                                    let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
-                                    match edit_image(&uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
-                                        Ok(image_path) => Ok(Ok((image_path, None))),
-                                        Err(e) => Ok(Err(e)),
-                                    }
-                                },
-                                Err(e) => Ok(Err(e)),
-                            }
-                        } else {
-                            Ok(PARAS.tools.run(name_id[1], paras))
-                        }
-                    } else {
-                        return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                        },
+                        0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                        2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                        _ => unreachable!(),
                     }
                 },
                 None => if name_id[0] == "hacker_news" {
@@ -1377,13 +1390,16 @@ async fn function_calling(
                         } else {
                             approval_msg
                         };
-                        if ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await? {
-                            match PARAS.tools.run(name_id[1], &i.1) {
-                                Ok(r) => r.0,
-                                Err(e) => return Ok(Err(e)),
-                            }
-                        } else {
-                            return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                        match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await? {
+                            1 => { // 允许
+                                match PARAS.tools.run(name_id[1], &i.1) {
+                                    Ok(r) => r.0,
+                                    Err(e) => return Ok(Err(e)),
+                                }
+                            },
+                            0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                            2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                            _ => unreachable!(),
                         }
                     } else {
                         if step_ask_approval {
@@ -1392,13 +1408,16 @@ async fn function_calling(
                             } else {
                                 format!("是否允许调用 {} 工具？{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
                             };
-                            if ask_approval(uuid, approval_msg, false, sender.clone()).await? {
-                                match PARAS.tools.run(name_id[1], &i.1) {
-                                    Ok(r) => r.0,
-                                    Err(e) => return Ok(Err(e)),
-                                }
-                            } else {
-                                return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                            match ask_approval(uuid, approval_msg, false, sender.clone()).await? {
+                                1 => { // 允许
+                                    match PARAS.tools.run(name_id[1], &i.1) {
+                                        Ok(r) => r.0,
+                                        Err(e) => return Ok(Err(e)),
+                                    }
+                                },
+                                0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                                2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                                _ => unreachable!(),
                             }
                         } else {
                             match PARAS.tools.run(name_id[1], &i.1) {
@@ -1414,13 +1433,16 @@ async fn function_calling(
                         } else {
                             format!("是否允许调用 {} 工具？{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
                         };
-                        if ask_approval(uuid, approval_msg, false, sender.clone()).await? {
-                            match PARAS.mcp_servers.run(&name_id, &i.1).await {
-                                Ok(r) => r.0,
-                                Err(e) => return Ok(Err(e)),
-                            }
-                        } else {
-                            return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])})
+                        match ask_approval(uuid, approval_msg, false, sender.clone()).await? {
+                            1 => { // 允许
+                                match PARAS.mcp_servers.run(&name_id, &i.1).await {
+                                    Ok(r) => r.0,
+                                    Err(e) => return Ok(Err(e)),
+                                }
+                            },
+                            0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                            2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                            _ => unreachable!(),
                         }
                     } else {
                         match PARAS.mcp_servers.run(&name_id, &i.1).await {
@@ -1474,19 +1496,17 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
 }
 
 /// ask approval
-async fn ask_approval(uuid: &str, msg: String, is_diff: bool, sender: Sender<Vec<u8>>) -> Result<bool, MyError> {
+async fn ask_approval(uuid: &str, msg: String, is_diff: bool, sender: Sender<Vec<u8>>) -> Result<u8, MyError> {
     let messages_num = get_messages_num(uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
     if let Err(e) = sender.send(MainData::prepare_sse(uuid, messages_num, "".to_string(), true, false, false, false, false, None, Some(0), Some(msg.replace("\n", "srxtzn")), is_diff)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "ask approval error: {:?}", e);
         return Err(MyError::PlanModeError{info: format!("ask approval error: {:?}", e)})
     }
-    let mut tmp_approved = false;
+    let tmp_approved: u8; // 0: 不允许, 1: 允许, 2: 跳过
     update_approval(uuid, None);
     loop {
         if let Some(apv) = approved(uuid) {
-            if apv {
-                tmp_approved = true;
-            }
+            tmp_approved = apv;
             update_approval(uuid, None);
             break
         }

@@ -19,12 +19,14 @@ pub async fn approval(Query(params): Query<HashMap<String, String>>, uri: Origin
             Some(p) => {
                 event!(Level::INFO, "{} approval {}", uuid, p);
                 if p == "true" {
-                    true
+                    1 // 允许
+                } else if p == "false" {
+                    0 // 不允许
                 } else {
-                    false
+                    2 // 跳过
                 }
             },
-            None => false,
+            None => 0, // 不允许
         };
         update_approval(&uuid, Some(approval));
     } else {
