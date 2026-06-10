@@ -465,8 +465,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                         },
                         Err(e) => {
                             if let MyError::PlanModeError{ref info} = e {
-                                if info.starts_with("skip call this tool: ") {
-                                    (format!("skip call this tool: {}", name_id[0]), "text".to_string(), false)
+                                if info.starts_with("skip, this tool has not been executed: ") {
+                                    (info.clone(), "text".to_string(), false)
                                 } else {
                                     event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
                                     event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
@@ -680,7 +680,7 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                             }
                         },
                         0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                        2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                        2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
                         _ => unreachable!(),
                     }
                 },
@@ -1398,7 +1398,7 @@ async fn function_calling(
                                 }
                             },
                             0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                            2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                            2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
                             _ => unreachable!(),
                         }
                     } else {
@@ -1416,7 +1416,7 @@ async fn function_calling(
                                     }
                                 },
                                 0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                                2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                                2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
                                 _ => unreachable!(),
                             }
                         } else {
@@ -1441,7 +1441,7 @@ async fn function_calling(
                                 }
                             },
                             0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                            2 => return Err(MyError::PlanModeError{info: format!("skip call this tool: {}", name_id[0])}), // 跳过
+                            2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
                             _ => unreachable!(),
                         }
                     } else {

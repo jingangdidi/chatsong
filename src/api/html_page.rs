@@ -804,6 +804,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
             <div class="modal-message" id="modalMessage"></div>
             <div class="modal-actions">
                 <button class="btn btn-agree" onclick="handleUserChoice(true)">Agree</button>
+                <button class="btn btn-skip" onclick="handleUserChoice('skip')">Skip</button>
                 <button class="btn btn-disagree" onclick="handleUserChoice(false)">Disagree</button>
             </div>
         </div>
@@ -1680,7 +1681,11 @@ print(b)
     }}
     function handleUserChoice(isAgreed) {{
         modal.classList.remove('active');
-        sendApprovalToBackend(isAgreed);
+        if (isAgreed === 'skip') {{
+            sendApprovalToBackend('skip');
+        }} else {{
+            sendApprovalToBackend(isAgreed);
+        }}
         wait_approval = false;
     }}
     window.handleUserChoice = handleUserChoice; // 暴露给全局

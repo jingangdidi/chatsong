@@ -872,7 +872,7 @@
     /* 按钮组 */
     .modal-actions {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
         gap: 12px;
     }
 
@@ -895,6 +895,12 @@
         color: white;
     }
 
+    /* 跳过按钮样式 */
+    .btn-skip {
+        background-color: #FF8C00;
+        color: white;
+    }
+
     /* 不同意按钮样式 */
     .btn-disagree {
         background-color: #dc3545;
@@ -906,4 +912,4 @@
         max-height: 500px;
         overflow: auto;
         position: relative;
-}
+    }
