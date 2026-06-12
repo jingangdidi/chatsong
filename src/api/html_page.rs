@@ -810,6 +810,20 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         </div>
     </div>
 
+    <div class="modal-overlay" id="skipReasonModal">
+        <div class="modal-box">
+            <textarea
+            id="skipReasonInput"
+            class="skip-textarea"
+            placeholder="New instruction (optional) ..."
+            rows="5"
+            ></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-submit" onclick="submitSkipReason()">Submit</button>
+            </div>
+        </div>
+    </div>
+
     <!-- footer -->
     <footer>
 "###;
@@ -1679,14 +1693,23 @@ print(b)
         }}
         modal.classList.add('active');
     }}
+    const skipModal = document.getElementById('skipReasonModal');
+    const skipInput = document.getElementById('skipReasonInput');
+
     function handleUserChoice(isAgreed) {{
         modal.classList.remove('active');
         if (isAgreed === 'skip') {{
-            sendApprovalToBackend('skip');
+            // ---------- 跳过 → 打开“跳过原因”弹窗 ----------
+            // 清空上一次输入
+            skipInput.value = '';
+            // 显示跳过原因弹窗
+            skipModal.classList.add('active');
+            // 聚焦输入框
+            setTimeout(() => skipInput.focus(), 100);
         }} else {{
             sendApprovalToBackend(isAgreed);
+            wait_approval = false;
         }}
-        wait_approval = false;
     }}
     window.handleUserChoice = handleUserChoice; // 暴露给全局
     function sendApprovalToBackend(agreed) {{
@@ -1696,6 +1719,29 @@ print(b)
     }}
     //showApprovalWindow('是否允许运行该工具？', true);", PARAS.addr_str, PARAS.port, v);
     result += r###"
+    // 关闭跳过弹窗
+    function closeSkipReasonModal() {
+        skipModal.classList.remove('active');
+        wait_approval = false;
+    }
+    window.closeSkipReasonModal = closeSkipReasonModal;
+
+    // 提交跳过后的新指示
+    function submitSkipReason() {
+        const reason = skipInput.value.trim();
+
+        // 关闭跳过原因弹窗
+        skipModal.classList.remove('active');
+
+        if (!reason) {
+            sendApprovalToBackend('skip');
+        } else {
+            sendApprovalToBackend(reason);
+        }
+
+        wait_approval = false;
+    }
+    window.submitSkipReason = submitSkipReason;
     // 高亮指定序号范围内的消息头像
     function highlightMessageAvatars(start, end, highlightClass = 'avatar-highlight') {
         // 确保输入是数字

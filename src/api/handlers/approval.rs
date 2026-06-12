@@ -17,16 +17,10 @@ pub async fn approval(Query(params): Query<HashMap<String, String>>, uri: Origin
         let uuid = c.value().to_string();
         let approval = match params.get("approval") {
             Some(p) => {
-                event!(Level::INFO, "{} approval {}", uuid, p);
-                if p == "true" {
-                    1 // 允许
-                } else if p == "false" {
-                    0 // 不允许
-                } else {
-                    2 // 跳过
-                }
+                event!(Level::INFO, "{} user approval: {}", uuid, p);
+                p.clone()
             },
-            None => 0, // 不允许
+            None => "false".to_string(), // 不允许
         };
         update_approval(&uuid, Some(approval));
     } else {

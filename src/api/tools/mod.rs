@@ -652,8 +652,8 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                     } else {
                         approval_msg
                     };
-                    match ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await? {
-                        1 => { // 允许
+                    match ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await?.as_ref() {
+                        "true" => { // 允许
                             if name_id[0] == "image_generation" {
                                 match PARAS.tools.run(name_id[1], paras) {
                                     Ok((image_prompt, _)) => {
@@ -679,9 +679,9 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                                 Ok(PARAS.tools.run(name_id[1], paras))
                             }
                         },
-                        0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                        2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
-                        _ => unreachable!(),
+                        "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                        "skip" => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
+                        new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
                     }
                 },
                 None => if name_id[0] == "hacker_news" {
@@ -1390,16 +1390,16 @@ async fn function_calling(
                         } else {
                             approval_msg
                         };
-                        match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await? {
-                            1 => { // 允许
+                        match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
+                            "true" => { // 允许
                                 match PARAS.tools.run(name_id[1], &i.1) {
                                     Ok(r) => r.0,
                                     Err(e) => return Ok(Err(e)),
                                 }
                             },
-                            0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                            2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
-                            _ => unreachable!(),
+                            "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                            "skip" => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
+                            new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
                         }
                     } else {
                         if step_ask_approval {
@@ -1408,16 +1408,16 @@ async fn function_calling(
                             } else {
                                 format!("是否允许调用 {} 工具？{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
                             };
-                            match ask_approval(uuid, approval_msg, false, sender.clone()).await? {
-                                1 => { // 允许
+                            match ask_approval(uuid, approval_msg, false, sender.clone()).await?.as_ref() {
+                                "true" => { // 允许
                                     match PARAS.tools.run(name_id[1], &i.1) {
                                         Ok(r) => r.0,
                                         Err(e) => return Ok(Err(e)),
                                     }
                                 },
-                                0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                                2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
-                                _ => unreachable!(),
+                                "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                                "skip" => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
+                                new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
                             }
                         } else {
                             match PARAS.tools.run(name_id[1], &i.1) {
@@ -1433,16 +1433,16 @@ async fn function_calling(
                         } else {
                             format!("是否允许调用 {} 工具？{}\n{:?}", name_id[0], i.3.clone().unwrap_or_default(), i.1)
                         };
-                        match ask_approval(uuid, approval_msg, false, sender.clone()).await? {
-                            1 => { // 允许
+                        match ask_approval(uuid, approval_msg, false, sender.clone()).await?.as_ref() {
+                            "true" => { // 允许
                                 match PARAS.mcp_servers.run(&name_id, &i.1).await {
                                     Ok(r) => r.0,
                                     Err(e) => return Ok(Err(e)),
                                 }
                             },
-                            0 => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                            2 => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
-                            _ => unreachable!(),
+                            "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                            "skip" => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
+                            new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
                         }
                     } else {
                         match PARAS.mcp_servers.run(&name_id, &i.1).await {
@@ -1496,13 +1496,13 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
 }
 
 /// ask approval
-async fn ask_approval(uuid: &str, msg: String, is_diff: bool, sender: Sender<Vec<u8>>) -> Result<u8, MyError> {
+async fn ask_approval(uuid: &str, msg: String, is_diff: bool, sender: Sender<Vec<u8>>) -> Result<String, MyError> {
     let messages_num = get_messages_num(uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
     if let Err(e) = sender.send(MainData::prepare_sse(uuid, messages_num, "".to_string(), true, false, false, false, false, None, Some(0), Some(msg.replace("\n", "srxtzn")), is_diff)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "ask approval error: {:?}", e);
         return Err(MyError::PlanModeError{info: format!("ask approval error: {:?}", e)})
     }
-    let tmp_approved: u8; // 0: 不允许, 1: 允许, 2: 跳过
+    let tmp_approved: String; // false: 不允许, true: 允许, skip: 跳过, 其他信息: 跳过的新指示
     update_approval(uuid, None);
     loop {
         if let Some(apv) = approved(uuid) {

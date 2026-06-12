@@ -177,7 +177,7 @@ pub struct Info {
     pub save:          bool,                 // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
     pub pop:           usize,                // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
     pub is_incognito:  bool,                 // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
-    pub approved:      Option<u8>,           // call tool approval
+    pub approved:      Option<String>,       // call tool approval
 }
 
 /// 实现Info的方法
@@ -751,7 +751,7 @@ fn get_chat_name_from_user_msg(msg: &ChatMessage) -> Option<String> {
 }
 
 /// update approval for call tools
-pub fn update_approval(uuid: &str, approval: Option<u8>) {
+pub fn update_approval(uuid: &str, approval: Option<String>) {
     let mut data = DATA.lock().unwrap();
     if let Some(info) = data.get_mut(uuid) {
         info.approved = approval;
@@ -759,11 +759,11 @@ pub fn update_approval(uuid: &str, approval: Option<u8>) {
 }
 
 /// check approved
-pub fn approved(uuid: &str) -> Option<u8> {
+pub fn approved(uuid: &str) -> Option<String> {
     let data = DATA.lock().unwrap();
     if let Some(info) = data.get(uuid) {
         if let Some(tf) = &info.approved {
-            Some(*tf)
+            Some(tf.clone())
         } else {
             None
         }
