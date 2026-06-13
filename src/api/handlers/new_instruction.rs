@@ -25,7 +25,7 @@ pub async fn instruction(Query(params): Query<HashMap<String, String>>, uri: Ori
                 } else {
                     *instruction = Some(msg.trim().to_string());
                 },
-                None => {
+                None => if !msg.trim().is_empty() {
                     data.insert(uuid, Some(msg.trim().to_string()));
                 },
             }
@@ -41,7 +41,9 @@ pub fn get_new_instruction(uuid: &str) -> Option<String> {
     if let Some(instruction) = new_instruction.get_mut(uuid) {
         if let Some(msg) = instruction {
             let instruction_msg = msg.clone();
-            *instruction = None;
+            if msg != "wait" {
+                *instruction = None;
+            }
             return Some(instruction_msg)
         }
     }

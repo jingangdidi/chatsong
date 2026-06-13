@@ -375,13 +375,23 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
 
     'outer: loop {
         // 每次循环都检查下是否有新指令，有则插入到当前 history_messages 中
-        if let Some(instruction_msg) = get_new_instruction(&uuid) {
-            history_messages.push(
-                ChatMessage::User{
-                    content: ChatMessageContent::Text(instruction_msg),
-                    name: None,
+        loop {
+            if let Some(instruction_msg) = get_new_instruction(&uuid) {
+                if instruction_msg == "wait" {
+                    event!(Level::INFO, "{} waiting new instruction ...", uuid);
+                    sleep(Duration::from_secs(5)).await;
+                } else {
+                    history_messages.push(
+                        ChatMessage::User{
+                            content: ChatMessageContent::Text(instruction_msg),
+                            name: None,
+                        }
+                    );
+                    break
                 }
-            );
+            } else {
+                break
+            }
         }
         // send query to LLM
         para_builder.messages(history_messages.clone());

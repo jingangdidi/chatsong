@@ -1045,6 +1045,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     // 监听插入新指令按钮
     let new_msg = false;
     document.getElementById('left-insert-msg').addEventListener('click', function(event) {
+        // 先发送等待信号，运行完当前任务，在下一步之前，等待用户输入的新指令，避免用户输入完新指令，原任务已经执行了好几步
+        sendNewMsgToBackend("wait");
         new_msg = true;
         // 清空上一次输入
         skipInput.value = '';
