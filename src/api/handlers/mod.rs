@@ -14,6 +14,7 @@ pub mod delete_message; // `GET /嵌套的前缀/delmsg/:id`
 pub mod microphone; // `GET /嵌套的前缀/microphone/:id`
 pub mod incognito; // `GET /嵌套的前缀/incognito`
 pub mod approval; // `GET /嵌套的前缀/approval`
+pub mod new_instruction; // `GET /嵌套的前缀/instruction`
 pub mod upload; // `POST /嵌套的前缀/upload`
 pub mod usage; // `GET /嵌套的前缀/usage`
 pub mod fallback; // `NOT_FOUND`

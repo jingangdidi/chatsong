@@ -51,9 +51,12 @@ use crate::{
     },
     parse_paras::PARAS,
     error::MyError,
-    api::handlers::chat::{
-        MainData,
-        MetaData,
+    api::handlers::{
+        chat::{
+            MainData,
+            MetaData,
+        },
+        new_instruction::get_new_instruction,
     },
     skills::SelectedSkills,
 };
@@ -371,6 +374,15 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     let mut real_name: String; // 要调用的工具的真实名称，含有`_uuid第一部分`后缀
 
     'outer: loop {
+        // 每次循环都检查下是否有新指令，有则插入到当前 history_messages 中
+        if let Some(instruction_msg) = get_new_instruction(&uuid) {
+            history_messages.push(
+                ChatMessage::User{
+                    content: ChatMessageContent::Text(instruction_msg),
+                    name: None,
+                }
+            );
+        }
         // send query to LLM
         para_builder.messages(history_messages.clone());
         let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;

@@ -141,6 +141,18 @@
         transition: transform 0.3s;
     }
 
+    /* 左下插入新指令按钮 */
+    #left-insert-msg {
+        left: 305px;
+        transition: transform 0.3s ease-in-out; /* 平滑过渡 */
+    }
+
+    #left-insert-msg:hover {
+        transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s;
+    }
+
     #right-part {
         position: absolute;
         right: 0px;
