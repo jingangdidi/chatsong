@@ -137,7 +137,7 @@ pub async fn use_stream(
         let stream = client.chat().create_stream(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
         let mut tracked_stream = RoleTrackingStream::new(stream);
         // 遍历接受stream信息
-        while let Some(response) = tracked_stream.next().await {
+        'inner: while let Some(response) = tracked_stream.next().await {
             //let chat_response = response.map_err(|e| MyError::ApiError{uuid: uuid.clone(), error: e})?;
             let chat_response = match response { // 这里遇到错误不能直接返回，否则服务端与前端id差一个，后面代码insert_message没有执行，下个问题会显示在这个未回答完的答案末尾
                 Ok(r) => r,
@@ -170,7 +170,7 @@ pub async fn use_stream(
                         if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                             //println!("channel send error: {:?}", e);
                             event!(Level::WARN, "channel send error: {:?}", e);
-                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                            break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                         }
                         //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                     },
@@ -237,13 +237,13 @@ pub async fn use_stream(
                                 //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                     event!(Level::WARN, "channel send error: {:?}", e);
-                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                    break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                                 }
                             } else if start_stop_think == 4 {
                                 //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                     event!(Level::WARN, "channel send error: {:?}", e);
-                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                    break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                                 }
                                 think = false;
                             }
@@ -256,7 +256,7 @@ pub async fn use_stream(
                             if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 //println!("channel send error: {:?}", e);
                                 event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
                             //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                         }
@@ -270,7 +270,7 @@ pub async fn use_stream(
                         if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                             //println!("channel send error: {:?}", e);
                             event!(Level::WARN, "channel send error: {:?}", e);
-                            break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                            break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                         }
                         //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                     },
@@ -349,13 +349,13 @@ pub async fn use_stream(
                                 //if let Err(e) = sender.send("data: thinking ...<br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "<div class='think'>thinking ...<br>".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                     event!(Level::WARN, "channel send error: {:?}", e);
-                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                    break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                                 }
                             } else if start_stop_think == 4 {
                                 //if let Err(e) = sender.send("data: <br>\n\n".as_bytes().to_vec()).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, "srxtzn</div>srxtznsrxtzn---srxtznsrxtzn".to_string(), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                     event!(Level::WARN, "channel send error: {:?}", e);
-                                    break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                    break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                                 }
                                 think = false;
                             }
@@ -368,7 +368,7 @@ pub async fn use_stream(
                             if let Err(e) = sender.send(MainData::prepare_sse(&uuid, messages_num, c_str.replace("\n", "srxtzn"), true, false, false, false, false, None, Some(0), None, false)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                                 //println!("channel send error: {:?}", e);
                                 event!(Level::WARN, "channel send error: {:?}", e);
-                                break 'outer; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
+                                break 'inner; // 可能客户端停止接收答案，这里也要停止，否则服务端依然接收答案，计费没停止
                             }
                             //sleep(Duration::from_millis(10)).await; // 这里设置间隔10ms，否则输出太快，客户端一大段一大段的输出，不流畅。不是获取stream的问题，确实是每个字符流式输出，只是太快了
                         }
