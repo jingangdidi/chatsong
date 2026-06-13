@@ -49,3 +49,13 @@ pub fn get_new_instruction(uuid: &str) -> Option<String> {
     }
     None
 }
+
+/// 将指定 uuid 的指令设为 None
+pub fn reset_new_instruction(uuid: &str) {
+    let mut new_instruction = NEW_INSTRUCTION.lock().unwrap();
+    if let Some(instruction) = new_instruction.get_mut(uuid) {
+        if instruction.is_some() {
+            *instruction = None;
+        }
+    }
+}

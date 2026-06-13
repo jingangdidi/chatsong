@@ -56,7 +56,10 @@ use crate::{
             MainData,
             MetaData,
         },
-        new_instruction::get_new_instruction,
+        new_instruction::{
+            get_new_instruction,
+            reset_new_instruction,
+        },
     },
     skills::SelectedSkills,
 };
@@ -373,6 +376,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     let mut is_first: bool;
     let mut real_name: String; // 要调用的工具的真实名称，含有`_uuid第一部分`后缀
 
+    // 进入循环前，如果当前 uuid 的新指令不为 None，则设为 None
+    reset_new_instruction(&uuid);
     'outer: loop {
         // 每次循环都检查下是否有新指令，有则插入到当前 history_messages 中
         loop {
