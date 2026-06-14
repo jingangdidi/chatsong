@@ -61,6 +61,7 @@ use crate::{
             reset_new_instruction,
         },
     },
+    tools::built_in_tools::schedule::run_schedule_task,
     skills::SelectedSkills,
 };
 
@@ -700,6 +701,11 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                                             Err(e) => Ok(Err(e)),
                                         }
                                     },
+                                    Err(e) => Ok(Err(e)),
+                                }
+                            } else if name_id[0] == "schedule_task" {
+                                match PARAS.tools.run(name_id[1], paras) {
+                                    Ok(_) => Ok(run_schedule_task(paras).await),
                                     Err(e) => Ok(Err(e)),
                                 }
                             } else {
