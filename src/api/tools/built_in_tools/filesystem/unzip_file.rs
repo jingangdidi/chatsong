@@ -8,9 +8,13 @@ use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/e
 use crate::{
     error::MyError,
     parse_paras::PARAS,
-    tools::built_in_tools::{
-        BuiltIn,
-        filesystem::utils::validate_path,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::{
+            BuiltIn,
+            filesystem::utils::validate_path,
+        },
     },
 };
 
@@ -62,7 +66,8 @@ impl BuiltIn for UnzipFile {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
 
         let zip_file = validate_path(&PARAS.allowed_path, Path::new(&params.zip_file.replace("\\", "/")), true)?;
         let correct_path = params.target_dir.replace("\\", "/");
@@ -115,7 +120,8 @@ impl BuiltIn for UnzipFile {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         if is_en {
             Ok(Some(format!("Do you allow calling the unzip_file tool to extract the contents of {} to {} ?{}", params.zip_file, params.target_dir, info.unwrap_or_default())))
         } else {

@@ -14,9 +14,13 @@ use zip::{
 use crate::{
     error::MyError,
     parse_paras::PARAS,
-    tools::built_in_tools::{
-        BuiltIn,
-        filesystem::utils::validate_path,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::{
+            BuiltIn,
+            filesystem::utils::validate_path,
+        },
     },
 };
 
@@ -73,7 +77,8 @@ impl BuiltIn for ZipDirectory {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
 
         let valid_dir_path = validate_path(&PARAS.allowed_path, Path::new(&params.input_dir.replace("\\", "/")), true)?;
         let input_dir_str = &valid_dir_path
@@ -143,7 +148,8 @@ impl BuiltIn for ZipDirectory {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         if is_en {
             Ok(Some(format!("Do you allow calling the zip_directory tool to create a ZIP archive {} by compressing {} ?{}", params.target_zip_file, params.input_dir, info.unwrap_or_default())))
         } else {

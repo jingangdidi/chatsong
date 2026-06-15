@@ -18,8 +18,8 @@ use openai_dive::v1::{
         ImageUrlType,
     },
 };
-use regex::Regex;
-use serde::{Deserialize, Serialize};
+//use regex::Regex;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{json, Value};
 use tokio::{
     sync::mpsc::Sender,
@@ -241,6 +241,23 @@ impl Tools {
             Err(MyError::ToolNotExistError{id: id.to_string(), info: "Tools::get_approval()".to_string()})
         }
     }
+
+    /// get tool id by name
+    pub fn get_tool_id_by_name(&self, name: &str) -> Option<String> {
+        // 从 built-in 工具中查找
+        for (k, v) in &self.built_in.id_map {
+            if v.tool.name() == name {
+                return Some(k.clone())
+            }
+        }
+        // 从 external 工具中查找
+        for (k, v) in &self.external.id_map {
+            if v.name == name {
+                return Some(k.clone())
+            }
+        }
+        None
+    }
 }
 
 /// chat with tools: built-in + external tools
@@ -423,47 +440,7 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                             event!(Level::WARN, "{} can't find real tool by model returned `{}`", uuid, j.0);
                         }
                     }
-                    // 模型返回的调用tool的json格式参数可能有问题，导致调用tool时解析参数失败，这里修复下可能存在的json格式问题
-                    let mut safe_args = j.1
-                        .replace(": \"[", ": [") // `: "[` --> `: ["`
-                        .replace("]\"", "]"); // `]"` --> `]`
-                        //.replace(": \"[\\\"", ": [\"") // `"[\"` --> `["`
-                        //.replace("\\\"]\"", "\"]") // `"\"]"` --> `"]`
-                        //.replace("\\\", ", "\", ") // `\\\", ` --> `\", `
-                        //.replace(", \\\"", ", \"") // `, \\\"` --> `, \"`
-                    if name_id[0].starts_with("edit_file") {
-                        safe_args = safe_args
-                            .replace("{\\\"newText\\\": \\\"", "{\"newText\": \"") // `{\"newText\": \"` --> `{"newText": "`
-                            .replace("\\\"}, {\\\"newText\\\": \\\"", "\\\"}, {\"newText\": \"") // `\"}, {\"newText\": \"` --> `"}, {"newText": "`
-                            .replace("\\\", \\\"oldText\\\": \\\"", "\", \"oldText\": \"") // `\", \"oldText\": \"` --> `", "oldText": "`
-                            .replace("\\\"}]}", "\"}]}"); // `\"}]}` --> `"}]}`
-                    }
-                    if name_id[0].starts_with("write_file") || name_id[0].starts_with("edit_file") {
-                        let sep = if name_id[0].starts_with("write_file") { "\"content\":" } else { "\"edits\":" };
-                        if let Some((first_part, second_part)) = safe_args.split_once(sep) {
-                            let re = Regex::new(r#", \\\"(.*?)\\\""#).unwrap();
-                            let mut tmp = re.replace_all(first_part, r#", "$1""#).to_string();
-                            let re = Regex::new(r#"\\\"(.*?)\\\", "#).unwrap();
-                            tmp = re.replace_all(&tmp, r#""$1", "#).to_string();
-                            let re = Regex::new(r#"\[\\\"(.*?)\\\\]", "#).unwrap();
-                            tmp = re.replace_all(&tmp, r#"["$1"]"#).to_string();
-                            tmp += sep;
-                            tmp += second_part;
-                            safe_args = tmp;
-                        }
-                    } else {
-                        let re = Regex::new(r#", \\\"(.*?)\\\""#).unwrap();
-                        safe_args = re.replace_all(&safe_args, r#", "$1""#).to_string();
-                        let re = Regex::new(r#"\\\"(.*?)\\\", "#).unwrap();
-                        safe_args = re.replace_all(&safe_args, r#""$1", "#).to_string();
-                        let re = Regex::new(r#"\[\\\"(.*?)\\\\]", "#).unwrap();
-                        safe_args = re.replace_all(&safe_args, r#"["$1"]"#).to_string();
-                        //let re = Regex::new(r#"\\\"(.*?)\\\""#).unwrap();
-                        //safe_args = re.replace_all(&safe_args, r#""$1""#).to_string();
-                    }
-                    //println!("raw  args: {:?}", j.1);
-                    //println!("safe args: {:?}", safe_args);
-                    let (mut result, language, is_image) = match try_call_tool(&uuid, &name_id, &safe_args, j.3.clone(), sender.clone(), model).await {
+                    let (mut result, language, is_image) = match try_call_tool(&uuid, &name_id, &j.1, j.3.clone(), sender.clone(), model).await {
                         Ok(inner_result) => {
                             match inner_result {
                                 Ok((result, file_option)) => {
@@ -480,11 +457,11 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                                         if try_count >= 3 {
                                             return Err(e)
                                         } else {
-                                            event!(Level::WARN, "{} call tool {} error, try again {}\n{}\n\nraw args: {}\n\nsafe args: {}", uuid, name_id[0], try_count, e, j.1, safe_args);
+                                            event!(Level::WARN, "{} call tool {} error, try again {}\n{}\nargs: {}", uuid, name_id[0], try_count, e, j.1);
                                             continue 'outer
                                         }
                                     } else {
-                                        event!(Level::WARN, "{} call tool {} error, not try again, return to model\n{}\n\nraw args: {}\n\nsafe args: {}", uuid, name_id[0], try_count, j.1, safe_args);
+                                        event!(Level::WARN, "{} call tool {} error, not try again, return to model\n{}\nargs: {}", uuid, name_id[0], try_count, j.1);
                                         try_count = 0;
                                         (format!("call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                     }
@@ -497,12 +474,12 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                                     (info.clone(), "text".to_string(), false)
                                 } else {
                                     event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
-                                    event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                                    //event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
                                     return Err(e)
                                 }
                             } else {
                                 event!(Level::WARN, "{} call tool {}, raw args: {}", uuid, name_id[0], j.1);
-                                event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                                //event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
                                 return Err(e)
                             }
                         },
@@ -651,7 +628,8 @@ struct SkillParams {
 /// try run tool, if error not from call tool, return Err(), else return Ok(Ok()) or Ok(Err())
 async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>, model: &str) -> Result<Result<(String, Option<String>), MyError>, MyError> {
     if name_id[0] == "activate_skill" {
-        let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: SkillParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
         Ok(Ok((PARAS.skills.get_skill_full_content(&params.skill_name)?, None)))
     } else if name_id.len() < 2 {
         return Ok(Err(MyError::ToolNotExistError{id: name_id[0].to_string(), info: "run_tools".to_string()}))
@@ -662,10 +640,17 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
             match PARAS.tools.get_approval(name_id[1], paras, info, PARAS.english)? {
                 Some(approval_msg) => {
                     let approval_msg = if name_id[0] == "edit_file" {
+                        /*
                         let mut params: Params = match serde_json::from_str(paras) {
                             Ok(p) => p,
                             Err(e) => return Ok(Err(MyError::SerdeJsonFromStrError{error: e})),
                         };
+                        */
+                        let mut params: Params = match parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["edits".to_string()]), object_fields: None }) {
+                            Ok(p) => p,
+                            Err(e) => return Ok(Err(e)),
+                        };
+
                         params.dry_run = Some(true);
                         let dry_run_para = match serde_json::to_string(&params) {
                             Ok(d) => d,
@@ -1407,9 +1392,15 @@ async fn function_calling(
                         }
                     } else if let Some(approval_msg) = PARAS.tools.get_approval(name_id[1], &i.1, i.3.clone(), PARAS.english)? {
                         let approval_msg = if name_id[0] == "edit_file" {
+                            /*
                             let mut params: Params = match serde_json::from_str(&i.1) {
                                 Ok(p) => p,
                                 Err(e) => return Ok(Err(MyError::SerdeJsonFromStrError{error: e})),
+                            };
+                            */
+                            let mut params: Params = match parse_tool_args(&i.1, ArgFixSpec{ array_fields: Some(vec!["edits".to_string()]), object_fields: None }) {
+                                Ok(p) => p,
+                                Err(e) => return Ok(Err(e)),
                             };
                             params.dry_run = Some(true);
                             let dry_run_para = match serde_json::to_string(&params) {
@@ -1595,4 +1586,90 @@ fn get_tool_hashmap(tools: &Vec<ChatCompletionTool>) -> HashMap<String, Vec<Stri
             .push(real_name);
     }
     out
+}
+
+// 调用 tool 时，模型返回的 tool 的 json 参数可能类型不对
+// 比如 numbers 需要是 list: `{"numnbers": [1, 2, 3]}`，但模型返回的是字符串: `{"numbers": "[1, 2, 3]"}`，导致解析为结构体时失败
+// 不要去修改 json 字符串，先转为 Value 再去修改指定字段
+
+/// 指定哪些字段允许被纠正类型
+/// 例如模型可能把数组字段返回成字符串：`"numbers": "[1, 2, 3]"`
+/// 这时可以把 `numbers` 放进 `array_fields`，函数会只修这个字段
+#[derive(Debug, Default)]
+pub struct ArgFixSpec {
+    /// 这些字段期望是 array，比如 Vec<T>
+    pub array_fields: Option<Vec<String>>,
+
+    /// 这些字段期望是 object，比如某个 struct/map
+    pub object_fields: Option<Vec<String>>,
+}
+
+/// 解析模型返回的 tool arguments
+/// 支持两类兼容修复：
+/// 1. arguments 整体被包成 JSON string
+/// 2. 某些白名单字段被错误地包成 string，例如 "[1,2,3]"
+pub fn parse_tool_args<T>(raw: &str, fix_spec: ArgFixSpec) -> Result<T, MyError>
+where
+    T: DeserializeOwned,
+{
+    // 第一步：把模型返回的 arguments 解析成 JSON Value
+    let mut value: Value = serde_json::from_str(raw).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+
+    // 第二步：兼容 arguments 整体被多包了一层字符串的情况
+    // 有些接口/模型可能返回：
+    // "{\"file_path\":\"Cargo.toml.txt\",\"content\":\"...\"}"
+    // 外层解析后是 Value::String，需要再解析一次
+    if let Value::String(inner_json) = value {
+        value = serde_json::from_str(&inner_json).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+    }
+
+    // 第三步：只修复明确声明的字段
+    // 例如字段 numbers 期望是数组，但模型给了字符串：
+    // {"numbers":"[1,2,3]"}
+    // 修复后变成：
+    // {"numbers":[1,2,3]}
+    if let Value::Object(map) = &mut value {
+        // 把 array 从多封装了一层的字符串中解析出来
+        if let Some(array_fields) = fix_spec.array_fields {
+            for field in array_fields {
+                fix_string_field_to_json_type(map, &field, |v| v.is_array());
+            }
+        }
+
+        // 把 object 从多封装了一层的字符串中解析出来
+        if let Some(object_fields) = fix_spec.object_fields {
+            for field in object_fields {
+                fix_string_field_to_json_type(map, &field, |v| v.is_object());
+            }
+        }
+    }
+
+    // 第四步：把修复后的 JSON Value 反序列化成结构体
+    // 如果字段类型仍然不匹配，这里会正常报错
+    serde_json::from_value::<T>(value).map_err(|e| MyError::StructToJsonValueError{error: e})
+}
+
+/// 如果某个字段现在是 string，并且这个 string 本身又是合法 JSON，
+/// 就尝试把它解析成真正的 JSON array/object
+/// `accept` 用来限制只接受目标类型：
+/// array 字段只接受 array，object 字段只接受 object
+fn fix_string_field_to_json_type(
+    map: &mut serde_json::Map<String, Value>,
+    field: &str,
+    accept: impl Fn(&Value) -> bool,
+) {
+    // 提取 field 对应的字符串
+    let Some(Value::String(s)) = map.get(field) else {
+        return;
+    };
+
+    // 将提取的字符串转为 Value
+    let Ok(parsed) = serde_json::from_str::<Value>(s) else {
+        return;
+    };
+
+    // 如果解析得到了期望的类型则原位更新
+    if accept(&parsed) {
+        map.insert(field.to_string(), parsed);
+    }
 }

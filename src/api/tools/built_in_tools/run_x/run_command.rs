@@ -6,7 +6,11 @@ use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/e
 
 use crate::{
     error::MyError,
-    tools::built_in_tools::BuiltIn,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::BuiltIn,
+    },
 };
 
 /// params for run command
@@ -58,7 +62,8 @@ impl BuiltIn for RunCommand {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["args".to_string()]), object_fields: None })?;
 
         // prepare command
         let cmd_vec: Vec<&str> = params.command.split(" ").collect(); // 有些模型会把命令和参数都写在`command`里
@@ -117,7 +122,8 @@ impl BuiltIn for RunCommand {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["args".to_string()]), object_fields: None })?;
         if is_en {
             Ok(Some(format!("Do you allow running this command: {} {}?{}", params.command, params.args.unwrap_or_default().join(" "), info.unwrap_or_default())))
         } else {

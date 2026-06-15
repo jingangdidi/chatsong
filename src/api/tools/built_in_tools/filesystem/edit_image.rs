@@ -21,7 +21,11 @@ use openai_dive::v1::{
 
 use crate::{
     error::MyError,
-    tools::built_in_tools::BuiltIn,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::BuiltIn,
+    },
     parse_paras::PARAS,
 };
 
@@ -80,7 +84,8 @@ impl BuiltIn for EditImage {
     /// run tool
     /// 返回的字符串以`---srx---`间隔，第一项表示是否设置`input_fidelity`，第二项表示绘图prompt，其余项表示要用的图片
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["image_path".to_string()]), object_fields: None })?;
         let mut result = vec![format!("{}", if params.facial_feature { "true" } else { "false" }), params.prompt];
         for p in params.image_path {
             let tmp_path = Path::new(&p);
@@ -95,7 +100,8 @@ impl BuiltIn for EditImage {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["image_path".to_string()]), object_fields: None })?;
         if is_en {
             Ok(Some(format!("Do you allow calling the edit_image tool to edit image?{}\n{}", info.unwrap_or_default(), params.prompt)))
         } else {

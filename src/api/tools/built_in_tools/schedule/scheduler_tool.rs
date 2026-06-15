@@ -1,17 +1,24 @@
+use chrono::Local;
 use serde::Deserialize;
-use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/enum.Value.html
+use serde_json::{json, Value, to_string}; // https://docs.rs/serde_json/latest/serde_json/enum.Value.html
 use tokio::sync::oneshot;
+use tracing::{event, Level};
 
 use crate::{
+    parse_paras::PARAS,
     error::MyError,
-    tools::built_in_tools::{
-        BuiltIn,
-        schedule::{
-            ScheduledJob,
-            SchedulerCmd,
-            ScheduleType,
-            get_cmd_tx,
-        }
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::{
+            BuiltIn,
+            schedule::{
+                ScheduledJob,
+                SchedulerCmd,
+                ScheduleType,
+                get_cmd_tx,
+            }
+        },
     },
 };
 
@@ -40,7 +47,7 @@ struct Params {
     tool_name: Option<String>,         // 要调用的工具
     #[serde(default)]
     //#[serde(rename = "toolArgs")]
-    tool_args: Option<String>,         // 要待哦用的工具参数
+    tool_args: Option<Value>,          // 要调用的工具参数
     #[serde(default)]
     //#[serde(rename = "toolId")]
     job_id:    Option<String>,         // 删除任务要用
@@ -143,16 +150,18 @@ impl BuiltIn for ScheduleTask {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let _params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let _params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let _params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         Ok(("".to_string(), None))
     }
 
     /// get approval message
-    fn get_approval(&self, _args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         if is_en {
-            Ok(Some(format!("Do you allow calling the schedule_task tool ?{}", info.unwrap_or_default())))
+            Ok(Some(format!("Do you allow calling the schedule_task tool {} method ?{}", params.action, info.unwrap_or_default())))
         } else {
-            Ok(Some(format!("是否允许调用 schedule_task 工具编辑？{}", info.unwrap_or_default())))
+            Ok(Some(format!("是否允许调用 schedule_task 工具 {} 方法？{}", params.action, info.unwrap_or_default())))
         }
     }
 }
@@ -190,12 +199,21 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                 other => return Err(MyError::OtherError{info: format!("schedule type only support 'interval' and 'daily', not {other}")}),
             };
 
+            let (tool_name, tool_id) = match tool_name.split_once("__") {
+                Some((t_name, t_id)) => (t_name.to_string(), t_id.to_string()), // 获取工具 id，`工具名__后缀`
+                None => match PARAS.tools.get_tool_id_by_name(&tool_name) {
+                    Some(t_id) => (tool_name, t_id),
+                    None => return Err(MyError::OtherError{info: format!("schedule can not find tool '{tool_name}', not exist")}), // 没有后缀，仅含有工具名，则通过工具名获取 id
+                },
+            };
+
             let job = ScheduledJob {
                 id: String::new(), // 空字符串，会生成一个 uuid
                 name,
                 schedule,
                 tool_name,
-                tool_args: params.tool_args.unwrap_or_default(),
+                tool_id,
+                tool_args: params.tool_args.and_then(|v| to_string(&v).ok()).unwrap_or_default(),
                 enabled: true,
                 next_run: None,
             };
@@ -207,6 +225,7 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                 .unwrap();
             let job_id = reply_rx.await.unwrap()?;
 
+            event!(Level::INFO, "create schedule job successfull, ID: {}", job_id);
             Ok((format!("create schedule job successfull, ID: {job_id}"), None))
         }
         "delete" => {
@@ -220,6 +239,7 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                 .unwrap();
             reply_rx.await.unwrap()?;
 
+            event!(Level::INFO, "delete schedule job successfull, ID: {}", id);
             Ok((format!("delete schedule job successfull, ID: {id}"), None))
         }
         "list" => {
@@ -230,9 +250,23 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                 .unwrap();
             let jobs = reply_rx.await.unwrap();
             if jobs.is_empty() {
+                event!(Level::INFO, "No schedule job");
                 Ok(("No schedule job".to_string(), None))
             } else {
-                let json = serde_json::to_string_pretty(&jobs).unwrap_or_default();
+                let jobs_view: Vec<Value> = jobs.iter().map(|job| {
+                    json!({
+                        "id": job.id,
+                        "name": job.name,
+                        "schedule": job.schedule,
+                        "tool_name": job.tool_name,
+                        "tool_args": job.tool_args,
+                        "enabled": job.enabled,
+                        "next_run": job.next_run.map(|t| t.with_timezone(&Local)), // 这里将 UTC 时间转为 Local 时间
+                    })
+                }).collect();
+
+                let json = serde_json::to_string_pretty(&jobs_view).unwrap_or_default();
+                event!(Level::INFO, "all schedule jobs:\n{}", json);
                 Ok((format!("all schedule jobs:\n{json}"), None))
             }
         }

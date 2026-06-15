@@ -7,7 +7,11 @@ use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/e
 
 use crate::{
     error::MyError,
-    tools::built_in_tools::BuiltIn,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::BuiltIn,
+    },
     skills::command_exists,
 };
 
@@ -60,7 +64,8 @@ impl BuiltIn for RunScript {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["args".to_string()]), object_fields: None })?;
 
         // 获取解释器（根据扩展名自动判断）
         let interpreter = get_interpreter(&params.script)?;
@@ -154,7 +159,8 @@ impl BuiltIn for RunScript {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["args".to_string()]), object_fields: None })?;
         let interpreter = get_interpreter(&params.script)?;
         if is_en {
             Ok(Some(format!("Do you allow running this script: {} {} {}?{}", interpreter, params.script, params.args.unwrap_or_default().join(" "), info.unwrap_or_default())))

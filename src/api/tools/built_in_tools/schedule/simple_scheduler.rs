@@ -80,6 +80,7 @@ pub struct ScheduledJob {
     pub name: String,
     pub schedule: ScheduleType,
     pub tool_name: String,
+    pub tool_id: String,
     pub tool_args: String,
     pub enabled: bool,
     pub next_run: Option<DateTime<Utc>>,
@@ -161,11 +162,11 @@ impl SimpleScheduler {
 
             let jobs = self.jobs.clone();
             tokio::spawn(async move {
-                event!(Level::INFO, "⏰ Job '{}' fired: calling tool '{}'", job.name, job.tool_name);
+                event!(Level::INFO, "Job '{}' fired: calling tool '{}'", job.name, job.tool_name);
 
                 // 🔥 在这里调用你的 agent 工具系统
                 //    例如: agent.call_tool(&job.tool_name, &job.tool_args).await
-                match PARAS.tools.run(&job.tool_name, &job.tool_args) {
+                match PARAS.tools.run(&job.tool_id, &job.tool_args) {
                     Ok(r) => event!(Level::INFO, "Job '{}' call tool '{}' successfull: {}", job.name, job.tool_name, r.0),
                     Err(e) => event!(Level::ERROR, "Job '{}' call tool '{}' failed: {}", job.name, job.tool_name, e),
                 }

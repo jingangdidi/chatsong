@@ -3,9 +3,13 @@ use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/e
 
 use crate::{
     error::MyError,
-    tools::built_in_tools::{
-        BuiltIn,
-        filesystem::utils::search_files_helper,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::{
+            BuiltIn,
+            filesystem::utils::search_files_helper,
+        },
     },
 };
 
@@ -63,7 +67,8 @@ impl BuiltIn for SearchFiles {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["exclude_patterns".to_string()]), object_fields: None })?;
         let list = search_files_helper(&params.root_path.replace("\\", "/"), params.include_pattern, params.exclude_patterns)?;
         let result = if !list.is_empty() {
             list.iter()

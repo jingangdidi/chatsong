@@ -4,7 +4,11 @@ use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/e
 
 use crate::{
     error::MyError,
-    tools::built_in_tools::BuiltIn,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::BuiltIn,
+    },
     web::parse_html::parse_single_html_str,
 };
 
@@ -51,7 +55,8 @@ impl BuiltIn for GetWebPageContent {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         let client = Client::new();
         let response = client.get(&params.url).send().map_err(|e| MyError::SendRequestError{url: params.url.clone(), error: e})?;
         let content = response.text().map_err(|e| MyError::GetResponseTextError{url: params.url, error: e})?;
@@ -61,7 +66,8 @@ impl BuiltIn for GetWebPageContent {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         if is_en {
             Ok(Some(format!("Do you allow calling the get_web_page_content tool to visit {} ?{}", params.url, info.unwrap_or_default())))
         } else {

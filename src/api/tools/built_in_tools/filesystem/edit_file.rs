@@ -8,11 +8,15 @@ use similar::TextDiff;
 use crate::{
     error::MyError,
     parse_paras::PARAS,
-    tools::built_in_tools::{
-        BuiltIn,
-        filesystem::utils::{
-            validate_path,
-            normalize_line_endings,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+        built_in_tools::{
+            BuiltIn,
+            filesystem::utils::{
+                validate_path,
+                normalize_line_endings,
+            },
         },
     },
 };
@@ -136,8 +140,9 @@ impl BuiltIn for EditFile {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        println!("\n{}\n", args);
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //println!("\n{}\n", args);
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["edits".to_string()]), object_fields: None })?;
         let valid_path = validate_path(&PARAS.allowed_path, &Path::new(&params.file_path.replace("\\", "/")), false)?;
 
         // Read file content and normalize line endings
@@ -285,7 +290,8 @@ impl BuiltIn for EditFile {
 
     /// get approval message
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["edits".to_string()]), object_fields: None })?;
         if is_en {
             Ok(Some(format!("Do you allow calling the edit_file tool to edit a text file {} ?{}\n{:?}", params.file_path, info.unwrap_or_default(), params.edits)))
         } else {
