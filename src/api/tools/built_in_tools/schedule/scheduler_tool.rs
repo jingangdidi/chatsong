@@ -79,14 +79,14 @@ impl BuiltIn for ScheduleTask {
 - `tool_name`: the exact name of the tool to invoke when the task fires. This tool must already exist in the system.
 - `tool_args` (optional): a JSON object with arguments to pass to that tool.
 
-**Example 1:** User says 'Write a poem every minute and save it to poem.txt'
-→ You should set action='create', name='write_poem_every_min', schedule={job_type='interval', secs=60}, tool_name='write_poem_to_file', tool_args={\"filename\":\"poem.txt\"}
+**Example 1:** User says 'Save a number to number.txt every minute'
+→ You should set action='create', name='write_number_every_min', schedule={job_type='interval', secs=60}, tool_name='write_file', tool_args={\"filename\":\"number.txt\", \"content\": \"123\"}
 
 **Example 2:** User says 'Run check.py every 5 minutes'
-→ action='create', name='run_check', schedule={job_type='interval', secs=300}, tool_name='run_python_script', tool_args={\"script\":\"check.py\"}
+→ action='create', name='run_check', schedule={job_type='interval', secs=300}, tool_name='run_script', tool_args={\"script\":\"check.py\", \"args\": \"null\"}
 
 **Example 3:** User says 'Daily summary of Hacker News at 6:00 AM'
-→ action='create', name='hn_summary', schedule={job_type='daily', hour=6, minute=0}, tool_name='summarize_hackernews', tool_args={}
+→ action='create', name='hacker_news_summary', schedule={job_type='daily', hour=6, minute=0}, tool_name='hacker_news', tool_args={\"save_html\": true}
 
 **For deletion:** action='delete', job_id='<the task's ID>'
 **For listing:** action='list'
