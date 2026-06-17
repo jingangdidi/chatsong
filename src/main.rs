@@ -106,8 +106,8 @@ async fn main() {
         handles.push(handle);
     }
 
-    // 初始化调度管道，50秒扫描一次任务，定时任务间隔最好不要少于1分钟
-    start_scheduler(50); // 内部有个 loop 循环，每50秒检查一次定时任务，并监听增加、删除、查看任务
+    // 初始化调度管道，65秒扫描一次任务，定时任务间隔最好不要少于1分钟
+    start_scheduler(65); // 内部有个 loop 循环，每65秒检查一次定时任务，定时任务下次运行时间<当前扫描时间则执行，并监听增加、删除、查看任务
 
     // 测试不同Level（TRACE、DEBUG、INFO、WARN、ERROR），可以比较，TRACE最高，ERROR最低，越高则有越多的verbose
     //event!(Level::TRACE, "Running on http://{}:{}", PARAS.addr_str, PARAS.port); // 紫色，very low priority, often extremely verbose, information. The most fine-grained information, useful for detailed debugging.

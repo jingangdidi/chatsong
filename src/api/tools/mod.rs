@@ -260,6 +260,9 @@ impl Tools {
     }
 }
 
+/// 以这些词为起始，则粗略认为是查看或删除任务，不需要把 tool 发给模型
+static SCHEDULE_LIST_REMOVE: &[&str; 6] = &["查看", "列出", "移除", "删除", "list", "remove"];
+
 /// chat with tools: built-in + external tools
 /// This just a simple loop, if not call tool, break the loop, return result
 /// +-------------------------------------------------------------+
@@ -370,11 +373,62 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     }
     // prepare buider for call tool
     tool_schema.extend(mcp_schema);
+    // 如果只选择了 schedule_task 这一个 tool，则从问题中提取是否有指定要调用的其他 tool，如果有，则获取这些 tool 的 schema，作为单独一条信息发送给模型，如果没有指定，则把所有其他 tool 单独作为一条信息发送给模型
+    let other_tools = if tool_schema.len() == 1 && tool_schema[0].function.name.starts_with("schedule_task__") {
+        let mut all_tools = PARAS.tools.get_desc_and_schema(&Some(SelectedTools::All))?;
+        all_tools.retain(|t| !t.function.name.starts_with("schedule_task__")); // 排除 schedule_task
+        Some(all_tools)
+    } else {
+        None
+    };
     // tool名称加了`_uuid第一部分`保证不重复，但是上下文很长时可能导致模型返回的要调用的模型丢失了`_uuid第一部分`，导致调用模型失败
     // 这里把不含`_uuid第一部分`的tool名称作为key，将对应的完整tool名称作为value，存入HashMap，当`_uuid第一部分`丢失，也能确认具体要调用的模型
     let tool_map = get_tool_hashmap(&tool_schema);
     para_builder.tools(tool_schema);
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
+    // 插入 schedule_task 要调用的其他 tool
+    let mut schedule_list_remove = false; // 是否仅查询或删除定时任务，此时不需要插入其他 tool，节省 token
+    if let Some(other_all_tools) = other_tools {
+        // 从 history_messages 最后连续的提问中获取指定要用的 tool
+        let mut final_tools = Vec::new();
+        for m in history_messages.iter().rev() {
+            if let &ChatMessage::User{content: ct, ..} = &m {
+                if let ChatMessageContent::Text(c) = ct {
+                    if !schedule_list_remove {
+                        schedule_list_remove = SCHEDULE_LIST_REMOVE.iter().any(|x| c.starts_with(x));
+                    }
+                    for t in &other_all_tools {
+                        if c.contains(t.function.name.split_once("__").unwrap().0) && !final_tools.contains(t) {
+                            final_tools.push(t.clone())
+                        }
+                    }
+                }
+            } else {
+                break
+            }
+        }
+        // 将 schedule_task 要用的工具单独一条信息发送给模型
+        if !schedule_list_remove {
+            if final_tools.is_empty() {
+                println!("{:?}", other_all_tools);
+            } else {
+                println!("{:?}", final_tools);
+            }
+            history_messages.push(
+                ChatMessage::User{
+                    content: ChatMessageContent::Text(format!(
+                        "Below are all the available tools for schedule_task:\n\n{:?}",
+                        if final_tools.is_empty() {
+                            other_all_tools
+                        } else {
+                            final_tools
+                        }
+                    )),
+                    name: None,
+                }
+            );
+        }
+    }
     if let Some(sele_skills) = selected_skills {
         let skill_prompt = match sele_skills {
             SelectedSkills::All => PARAS.skills.get_all_available_skills_prompt(),
