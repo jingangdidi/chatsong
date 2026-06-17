@@ -11,6 +11,7 @@ use crate::{
 
 //mod sum;
 pub mod filesystem;
+#[cfg(feature = "tree-sitter")]
 pub mod codebase;
 pub mod web;
 pub mod run_x;
@@ -42,6 +43,7 @@ use filesystem::{
     ZipDirectory,
     ZipFiles,
 };
+#[cfg(feature = "tree-sitter")]
 use codebase::{
     GetCodebaseFileTree,
     SearchCodeSignature,
@@ -80,6 +82,7 @@ pub trait BuiltIn: Send + Sync {
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub enum Group {
     FileSystem,
+    #[cfg(feature = "tree-sitter")]
     Codebase,
     Web,
     RunX,
@@ -91,6 +94,7 @@ impl Group {
     pub fn to_string(&self) -> String {
         match self {
             Group::FileSystem => "file system".to_string(),
+            #[cfg(feature = "tree-sitter")]
             Group::Codebase => "codebase".to_string(),
             Group::Web => "web".to_string(),
             Group::RunX => "run_x".to_string(),
@@ -102,6 +106,7 @@ impl Group {
     fn from_str(g: &str) -> Result<Self, MyError> {
         match g {
             "file system" => Ok(Group::FileSystem),
+            #[cfg(feature = "tree-sitter")]
             "codebase" => Ok(Group::Codebase),
             "web" => Ok(Group::Web),
             "run_x" => Ok(Group::RunX),
@@ -154,11 +159,17 @@ impl BuiltInTools {
             (Arc::new(ZipDirectory::new()), Group::FileSystem),
             (Arc::new(ZipFiles::new()), Group::FileSystem),
             // codebase
+            #[cfg(feature = "tree-sitter")]
             (Arc::new(GetCodebaseFileTree::new()), Group::Codebase),
+            #[cfg(feature = "tree-sitter")]
             (Arc::new(SearchCodeSignature::new()), Group::Codebase),
+            #[cfg(feature = "tree-sitter")]
             (Arc::new(GrepCodeSignature::new()), Group::Codebase),
+            #[cfg(feature = "tree-sitter")]
             (Arc::new(GetAllCallers::new()), Group::Codebase),
+            #[cfg(feature = "tree-sitter")]
             (Arc::new(GetMethods::new()), Group::Codebase),
+            #[cfg(feature = "tree-sitter")]
             (Arc::new(GetCodeSignature::new()), Group::Codebase),
             // web
             (Arc::new(GetWebPageContent::new()), Group::Web),

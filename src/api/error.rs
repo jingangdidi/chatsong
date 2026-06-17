@@ -43,6 +43,7 @@ use reqwest::Error as reqwest_error;
 use regex::Error as regex_error;
 use serde_json::Error as json_error;
 use thiserror::Error;
+#[cfg(feature = "tree-sitter")]
 use tree_sitter::QueryError;
 use url::ParseError;
 use zip::result::ZipError;
@@ -292,6 +293,7 @@ pub enum MyError {
     ParseLanguageError{language: String},
 
     // An error that occurred when trying to create a Query
+    #[cfg(feature = "tree-sitter")]
     #[error("Error - query error: {error}")]
     TreeSitterQueryError{error: QueryError},
 

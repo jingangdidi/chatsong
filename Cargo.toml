@@ -51,13 +51,13 @@ url = { version = "2.5.8" }
 dashmap = { version = "6.2.1" }
 
 # Tree-sitter
-tree-sitter = { version = "0.26" }
-tree-sitter-rust = { version = "0.24" }
-tree-sitter-python = { version = "0.25" }
-tree-sitter-typescript = { version = "0.23" }
-tree-sitter-javascript = { version = "0.25" }
-tree-sitter-go = { version = "0.25" }
-tree-sitter-java = { version = "0.23" }
+tree-sitter = { version = "0.26", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-go = { version = "0.25", optional = true }
+tree-sitter-java = { version = "0.23", optional = true }
 
 # search
 regex = { version = "1" }
@@ -95,6 +95,8 @@ tempfile = { version = "3", optional = true }
 
 [features]
 default = []
+
+tree-sitter = ["dep:tree-sitter", "tree-sitter-rust", "tree-sitter-python", "tree-sitter-typescript", "tree-sitter-javascript", "tree-sitter-go", "tree-sitter-java"]
 
 code-completion = ["rdev", "arboard"]
 

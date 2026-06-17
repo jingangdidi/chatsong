@@ -261,7 +261,12 @@ impl Tools {
 }
 
 /// 以这些词为起始，则粗略认为是查看或删除任务，不需要把 tool 发给模型
-static SCHEDULE_LIST_REMOVE: &[&str; 6] = &["查看", "列出", "移除", "删除", "list", "remove"];
+static SCHEDULE_LIST_REMOVE: &[&str; 21] = &[
+    "查看", "列出", "显示", "展示", "查询", "当前",
+    "移除", "删除", "取消", "删掉", "终止", "停止",
+    "list", "show", "display",
+    "remove", "delete", "cancel", "terminate", "stop", "kill",
+];
 
 /// chat with tools: built-in + external tools
 /// This just a simple loop, if not call tool, break the loop, return result
@@ -409,11 +414,19 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
         }
         // 将 schedule_task 要用的工具单独一条信息发送给模型
         if !schedule_list_remove {
-            if final_tools.is_empty() {
-                println!("{:?}", other_all_tools);
-            } else {
-                println!("{:?}", final_tools);
-            }
+            event!(Level::INFO, "{} add {} tools for schedule_task: {}",
+                uuid,
+                if final_tools.is_empty() {
+                    other_all_tools.len()
+                } else {
+                    final_tools.len()
+                },
+                if final_tools.is_empty() {
+                    other_all_tools.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(", ")
+                } else {
+                    final_tools.iter().map(|t| t.function.name.clone()).collect::<Vec<String>>().join(", ")
+                },
+            );
             history_messages.push(
                 ChatMessage::User{
                     content: ChatMessageContent::Text(format!(
