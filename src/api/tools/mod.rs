@@ -134,6 +134,10 @@ impl Tools {
             options.push("                    <option value='select_all_built_in'>🟢 选择所有内置工具</option>".to_string());
         }
         for g in groups {
+            // 排除 sub-agent，不在页面下拉选项中显示
+            if g.0 == Group::SubAgent {
+                continue
+            }
             let mut tools: Vec<(String, String, String)> = built_in.id_map.iter().filter(|(_, v)| v.group == g.0).map(|(k, v)| (k.clone(), v.tool.name(), v.tool.description())).collect();
             tools.sort_by(|a, b| a.1.cmp(&b.1)); // sort by tool name
             options.push(format!("                    <option disabled>--{}--</option>", g.1));
@@ -376,6 +380,27 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
             );
         }
     }
+    // 加上 sub_agent 工具
+    {
+        let sub_agent_schema: Vec<_> = PARAS
+            .tools
+            .built_in
+            .id_map
+            .iter()
+            .filter(|(_, v)| v.tool.name() == "sub_agent")
+            .map(|(k, v)| (format!("{}__{}", v.tool.name(), k), v.tool.description(), v.tool.schema()))
+            .collect();
+        tool_schema.push(
+            ChatCompletionTool {
+                r#type: ChatCompletionToolType::Function,
+                function: ChatCompletionFunction {
+                    name: sub_agent_schema[0].0.clone(),
+                    description: Some(sub_agent_schema[0].1.clone()),
+                    parameters: sub_agent_schema[0].2.clone(),
+                },
+            }
+        );
+    }
     // prepare buider for call tool
     tool_schema.extend(mcp_schema);
     // 如果只选择了 schedule_task 这一个 tool，则从问题中提取是否有指定要调用的其他 tool，如果有，则获取这些 tool 的 schema，作为单独一条信息发送给模型，如果没有指定，则把所有其他 tool 单独作为一条信息发送给模型
@@ -389,7 +414,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     // tool名称加了`_uuid第一部分`保证不重复，但是上下文很长时可能导致模型返回的要调用的模型丢失了`_uuid第一部分`，导致调用模型失败
     // 这里把不含`_uuid第一部分`的tool名称作为key，将对应的完整tool名称作为value，存入HashMap，当`_uuid第一部分`丢失，也能确认具体要调用的模型
     let tool_map = get_tool_hashmap(&tool_schema);
-    para_builder.tools(tool_schema);
+    let para_builder_for_sub_agent = para_builder.clone();
+    para_builder.tools(tool_schema.clone());
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
     // 插入 schedule_task 要调用的其他 tool
     let mut schedule_list_remove = false; // 是否仅查询或删除定时任务，此时不需要插入其他 tool，节省 token
@@ -507,7 +533,17 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                             event!(Level::WARN, "{} can't find real tool by model returned `{}`", uuid, j.0);
                         }
                     }
-                    let (mut result, language, is_image) = match try_call_tool(&uuid, &name_id, &j.1, j.3.clone(), sender.clone(), model).await {
+                    let (mut result, language, is_image) = match try_call_tool(
+                        &uuid,
+                        &name_id,
+                        &j.1,
+                        j.3.clone(),
+                        sender.clone(),
+                        model,
+                        Some(tool_schema.clone()),
+                        Some(client.clone()),
+                        Some(para_builder_for_sub_agent.clone()),
+                    ).await {
                         Ok(inner_result) => {
                             match inner_result {
                                 Ok((result, file_option)) => {
@@ -686,6 +722,168 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
     Ok(())
 }
 
+/// sub-agent
+/// 不能再开启 sub-agent，避免无限递归调用
+pub async fn sub_agent(
+    uuid: String,
+    prompt: String,
+    sender: Sender<Vec<u8>>,
+    client: Client,
+    mut para_builder: ChatCompletionParametersBuilder,
+    model: &str,
+    tool_map: HashMap<String, Vec<String>>,
+) -> Result<String, MyError> {
+    let mut history_messages: Vec<ChatMessage> = vec![ChatMessage::User{
+        content: ChatMessageContent::Text(prompt),
+        name: None,
+    }];
+
+    let mut call_tool_count = 0;
+    let call_tool_limit = call_tool_count+100; // 调用工具的次数限制
+    let mut try_count = 0;
+    let mut is_first: bool;
+    let mut real_name: String; // 要调用的工具的真实名称，含有`_uuid第一部分`后缀
+
+    'outer: loop {
+        // send query to LLM
+        para_builder.messages(history_messages.clone());
+        let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
+        let answer = call_tool_not_use_stream(&uuid, client.clone(), parameters).await?;
+        // if answer is call tool result, continue; else break
+        match answer {
+            CallToolResult::CallTool((raw_message, call_tool_result)) => { // (ChatMessage, Vec<(tool name, tool args, call tool id, content)>)
+                is_first = true;
+                for j in call_tool_result {
+                    // call tool
+                    let mut name_id: Vec<&str> = j.0.split("__").collect();
+                    if name_id.len() < 2 && name_id[0] != "activate_skill" {
+                        if let Some(tools_vec) = tool_map.get(&j.0) {
+                            if tools_vec.len() > 1 {
+                                event!(Level::WARN, "{} sub-agent call tool error, llm only return tool name prefix `{}`, but this prefix have multiple tools: {}", uuid, j.0, tools_vec.join(", "));
+                            } else {
+                                real_name = tools_vec[0].clone();
+                                name_id = real_name.split("__").collect();
+                                event!(Level::WARN, "{} sub-agent call real tool `{}` by model returned `{}`", uuid, real_name, j.0);
+                            }
+                        } else {
+                            event!(Level::WARN, "{} sub-agent can't find real tool by model returned `{}`", uuid, j.0);
+                        }
+                    }
+                    let (mut result, _, is_image) = match Box::pin(try_call_tool(
+                        &uuid,
+                        &name_id,
+                        &j.1,
+                        j.3.clone(),
+                        sender.clone(),
+                        model,
+                        None,
+                        None,
+                        None,
+                    )).await {
+                        Ok(inner_result) => {
+                            match inner_result {
+                                Ok((result, file_option)) => {
+                                    try_count = 0;
+                                    if name_id[0].starts_with("load_image") {
+                                        (result, get_file_language(file_option), true)
+                                    } else {
+                                        (result, get_file_language(file_option), false)
+                                    }
+                                },
+                                Err(e) => {
+                                    try_count += 1;
+                                    if is_first {
+                                        if try_count >= 3 {
+                                            return Err(e)
+                                        } else {
+                                            event!(Level::WARN, "{} sub-agent call tool {} error, try again {}\n{}\nargs: {}", uuid, name_id[0], try_count, e, j.1);
+                                            continue 'outer
+                                        }
+                                    } else {
+                                        event!(Level::WARN, "{} sub-agent call tool {} error, not try again, return to model\n{}\nargs: {}", uuid, name_id[0], try_count, j.1);
+                                        try_count = 0;
+                                        (format!("sub-agent call tool {} error: {}", name_id[0], e), "text".to_string(), false)
+                                    }
+                                },
+                            }
+                        },
+                        Err(e) => {
+                            if let MyError::PlanModeError{ref info} = e {
+                                if info.starts_with("sub-agent skip, this tool has not been executed: ") {
+                                    (info.clone(), "text".to_string(), false)
+                                } else {
+                                    event!(Level::WARN, "{} sub-agent call tool {}, raw args: {}", uuid, name_id[0], j.1);
+                                    //event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                                    return Err(e)
+                                }
+                            } else {
+                                event!(Level::WARN, "{} sub-agent call tool {}, raw args: {}", uuid, name_id[0], j.1);
+                                //event!(Level::WARN, "{} call tool {}, safe args: {}", uuid, name_id[0], safe_args);
+                                return Err(e)
+                            }
+                        },
+                    };
+                    call_tool_count += 1;
+
+                    // 如果是绘图，则把图片显示在页面
+                    if name_id[0] == "image_generation" || name_id[0] == "edit_image" {
+                        result = if name_id[0] == "image_generation" {
+                            format!("create image successfull: {}", result)
+                        } else if name_id[0] == "edit_image" {
+                            format!("edit image successfull: {}", result)
+                        } else {
+                            result
+                        };
+                    }
+
+                    // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
+                    let meta_data = MetaData::new(uuid.clone(), None, false);
+                    if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+                        event!(Level::WARN, "channel send error: {:?}", e);
+                        break
+                    }
+
+                    // add each tool call result to current message history
+                    if is_first {
+                        history_messages.push(raw_message.clone());
+                        is_first = false;
+                    }
+                    if is_image {
+                        history_messages.push(ChatMessage::Tool{
+                            content: ChatMessageContent::ContentPart(vec![ChatMessageContentPart::Image(
+                                ChatMessageImageContentPart {
+                                    r#type: "image_url".to_string(),
+                                    image_url: ImageUrlType {
+                                        url: result, // Either a URL of the image or the base64 encoded image data
+                                        detail: None,
+                                    },
+                                },
+                            )]),
+                            tool_call_id: j.2,
+                        });
+                    } else {
+                        history_messages.push(ChatMessage::Tool{content: ChatMessageContent::Text(result), tool_call_id: j.2});
+                    }
+                }
+            },
+            CallToolResult::Text(test_result) => { // normal text result, not call tool
+                // return result to main agent
+                return Ok(test_result)
+            },
+        }
+        if call_tool_count > call_tool_limit {
+            event!(Level::WARN, "{} sub-agent already call tool {} times, stop this loop", uuid, call_tool_count);
+            break
+        }
+    }
+    // page left info
+    let meta_data = MetaData::new(uuid.clone(), None, false);
+    if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
+        event!(Level::WARN, "sub-agent channel send error: {:?}", e);
+    }
+    Err(MyError::OtherError{info: "sub-agent error".to_string()})
+}
+
 /// 调用的skill
 #[derive(Deserialize)]
 struct SkillParams {
@@ -693,7 +891,17 @@ struct SkillParams {
 }
 
 /// try run tool, if error not from call tool, return Err(), else return Ok(Ok()) or Ok(Err())
-async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<String>, sender: Sender<Vec<u8>>, model: &str) -> Result<Result<(String, Option<String>), MyError>, MyError> {
+async fn try_call_tool(
+    uuid: &str,
+    name_id: &[&str],
+    paras: &str,
+    info: Option<String>,
+    sender: Sender<Vec<u8>>,
+    model: &str,
+    tool_schema: Option<Vec<ChatCompletionTool>>,
+    client: Option<Client>,
+    mut para_builder: Option<ChatCompletionParametersBuilder>,
+) -> Result<Result<(String, Option<String>), MyError>, MyError> {
     if name_id[0] == "activate_skill" {
         //let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         let params: SkillParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
@@ -732,7 +940,7 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                     } else {
                         approval_msg
                     };
-                    match ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender).await?.as_ref() {
+                    match ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
                         "true" => { // 允许
                             if name_id[0] == "image_generation" {
                                 match PARAS.tools.run(name_id[1], paras) {
@@ -758,6 +966,54 @@ async fn try_call_tool(uuid: &str, name_id: &[&str], paras: &str, info: Option<S
                             } else if name_id[0] == "schedule_task" {
                                 match PARAS.tools.run(name_id[1], paras) {
                                     Ok(_) => Ok(run_schedule_task(paras).await),
+                                    Err(e) => Ok(Err(e)),
+                                }
+                            } else if name_id[0] == "sub_agent" {
+                                match PARAS.tools.run(name_id[1], paras) {
+                                    Ok((prompt_tools, _)) => {
+                                        let parts: Vec<&str> = prompt_tools.split("---srx---").collect(); // [prompt, tool1, tool2, ...]
+                                        let tool_map = if parts.len() > 1 {
+                                            let mut sub_agent_tools: Vec<ChatCompletionTool> = Vec::with_capacity(parts.len()-1);
+                                            for t in &parts[1..] {
+                                                let tmp_name = match t.split_once("__") {
+                                                    Some((t_name, _)) => format!("{}__", t_name),
+                                                    None => format!("{}__", t),
+                                                };
+                                                if tmp_name == "sub_agent" {
+                                                    // 禁止 sub-agent 再开启新的 sub-agent
+                                                    event!(Level::WARN, "{} skip tool `{}` in sub-agent", uuid, tmp_name);
+                                                    continue
+                                                }
+                                                if let Some(ref tools) = tool_schema {
+                                                    for t in tools {
+                                                        if t.function.name.starts_with(&tmp_name) {
+                                                            sub_agent_tools.push(t.clone());
+                                                            break
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            let tool_map = get_tool_hashmap(&sub_agent_tools);
+                                            if let Some(ref mut p_b) = para_builder {
+                                                p_b.tools(sub_agent_tools);
+                                            }
+                                            tool_map
+                                        } else {
+                                            HashMap::new()
+                                        };
+                                        match Box::pin(sub_agent(
+                                            uuid.to_string(),
+                                            parts[0].to_string(),
+                                            sender.clone(),
+                                            client.unwrap(),
+                                            para_builder.unwrap(),
+                                            model,
+                                            tool_map,
+                                        )).await {
+                                            Ok(sub_agent_result) => Ok(Ok((sub_agent_result, None))),
+                                            Err(e) => Ok(Err(e)),
+                                        }
+                                    },
                                     Err(e) => Ok(Err(e)),
                                 }
                             } else {

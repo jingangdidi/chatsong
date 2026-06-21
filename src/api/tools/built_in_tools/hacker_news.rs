@@ -22,6 +22,8 @@ use crate::{
     parse_paras::PARAS,
     error::MyError,
     tools::{
+        parse_tool_args,
+        ArgFixSpec,
         built_in_tools::BuiltIn,
         call_llm,
     },
@@ -71,7 +73,8 @@ impl BuiltIn for HackerNews {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+        let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         Ok((if params.save_html { "true".to_string() } else { "false".to_string() }, None))
     }
 
