@@ -489,7 +489,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
 
     // 进入循环前，如果当前 uuid 的新指令不为 None，则设为 None
     reset_new_instruction(&uuid);
-    'outer: loop {
+    //'outer: loop {
+    loop {
         // 每次循环都检查下是否有新指令，有则插入到当前 history_messages 中
         loop {
             if let Some(instruction_msg) = get_new_instruction(&uuid) {
@@ -561,7 +562,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                                             return Err(e)
                                         } else {
                                             event!(Level::WARN, "{} call tool {} error, try again {}\n{}\nargs: {}", uuid, name_id[0], try_count, e, j.1);
-                                            continue 'outer
+                                            //continue 'outer
+                                            (format!("call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                         }
                                     } else {
                                         event!(Level::WARN, "{} call tool {} error, not try again, return to model\n{}\nargs: {}", uuid, name_id[0], try_count, j.1);
@@ -744,7 +746,8 @@ pub async fn sub_agent(
     let mut is_first: bool;
     let mut real_name: String; // 要调用的工具的真实名称，含有`_uuid第一部分`后缀
 
-    'outer: loop {
+    //'outer: loop {
+    loop {
         // send query to LLM
         para_builder.messages(history_messages.clone());
         let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
@@ -797,7 +800,8 @@ pub async fn sub_agent(
                                             return Err(e)
                                         } else {
                                             event!(Level::WARN, "{} sub-agent call tool {} error, try again {}\n{}\nargs: {}", uuid, name_id[0], try_count, e, j.1);
-                                            continue 'outer
+                                            //continue 'outer
+                                            (format!("sub-agent call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                         }
                                     } else {
                                         event!(Level::WARN, "{} sub-agent call tool {} error, not try again, return to model\n{}\nargs: {}", uuid, name_id[0], try_count, j.1);

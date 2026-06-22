@@ -36,7 +36,18 @@ impl BuiltIn for SubAgent {
 
     /// get tool description
     fn description(&self) -> String {
-        "Spawn a dedicated sub-agent to handle a complex, multi-step task autonomously. The sub-agent runs its own agentic loop with access to the specified tools and returns the final result when done. Use this to delegate focused subtasks (e.g., research, multi-step reasoning) without polluting the main agent's conversation history. Do not ask the user questions, and finish with a concise result.".to_string()
+        //"Spawn a dedicated sub-agent to handle a complex, multi-step task autonomously. The sub-agent runs its own agentic loop with access to the specified tools and returns the final result when done. Use this to delegate focused subtasks (e.g., research, multi-step reasoning) without polluting the main agent's conversation history. Do not ask the user questions, and finish with a concise result.".to_string()
+        "Spawn a dedicated sub-agent to handle a focused, context-heavy, or multi-step subtask autonomously.
+
+Use this when a task is broad, exploratory, decomposable, requires many tool calls, needs independent verification, or would pollute the main agent's context.
+
+The main agent should use sub_agent to investigate, research, inspect files, compare options, verify assumptions, review code, analyze documents, or handle isolated implementation subtasks.
+
+The sub-agent receives:
+- prompt: a clear bounded task
+- tools: the allowed tools for that task
+
+The sub-agent must not ask the user questions. It should complete the task with the provided tools and return a concise result including key findings, evidence, uncertainty, and next steps.".to_string()
     }
 
     /// get tool schema

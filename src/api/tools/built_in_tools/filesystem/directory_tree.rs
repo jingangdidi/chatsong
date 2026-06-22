@@ -22,6 +22,7 @@ use crate::{
 #[derive(Deserialize)]
 struct Params {
     root_path: String,
+    #[serde(default)]
     max_depth: Option<usize>,
 }
 

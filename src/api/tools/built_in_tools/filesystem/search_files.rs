@@ -18,6 +18,7 @@ use crate::{
 struct Params {
     root_path:        String,
     include_pattern:  String,
+    #[serde(default)]
     exclude_patterns: Option<Vec<String>>,
 }
 

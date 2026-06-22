@@ -19,6 +19,7 @@ use crate::{
 #[derive(Deserialize)]
 struct Params {
     script: String,
+    #[serde(default)]
     args:   Option<Vec<String>>,
 }
 

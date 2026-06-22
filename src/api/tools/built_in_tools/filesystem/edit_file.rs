@@ -38,6 +38,7 @@ pub struct EditOperation {
 pub struct Params {
     pub file_path: String,
     pub edits:     Vec<EditOperation>,
+    #[serde(default)]
     pub dry_run:   Option<bool>,
     //save_to:   Option<String>,
 }

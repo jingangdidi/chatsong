@@ -29,6 +29,7 @@ use crate::{
 struct Params {
     input_dir:       String,
     target_zip_file: String,
+    #[serde(default)]
     pattern:         Option<String>,
 }
 

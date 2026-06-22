@@ -37,7 +37,9 @@ struct Params {
     root_path:        String,
     pattern:          String,
     query:            String,
+    #[serde(default)]
     is_regex:         bool,
+    #[serde(default)]
     exclude_patterns: Option<Vec<String>>,
 }
 
