@@ -87,8 +87,14 @@ use crate::{
         SelectedTools,
         run_tools,
         run_tools_with_plan,
+        built_in_tools::goal::render_init_goal_prompt,
     },
     skills::SelectedSkills,
+    api::handlers::goal::{
+        append_goal,
+        get_goal,
+        running_goal,
+    },
 };
 
 /// https://github.com/plandex-ai/plandex/blob/main/app/server/model/prompts/summary.go
@@ -128,6 +134,7 @@ pub struct MetaData {
     is_incognito:  bool,                  // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
     context_start: usize,                 // 上下文起始
     context_end:   usize,                 // 上下文终止
+    close_goal:    bool,                  // 关闭 goal 模式，前端页面 goal 图标切换为关闭
 }
 
 impl MetaData {
@@ -141,6 +148,8 @@ impl MetaData {
         let token = get_token(&uuid);
         // 获取当前上下文窗口的起始和终止索引
         let (context_start, context_end) = get_context_start_end(&uuid, is_q);
+        // 判断指定 uuid 是否是 goal 模式
+        let close_goal = !running_goal(&uuid);
         // MetaData
         Self {
             chat_name:     get_chat_name(&uuid),     // chat name
@@ -157,6 +166,7 @@ impl MetaData {
             is_incognito:  is_incognito(&uuid),      // 是否无痕模型
             context_start,                           // 上下文起始
             context_end,                             // 上下文终止
+            close_goal,                              // 关闭 goal 模式，前端页面 goal 图标切换为关闭
         }
     }
 
@@ -228,7 +238,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     content: ChatMessageContent::Text(COMPRESSION_PROMPT.to_string()),
                     name: None,
                 };
-                insert_message(&client_para.uuid, compression_prompt, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                insert_message(&client_para.uuid, compression_prompt, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name.clone());
             }
             let num_q = get_query_num(&client_para.uuid);
             event!(Level::INFO, "{} POST {}, query {}, Q&A pair {}, waiting for anwser ...", client_para.uuid, uri.path(), num_q.0, num_q.1);
@@ -530,7 +540,17 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         let tool_error = if client_para.plan_mode && client_para.selected_skills.is_none() { // 目前计划模式不支持skills
                             run_tools_with_plan(client_para.selected_tools, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model).await
                         } else {
-                            run_tools(client_para.selected_tools, client_para.selected_skills, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model).await
+                            let raw_goal = if let Some(g) = get_goal(&tmp_uuid) {
+                                let m = ChatMessage::User{
+                                    content: ChatMessageContent::Text(render_init_goal_prompt(&g)),
+                                    name: None,
+                                };
+                                insert_message(&tmp_uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                                Some(g)
+                            } else {
+                                None
+                            };
+                            run_tools(client_para.selected_tools, client_para.selected_skills, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model, raw_goal).await
                         };
                         if let Err(e) = tool_error {
                             event!(Level::ERROR, "{} receive call tool result error: {}", tmp_uuid, e);
@@ -771,34 +791,40 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 )
             };
             if let Some(m) = message {
-                // 当前问题插入到messages中
-                if client_para.web_search { // 使用网络搜索，需记录原始问题
-                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name);
-                } else {
-                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                if append_goal(&client_para.uuid, &body) {
+                    // 当前问题插入到messages中
+                    if client_para.web_search { // 使用网络搜索，需记录原始问题
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                    } else {
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                    }
                 }
             } else {
-                // 插入原始问题
-                let m = ChatMessage::User{
-                    content: ChatMessageContent::Text(body.clone()),
-                    name: None,
-                };
-                if client_para.web_search { // 使用网络搜索，需记录原始问题
-                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name);
-                } else {
-                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                if append_goal(&client_para.uuid, &body) {
+                    // 插入原始问题
+                    let m = ChatMessage::User{
+                        content: ChatMessageContent::Text(body.clone()),
+                        name: None,
+                    };
+                    if client_para.web_search { // 使用网络搜索，需记录原始问题
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                    } else {
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                    }
                 }
                 // 插入错误提示
-                let m = ChatMessage::Assistant{
-                    content: Some(ChatMessageContent::Text(err_msg.clone())),
-                    reasoning: None,
-                    reasoning_content: None,
-                    refusal: None,
-                    name: None,
-                    audio: None,
-                    tool_calls: None,
-                };
-                insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, None);
+                if append_goal(&client_para.uuid, &err_msg) {
+                    let m = ChatMessage::Assistant{
+                        content: Some(ChatMessageContent::Text(err_msg.clone())),
+                        reasoning: None,
+                        reasoning_content: None,
+                        refusal: None,
+                        name: None,
+                        audio: None,
+                        tool_calls: None,
+                    };
+                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, None);
+                }
             }
             let num_q = get_query_num(&client_para.uuid);
             event!(Level::INFO, "{} GET {}, query {}, Q&A pair {}", client_para.uuid, uri.path(), num_q.0, num_q.1);

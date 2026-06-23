@@ -60,8 +60,8 @@ use crate::{
             get_new_instruction,
             reset_new_instruction,
         },
+        goal::reset_goal,
     },
-    tools::built_in_tools::schedule::run_schedule_task,
     skills::SelectedSkills,
 };
 
@@ -77,6 +77,11 @@ use built_in_tools::{
         edit_image::edit_image,
     },
     hacker_news::hacker_news_summaries,
+    schedule::run_schedule_task,
+    goal::{
+        Goal,
+        GoalStatus,
+    },
 };
 use external_tools::ExternalTools;
 
@@ -134,8 +139,8 @@ impl Tools {
             options.push("                    <option value='select_all_built_in'>🟢 选择所有内置工具</option>".to_string());
         }
         for g in groups {
-            // 排除 sub-agent，不在页面下拉选项中显示
-            if g.0 == Group::SubAgent {
+            // 排除 sub-agent 和 update_goal_status，不在页面下拉选项中显示
+            if g.0 == Group::SubAgent || g.0 == Group::UpdateGoalStatus {
                 continue
             }
             let mut tools: Vec<(String, String, String)> = built_in.id_map.iter().filter(|(_, v)| v.group == g.0).map(|(k, v)| (k.clone(), v.tool.name(), v.tool.description())).collect();
@@ -311,7 +316,22 @@ static SCHEDULE_LIST_REMOVE: &[&str; 21] = &[
 /// https://api-docs.deepseek.com/zh-cn/guides/function_calling
 /// https://docs.bigmodel.cn/cn/guide/capabilities/function-calling
 /// https://platform.moonshot.cn/docs/api/tool-use
-pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: Option<SelectedSkills>, uuid: String, sender: Sender<Vec<u8>>, client: Client, mut para_builder: ChatCompletionParametersBuilder, model: &str) -> Result<(), MyError> {
+pub async fn run_tools(
+    selected_tools: Option<SelectedTools>,
+    selected_skills: Option<SelectedSkills>,
+    uuid: String,
+    sender: Sender<Vec<u8>>,
+    client: Client,
+    mut para_builder: ChatCompletionParametersBuilder,
+    model: &str,
+    raw_goal: Option<String>,
+) -> Result<(), MyError> {
+    // 初始化 Goal
+    let (mut my_goal, goal_mode) = if let Some(g) = raw_goal {
+        (Some(Goal::new_goal(g)), true)
+    } else {
+        (None, false)
+    };
     // get built-in and external tools schame
     let mut tool_schema = PARAS.tools.get_desc_and_schema(&selected_tools)?;
     // get mcp tools schema
@@ -397,6 +417,27 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     name: sub_agent_schema[0].0.clone(),
                     description: Some(sub_agent_schema[0].1.clone()),
                     parameters: sub_agent_schema[0].2.clone(),
+                },
+            }
+        );
+    }
+    // goal 模式加上 update_goal_status
+    if goal_mode {
+        let update_goal_status: Vec<_> = PARAS
+            .tools
+            .built_in
+            .id_map
+            .iter()
+            .filter(|(_, v)| v.tool.name() == "update_goal_status")
+            .map(|(k, v)| (format!("{}__{}", v.tool.name(), k), v.tool.description(), v.tool.schema()))
+            .collect();
+        tool_schema.push(
+            ChatCompletionTool {
+                r#type: ChatCompletionToolType::Function,
+                function: ChatCompletionFunction {
+                    name: update_goal_status[0].0.clone(),
+                    description: Some(update_goal_status[0].1.clone()),
+                    parameters: update_goal_status[0].2.clone(),
                 },
             }
         );
@@ -591,6 +632,14 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     };
                     call_tool_count += 1;
 
+                    // 更新 goal 状态
+                    if goal_mode && name_id[0] == "update_goal_status" {
+                        if let Some(ref mut goal) = my_goal {
+                            goal.update_goal_status(GoalStatus::from_str(&result)?)?;
+                            result = format!("successfully update goal status to '{}'", result)
+                        }
+                    }
+
                     // 1. send call tool result to user page
                     let messages_num = get_messages_num(&uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
                     // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
@@ -706,12 +755,26 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
                     tool_calls: None,
                 };
                 let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                insert_message(&uuid, message.clone(), None, tmp_time, false, DataType::Normal, None, model, None);
+                insert_message(&uuid, message, None, tmp_time.clone(), false, DataType::Normal, None, model, None);
 
-                break
+                if let Some(ref mut goal) = my_goal {
+                    if goal.is_active() { // 没有完成 goal，继续
+                        event!(Level::INFO, "{} continue goal", uuid);
+                        let message = ChatMessage::User{
+                            content: ChatMessageContent::Text(goal.take_continuation_prompt()),
+                            name: None,
+                        };
+                        insert_message(&uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
+                    } else {
+                        reset_goal(&uuid); // 客户端开启的指定 uuid 的 goal 设为 None
+                        break
+                    }
+                } else {
+                    break
+                }
             },
         }
-        if call_tool_count > call_tool_limit {
+        if !goal_mode && call_tool_count > call_tool_limit { // goal 模式不限制
             event!(Level::WARN, "{} already call tool {} times, stop this loop", uuid, call_tool_count);
             break
         }
@@ -725,7 +788,8 @@ pub async fn run_tools(selected_tools: Option<SelectedTools>, selected_skills: O
 }
 
 /// sub-agent
-/// 不能再开启 sub-agent，避免无限递归调用
+/// 不能再开启 sub-agent，避免无限递归调用，会自动把 sub_agent 工具过滤掉
+/// 也不能更新 goal 的状态，会自动把 update_goal_status 工具过滤掉
 pub async fn sub_agent(
     uuid: String,
     prompt: String,
@@ -983,8 +1047,9 @@ async fn try_call_tool(
                                                     Some((t_name, _)) => format!("{}__", t_name),
                                                     None => format!("{}__", t),
                                                 };
-                                                if tmp_name == "sub_agent" {
+                                                if tmp_name == "sub_agent" || tmp_name == "update_goal_status" {
                                                     // 禁止 sub-agent 再开启新的 sub-agent
+                                                    // 禁止 sub-agent 更新 goal 的状态
                                                     event!(Level::WARN, "{} skip tool `{}` in sub-agent", uuid, tmp_name);
                                                     continue
                                                 }

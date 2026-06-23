@@ -17,6 +17,7 @@ use crate::api::handlers::{
     multi_foo::{get_foo, put_foo, patch_foo, post_foo, delete_foo},
     get_items_id::get_items_id,
     get_items::get_items,
+    goal::goal,
     demo_json::{get_demo_json, put_demo_json},
     demo_csv::get_demo_csv,
     index::index,
@@ -61,6 +62,7 @@ pub fn configure() -> Router {
         .route("/incognito", get(incognito)) // GET /v1/incognito，更新is_incognito
         .route("/approval", get(approval)) // GET /v1/approval，更新approval
         .route("/instruction", get(instruction)) // GET /v1/instruction，插入新指令
+        .route("/goal", get(goal)) // GET /v1/goal，goal模式
         .route("/upload", post(upload)) // POST /v1/upload，上传文件
         .route("/usage", get(usage)) // GET /v1/usage，查看使用说明
         .layer(DefaultBodyLimit::max(1024*1024*100)) // 设置上传文件大小限制为1024*1024*100=104857600=100M
