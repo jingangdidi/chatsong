@@ -1149,8 +1149,7 @@ async fn try_call_tool(
                     if metadata.len() > 4000 {
                         event!(Level::INFO, "{} main agent read_file by sub-agent", uuid);
                         let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
-                        println!("sub call there: '{}'", read_file_para.file_path);
-                        println!("sub call there: '{}'", read_file_para.file_path.trim());
+                        println!("sub call there:\n{}", format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.trim(), name_id[0]));
                         run_sub_agent(
                             uuid,
                             &["sub_agent", &sub_agent_id],
@@ -1170,8 +1169,7 @@ async fn try_call_tool(
                     let read_multiple_files_para: ReadMultipleFilesParams = parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["paths".to_string()]), object_fields: None })?;
                     let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
                     event!(Level::INFO, "{} main agent read_multiple_files by sub-agent", uuid);
-                    println!("sub call there: '{}'", read_multiple_files_para.paths.join("\\n"));
-                    println!("sub call there: '{}'", read_multiple_files_para.paths.join("\\n").trim());
+                    println!("sub call there:\n{}", format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").trim(), name_id[0]));
                     run_sub_agent(
                         uuid,
                         &["sub_agent", &sub_agent_id],
