@@ -15,8 +15,8 @@ use crate::{
 
 /// params for integer read_multiple_files
 #[derive(Deserialize)]
-struct Params {
-    paths: Vec<String>,
+pub struct Params {
+    pub paths: Vec<String>,
 }
 
 /// built-in tool

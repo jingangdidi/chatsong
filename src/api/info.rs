@@ -1913,6 +1913,36 @@ fn is_ascii_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric()
 }
 
+/// 手动转义，确保可以安全放进 <script> 中的双引号 JS 字符串
+fn escape_js_double_quoted_string(s: &str) -> String {
+    let mut result = String::new();
+
+    for ch in s.chars() {
+        match ch {
+            '\\' => result.push_str("\\\\"),
+            '"' => result.push_str("\\\""),
+
+            // 防止出现在 <script> 中时被 HTML 解析器提前闭合，比如 </script>
+            '<' => result.push_str("\\u003C"),
+            '>' => result.push_str("\\u003E"),
+            '&' => result.push_str("\\u0026"),
+
+            // 再兜底处理一次换行类字符，保证不会出现真实换行
+            '\n' => result.push_str(" "),
+            '\r' => result.push_str(" "),
+            '\t' => result.push_str(" "),
+
+            // JS 字符串里的特殊换行符
+            '\u{2028}' => result.push_str("\\u2028"),
+            '\u{2029}' => result.push_str("\\u2029"),
+
+            _ => result.push(ch),
+        }
+    }
+
+    result
+}
+
 /// 提取前N个单位（中文字符或英文单词），总数不超过limit
 /// 用户没有设置对话名称，则自动从的输入的问题中提取
 fn extract_prefix(s: &str, limit: usize) -> String {
@@ -1923,6 +1953,7 @@ fn extract_prefix(s: &str, limit: usize) -> String {
     let mut count = 0;               // 已提取的单位数
     let mut result = String::new();  // 结果字符串
     let mut in_english_word = false; // 是否在英文单词内
+    let mut last_is_space = false;
 
     for ch in s.chars() {
         if is_chinese_char(ch) {
@@ -1930,6 +1961,7 @@ fn extract_prefix(s: &str, limit: usize) -> String {
             if in_english_word {
                 in_english_word = false;
             }
+            last_is_space = false;
 
             if count >= limit {
                 break
@@ -1946,6 +1978,7 @@ fn extract_prefix(s: &str, limit: usize) -> String {
                 count += 1;
                 in_english_word = true;
             }
+            last_is_space = false;
             // 添加到结果
             result.push(ch);
         } else {
@@ -1953,10 +1986,17 @@ fn extract_prefix(s: &str, limit: usize) -> String {
             if in_english_word {
                 in_english_word = false;
             }
-            // 保留分隔符到结果
-            result.push(ch);
+            if ch.is_whitespace() {
+                if !last_is_space && !result.is_empty() {
+                    result.push(' '); // 换行符等都用空格代替
+                    last_is_space = true;
+                }
+            } else {
+                last_is_space = false;
+                result.push(ch);
+            }
         }
     }
 
-    result
+    escape_js_double_quoted_string(result.trim())
 }

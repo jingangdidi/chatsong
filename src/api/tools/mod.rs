@@ -73,6 +73,8 @@ use built_in_tools::{
     Group,
     filesystem::{
         edit_file::Params,
+        read_file::Params as ReadFileParams,
+        read_multiple_files::Params as ReadMultipleFilesParams,
         image_generation::image_generation,
         edit_image::edit_image,
     },
@@ -585,6 +587,7 @@ pub async fn run_tools(
                         Some(tool_schema.clone()),
                         Some(client.clone()),
                         Some(para_builder_for_sub_agent.clone()),
+                        true, // is main agent
                     ).await {
                         Ok(inner_result) => {
                             match inner_result {
@@ -607,7 +610,7 @@ pub async fn run_tools(
                                             (format!("call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                         }
                                     } else {
-                                        event!(Level::WARN, "{} call tool {} error, not try again, return to model\n{}\nargs: {}", uuid, name_id[0], try_count, j.1);
+                                        event!(Level::WARN, "{} call tool {} error, send this error to LLM\n{}\nargs: {}", uuid, name_id[0], e, j.1);
                                         try_count = 0;
                                         (format!("call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                     }
@@ -846,6 +849,7 @@ pub async fn sub_agent(
                         None,
                         None,
                         None,
+                        false, // is main agent
                     )).await {
                         Ok(inner_result) => {
                             match inner_result {
@@ -868,7 +872,7 @@ pub async fn sub_agent(
                                             (format!("sub-agent call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                         }
                                     } else {
-                                        event!(Level::WARN, "{} sub-agent call tool {} error, not try again, return to model\n{}\nargs: {}", uuid, name_id[0], try_count, j.1);
+                                        event!(Level::WARN, "{} sub-agent call tool {} error, send this error to LLM\n{}\nargs: {}", uuid, name_id[0], e, j.1);
                                         try_count = 0;
                                         (format!("sub-agent call tool {} error: {}", name_id[0], e), "text".to_string(), false)
                                     }
@@ -952,6 +956,75 @@ pub async fn sub_agent(
     Err(MyError::OtherError{info: "sub-agent error".to_string()})
 }
 
+/// 调用 sub-agent
+async fn run_sub_agent(
+    uuid: &str,
+    name_id: &[&str],
+    paras: &str,
+    model: &str,
+    tool_schema: Option<Vec<ChatCompletionTool>>,
+    mut para_builder: Option<ChatCompletionParametersBuilder>,
+    client: Option<Client>,
+    sender: Sender<Vec<u8>>,
+    indirect: bool, // 是否主 agent 间接调用，比如主 agent 调用读取大文件，改为通过 sub-agent 间接调用
+) -> Result<Result<(String, Option<String>), MyError>, MyError> {
+    match PARAS.tools.run(name_id[1], paras) {
+        Ok((prompt_tools, _)) => {
+            let parts: Vec<&str> = prompt_tools.split("---srx---").collect(); // [prompt, tool1, tool2, ...]
+            let tool_map = if parts.len() > 1 {
+                let mut sub_agent_tools: Vec<ChatCompletionTool> = Vec::with_capacity(parts.len()-1);
+                for t in &parts[1..] {
+                    let tmp_name = match t.split_once("__") {
+                        Some((t_name, _)) => format!("{}__", t_name),
+                        None => format!("{}__", t),
+                    };
+                    if tmp_name == "sub_agent__" || tmp_name == "update_goal_status__" {
+                        // 禁止 sub-agent 再开启新的 sub-agent
+                        // 禁止 sub-agent 更新 goal 的状态
+                        event!(Level::WARN, "{} skip tool `{}` in sub-agent", uuid, tmp_name);
+                        continue
+                    }
+                    if let Some(ref tools) = tool_schema {
+                        for t in tools {
+                            if t.function.name.starts_with(&tmp_name) {
+                                sub_agent_tools.push(t.clone());
+                                break
+                            }
+                        }
+                    }
+                }
+                let tool_map = get_tool_hashmap(&sub_agent_tools);
+                if let Some(ref mut p_b) = para_builder {
+                    p_b.tools(sub_agent_tools);
+                }
+                tool_map
+            } else {
+                HashMap::new()
+            };
+            match Box::pin(sub_agent(
+                uuid.to_string(),
+                parts[0].to_string(),
+                sender.clone(),
+                client.unwrap(),
+                para_builder.unwrap(),
+                model,
+                tool_map,
+            )).await {
+                Ok(sub_agent_result) => Ok(Ok((if indirect { format!("Complete by calling the sub_agent:\n{}", sub_agent_result) } else { sub_agent_result }, None))),
+                Err(e) => Ok(Err(e)),
+            }
+        },
+        Err(e) => Ok(Err(e)),
+    }
+}
+
+const LARGE_FILE_PROMPT: &str = r###"The main agent is delegating this work to preserve its context window. The requested work may require reading a large file, multiple files, long logs, generated output, structured data, source code, documentation, or other context-heavy material.
+
+Your job is to inspect the relevant material using the available tools and return a compact, evidence-backed report. Do not include unnecessary raw content. Do not solve unrelated parts of the task.
+
+Original main agent task:
+"###;
+
 /// 调用的skill
 #[derive(Deserialize)]
 struct SkillParams {
@@ -968,7 +1041,8 @@ async fn try_call_tool(
     model: &str,
     tool_schema: Option<Vec<ChatCompletionTool>>,
     client: Option<Client>,
-    mut para_builder: Option<ChatCompletionParametersBuilder>,
+    para_builder: Option<ChatCompletionParametersBuilder>,
+    is_main_agent: bool,
 ) -> Result<Result<(String, Option<String>), MyError>, MyError> {
     if name_id[0] == "activate_skill" {
         //let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
@@ -1008,12 +1082,12 @@ async fn try_call_tool(
                     } else {
                         approval_msg
                     };
-                    match ask_approval(&uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
+                    match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
                         "true" => { // 允许
                             if name_id[0] == "image_generation" {
                                 match PARAS.tools.run(name_id[1], paras) {
                                     Ok((image_prompt, _)) => {
-                                        match image_generation(&uuid, image_prompt, "gpt-image-2").await {
+                                        match image_generation(uuid, image_prompt, "gpt-image-2").await {
                                             Ok(image_path) => Ok(Ok((image_path, None))),
                                             Err(e) => Ok(Err(e)),
                                         }
@@ -1024,7 +1098,7 @@ async fn try_call_tool(
                                 match PARAS.tools.run(name_id[1], paras) {
                                     Ok((facial_prompt_image, _)) => {
                                         let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
-                                        match edit_image(&uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
+                                        match edit_image(uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
                                             Ok(image_path) => Ok(Ok((image_path, None))),
                                             Err(e) => Ok(Err(e)),
                                         }
@@ -1037,54 +1111,17 @@ async fn try_call_tool(
                                     Err(e) => Ok(Err(e)),
                                 }
                             } else if name_id[0] == "sub_agent" {
-                                match PARAS.tools.run(name_id[1], paras) {
-                                    Ok((prompt_tools, _)) => {
-                                        let parts: Vec<&str> = prompt_tools.split("---srx---").collect(); // [prompt, tool1, tool2, ...]
-                                        let tool_map = if parts.len() > 1 {
-                                            let mut sub_agent_tools: Vec<ChatCompletionTool> = Vec::with_capacity(parts.len()-1);
-                                            for t in &parts[1..] {
-                                                let tmp_name = match t.split_once("__") {
-                                                    Some((t_name, _)) => format!("{}__", t_name),
-                                                    None => format!("{}__", t),
-                                                };
-                                                if tmp_name == "sub_agent" || tmp_name == "update_goal_status" {
-                                                    // 禁止 sub-agent 再开启新的 sub-agent
-                                                    // 禁止 sub-agent 更新 goal 的状态
-                                                    event!(Level::WARN, "{} skip tool `{}` in sub-agent", uuid, tmp_name);
-                                                    continue
-                                                }
-                                                if let Some(ref tools) = tool_schema {
-                                                    for t in tools {
-                                                        if t.function.name.starts_with(&tmp_name) {
-                                                            sub_agent_tools.push(t.clone());
-                                                            break
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            let tool_map = get_tool_hashmap(&sub_agent_tools);
-                                            if let Some(ref mut p_b) = para_builder {
-                                                p_b.tools(sub_agent_tools);
-                                            }
-                                            tool_map
-                                        } else {
-                                            HashMap::new()
-                                        };
-                                        match Box::pin(sub_agent(
-                                            uuid.to_string(),
-                                            parts[0].to_string(),
-                                            sender.clone(),
-                                            client.unwrap(),
-                                            para_builder.unwrap(),
-                                            model,
-                                            tool_map,
-                                        )).await {
-                                            Ok(sub_agent_result) => Ok(Ok((sub_agent_result, None))),
-                                            Err(e) => Ok(Err(e)),
-                                        }
-                                    },
-                                    Err(e) => Ok(Err(e)),
-                                }
+                                run_sub_agent(
+                                    uuid,
+                                    name_id,
+                                    paras,
+                                    model,
+                                    tool_schema,
+                                    para_builder,
+                                    client,
+                                    sender,
+                                    false,
+                                ).await
                             } else {
                                 Ok(PARAS.tools.run(name_id[1], paras))
                             }
@@ -1104,6 +1141,48 @@ async fn try_call_tool(
                         },
                         Err(e) => Ok(Err(e)),
                     }
+                } else if is_main_agent && name_id[0] == "read_file" { // 读取大文件时转为调用 sub-agent
+                    let read_file_para: ReadFileParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
+                    // 如果文件很大则通过 sub_agent 读取，否则直接读取
+                    let file_path = Path::new(&read_file_para.file_path);
+                    let metadata = file_path.metadata()?;
+                    if metadata.len() > 4000 {
+                        event!(Level::INFO, "{} main agent read_file by sub-agent", uuid);
+                        let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
+                        println!("sub call there: '{}'", read_file_para.file_path);
+                        println!("sub call there: '{}'", read_file_para.file_path.trim());
+                        run_sub_agent(
+                            uuid,
+                            &["sub_agent", &sub_agent_id],
+                            &format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.trim(), name_id[0]),
+                            model,
+                            tool_schema,
+                            para_builder,
+                            client,
+                            sender,
+                            true,
+                        ).await
+                    } else { // 直接读取
+                        println!("main call there: {}", paras);
+                        Ok(PARAS.tools.run(name_id[1], paras))
+                    }
+                } else if is_main_agent && name_id[0] == "read_multiple_files" { // 读取多个文件时转为调用 sub-agent
+                    let read_multiple_files_para: ReadMultipleFilesParams = parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["paths".to_string()]), object_fields: None })?;
+                    let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
+                    event!(Level::INFO, "{} main agent read_multiple_files by sub-agent", uuid);
+                    println!("sub call there: '{}'", read_multiple_files_para.paths.join("\\n"));
+                    println!("sub call there: '{}'", read_multiple_files_para.paths.join("\\n").trim());
+                    run_sub_agent(
+                        uuid,
+                        &["sub_agent", &sub_agent_id],
+                        &format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").trim(), name_id[0]),
+                        model,
+                        tool_schema,
+                        para_builder,
+                        client,
+                        sender,
+                        true,
+                    ).await
                 } else {
                     Ok(PARAS.tools.run(name_id[1], paras))
                 }

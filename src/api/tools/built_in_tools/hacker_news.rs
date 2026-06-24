@@ -199,7 +199,6 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool, model: &str) -> 
                                 continue;
                             }
                             if !status.is_success() {
-                                eprintln!("   {}. HTTP {} for {}，跳过", idx+1, status, abs_url);
                                 event!(Level::INFO, "{} {}. HTTP {} for {}, skip", uuid, idx+1, status, abs_url);
                                 break None;
                             }

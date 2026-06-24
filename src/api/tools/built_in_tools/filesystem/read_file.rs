@@ -1,5 +1,6 @@
 use serde::Deserialize; // Serialize
 use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/enum.Value.html
+use tracing::{event, Level};
 
 use crate::{
     error::MyError,
@@ -15,8 +16,8 @@ use crate::{
 
 /// params for integer read_file
 #[derive(Deserialize)]
-struct Params {
-    file_path: String,
+pub struct Params {
+    pub file_path: String,
 }
 
 /// built-in tool
@@ -56,6 +57,7 @@ impl BuiltIn for ReadFile {
 
     /// run tool
     fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
+        event!(Level::INFO, "read file: {}", args);
         //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         let content = read_file_helper(&params.file_path.replace("\\", "/"))?;
