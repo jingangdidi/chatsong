@@ -38,6 +38,7 @@ const ICON_MICROPHONE1: &str = include_str!("../../assets/image/microphone-svgre
 const ICON_INSERT_MSG: &str = include_str!("../../assets/image/message-plus-circle-svgrepo-com.txt");
 const ICON_GOAL0: &str = include_str!("../../assets/image/target-svgrepo-com-1-0.txt");
 const ICON_GOAL1: &str = include_str!("../../assets/image/target-svgrepo-com-1-1.txt");
+const ICON_MEMORY: &str = include_str!("../../assets/image/brain-svgrepo-com.txt");
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -107,7 +108,7 @@ struct PageInfo {
     m_qa_token:   [String; 4], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
     upload:       String,      // 上传文件的title
     textarea:     String,      // 输入框内的提示信息
-    button:       [String; 6], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式这6个按钮的title
+    button:       [String; 7], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆当前结果这7个按钮的title
     incognito:    [String; 3], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
     microphone:   [String; 3], // 左下角语音按钮开启和关闭2个状态的title，以及开启的前2个字符
     wait:         [String; 3], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
@@ -270,7 +271,7 @@ impl PageInfo {
                 m_qa_token: ["message ".to_string(), ", Q&A pair ".to_string(), ", ".to_string(), " tokens".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "upload files".to_string(), // 上传文件的title
                 textarea:   "Input your query (Press Shift+Enter for line breaks)".to_string(), // 输入框内的提示信息
-                button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string(), "Insert new instruction during tool calling".to_string(), "Goal mode".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式这6个按钮的title
+                button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string(), "Insert new instruction during tool calling".to_string(), "Goal mode".to_string(), "Add the current conversation to memory".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆当前结果这7个按钮的title
                 incognito:  ["Activate incognito mode, where the current conversation will not be locally preserved upon program termination and shall be irrevocably discarded, refreshing or reopening the current page will also erase the conversation history".to_string(), "Disable the incognito mode, and your current conversation will be preserved locally upon exiting the application, allowing you to resume seamlessly during your next session".to_string(), "Ac".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
@@ -430,7 +431,7 @@ impl PageInfo {
                 m_qa_token: ["第".to_string(), "条信息，第".to_string(), "对问答，".to_string(), "个token".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "上传文件".to_string(), // 上传文件的title
                 textarea:   "输入你的问题 (Shift+Enter换行)".to_string(), // 输入框内的提示信息
-                button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string(), "在调用工具期间插入新指令".to_string(), "开启/关闭 Goal 模式".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式这6个按钮的title
+                button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string(), "在调用工具期间插入新指令".to_string(), "开启/关闭 Goal 模式".to_string(), "当前对话添加到记忆".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、这7个按钮的title
                 incognito:  ["开启无痕模式，关闭程序时，当前对话不会被保存在本地，直接舍弃，刷新或重新打开当前页面也将丢弃对话记录".to_string(), "关闭无痕模式，关闭程序时，当前对话会被保存在本地，下次可以接着提问".to_string(), "开启".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
@@ -853,7 +854,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         </div>
         <div id='left-goal' class='left-bottom' title='{}'>
             <img src='{}' id='goal' aria-hidden='true' />
-        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0);
+        </div>
+        <div id='left-memory' class='left-bottom' title='{}'>
+            <img src='{}' id='memory' aria-hidden='true' />
+        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY);
     result += r###"
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>

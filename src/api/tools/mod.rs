@@ -1143,17 +1143,23 @@ async fn try_call_tool(
                     }
                 } else if is_main_agent && name_id[0] == "read_file" { // 读取大文件时转为调用 sub-agent
                     let read_file_para: ReadFileParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
-                    // 如果文件很大则通过 sub_agent 读取，否则直接读取
+                    // 小文件（<4000）和 md 文件可以直接读取，大文件则通过 sub_agent 读取
                     let file_path = Path::new(&read_file_para.file_path);
+                    let ext = if let Some(ext) = file_path.extension() {
+                        Some(ext.to_ascii_lowercase().to_str().unwrap().to_string())
+                    } else {
+                        None
+                    };
                     let metadata = file_path.metadata()?;
-                    if metadata.len() > 4000 {
+                    if metadata.len() < 4000 || if let Some(e) = ext { e == "md" } else { false } { // 直接读取
+                        Ok(PARAS.tools.run(name_id[1], paras))
+                    } else { // 通过 sub_agent 读取
                         event!(Level::INFO, "{} main agent read_file by sub-agent", uuid);
                         let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
-                        println!("sub call there:\n{}", format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.trim(), name_id[0]));
                         run_sub_agent(
                             uuid,
                             &["sub_agent", &sub_agent_id],
-                            &format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.trim(), name_id[0]),
+                            &format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.replace("\\", "\\\\"), name_id[0]), // 这里自己构建 json 字符串，换行符、双引号、文件路径的`\`都需要转义
                             model,
                             tool_schema,
                             para_builder,
@@ -1161,19 +1167,15 @@ async fn try_call_tool(
                             sender,
                             true,
                         ).await
-                    } else { // 直接读取
-                        println!("main call there: {}", paras);
-                        Ok(PARAS.tools.run(name_id[1], paras))
                     }
                 } else if is_main_agent && name_id[0] == "read_multiple_files" { // 读取多个文件时转为调用 sub-agent
                     let read_multiple_files_para: ReadMultipleFilesParams = parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["paths".to_string()]), object_fields: None })?;
                     let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
                     event!(Level::INFO, "{} main agent read_multiple_files by sub-agent", uuid);
-                    println!("sub call there:\n{}", format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").trim(), name_id[0]));
                     run_sub_agent(
                         uuid,
                         &["sub_agent", &sub_agent_id],
-                        &format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").trim(), name_id[0]),
+                        &format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").replace("\\", "\\\\"), name_id[0]), // 这里自己构建 json 字符串，换行符、双引号、文件路径的`\`都需要转义
                         model,
                         tool_schema,
                         para_builder,
