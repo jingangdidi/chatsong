@@ -7,6 +7,11 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
+use crate::{
+    parse_paras::PARAS,
+    error::MyError,
+};
+
 //! 极简版记忆体
 //!
 //! 1. 每轮任务开始前，根据“当前用户问题”检索相关记忆，注入模型上下文
@@ -117,9 +122,10 @@ impl SimpleMemory {
     }
 
     /// 把当前记忆体保存为 JSON 文件
-    pub fn save_to_file(&self, path: impl AsRef<Path>) -> Result<(), MyError> {
+    pub fn save_to_file(&self) -> Result<(), MyError> {
         let json = serde_json::to_string_pretty(self).map_err(json_error)?;
-        fs::write(path, json)
+        let memory_file format!("{}/memory.json", PARAS.outpath);
+        fs::write(&memory_file, json).map_err(|e| MyError::WriteFileError{file: memory_file, error: e})
     }
 
     /// 从 JSON 文件恢复记忆体
