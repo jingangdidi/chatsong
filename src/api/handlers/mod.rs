@@ -16,6 +16,7 @@ pub mod incognito; // `GET /嵌套的前缀/incognito`
 pub mod approval; // `GET /嵌套的前缀/approval`
 pub mod new_instruction; // `GET /嵌套的前缀/instruction`
 pub mod goal; // `GET /嵌套的前缀/goal`
+pub mod memory; // `GET /嵌套的前缀/memory`
 pub mod upload; // `POST /嵌套的前缀/upload`
 pub mod usage; // `GET /嵌套的前缀/usage`
 pub mod fallback; // `NOT_FOUND`

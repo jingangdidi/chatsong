@@ -15,6 +15,7 @@ pub mod tools;
 pub mod mcp;
 pub mod channel;
 pub mod skills;
+pub mod memory;
 #[cfg(feature = "code-completion")]
 pub mod code_completion;
 #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]

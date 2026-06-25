@@ -1,6 +1,5 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -12,13 +11,12 @@ use crate::{
     error::MyError,
 };
 
-//! 极简版记忆体
-//!
-//! 1. 每轮任务开始前，根据“当前用户问题”检索相关记忆，注入模型上下文
-//! 2. 每轮任务结束后，由用户决定是否提取对话记忆进行存储
-//! 3. agent 时，把 `SimpleMemory` 直接序列化成 JSON 保存到本地，下次直接导入
+// 极简版记忆体
+// 1. 每轮任务开始前，根据“当前用户问题”检索相关记忆，注入模型上下文
+// 2. 每轮任务结束后，由用户决定是否提取对话记忆进行存储
+// 3. agent 时，把 `SimpleMemory` 直接序列化成 JSON 保存到本地，下次直接导入
 
-pub static MEMORY: Lazy<Mutex<SimpleMemory>> = Lazy::new(|| Mutex::new(SimpleMemory::new()));
+pub static MEMORY: Lazy<Mutex<HashMap<String, SimpleMemory>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// 是否需要记忆
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,13 +62,13 @@ impl Messages {
 }
 
 /// 从对话中提取的一条记忆
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryNote {
     pub text: String,
 }
 
 /// 一条和当前问题相关的记忆命中结果
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelevantMemory {
     pub note: MemoryNote, // 被命中的原始记忆
     pub score: usize, // 简单相关性分数。分数越高，越应该优先注入模型
@@ -78,18 +76,13 @@ pub struct RelevantMemory {
 
 /// 从对话中抽取记忆
 /// 这里只是示例，将用户最后一条消息作为提取的记忆，实际应该让LLM提取
-fn extract_memory(&self, transcript: &str) -> Option<String> {
-    transcript
-        .lines()
-        .rev()
-        .find(|line| line.starts_with("User: "))
-        .map(|line| line.trim_start_matches("User: ").trim().to_string())
-        .filter(|line| !line.is_empty())
+fn extract_memory(text: &str) -> Option<String> {
+    Some(text.to_string())
 }
 
 /// 根据已有 notes 重建短 summary
 /// 调用LLM把当前所有记忆一起总结压缩，这里只是示例
-fn summarize(&self, notes: &[MemoryNote]) -> String {
+fn summarize(notes: &[MemoryNote]) -> String {
     if notes.is_empty() {
         return String::new();
     }
@@ -104,7 +97,7 @@ fn summarize(&self, notes: &[MemoryNote]) -> String {
 }
 
 /// 极简记忆体
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SimpleMemory {
     summary:   String, // 当前所有 notes 总结的记忆内容，下次读取记忆时，直接将这个字符串注入 prompt
     notes:     Vec<MemoryNote>, // 从每个对话提取的记忆正文
@@ -117,24 +110,23 @@ impl SimpleMemory {
         Self {
             summary: String::new(),
             notes: Vec::new(),
-            max_notes: max_notes.max(1),
+            max_notes: max_notes.max(10), // 至少10条记忆
         }
     }
 
     /// 把当前记忆体保存为 JSON 文件
     pub fn save_to_file(&self) -> Result<(), MyError> {
-        let json = serde_json::to_string_pretty(self).map_err(json_error)?;
-        let memory_file format!("{}/memory.json", PARAS.outpath);
+        let json = serde_json::to_string_pretty(self).map_err(|e| MyError::ToJsonStirngError{uuid: "memory".to_string(), error: e})?;
+        let memory_file = format!("{}/memory.json", PARAS.outpath);
         fs::write(&memory_file, json).map_err(|e| MyError::WriteFileError{file: memory_file, error: e})
     }
 
     /// 从 JSON 文件恢复记忆体
     pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self, MyError> {
         let json = fs::read_to_string(path)?;
-        let mut memory = serde_json::from_str::<Self>(&json).map_err(json_error)?;
+        let mut memory = serde_json::from_str::<Self>(&json).map_err(|e| MyError::ResponseTextToJsonError{error: e})?;
 
-        // 读取旧文件或手写 JSON 时做一次轻量修正，避免 max_notes 为 0
-        memory.max_notes = memory.max_notes.max(1);
+        memory.max_notes = memory.max_notes.max(10); // 至少10条记忆
         memory.trim_old_notes();
         Ok(memory)
     }
@@ -161,17 +153,13 @@ impl SimpleMemory {
         }
     }
 
-    /// 手动写入一条记忆
-    ///
-    /// 用户显式说“记住这个”时，可以直接调用这个方法，而不必走 transcript 抽取。
-    pub fn remember(&mut self, text: impl Into<String>) {
-        let text = text.into();
-        if text.trim().is_empty() {
-            return;
+    /// 调用 LLM 抽提总结指定字符串作为记忆
+    pub fn remember(&mut self, text: String) {
+        if !text.trim().is_empty() {
+            self.notes.push(MemoryNote { text });
+            self.trim_old_notes();
+            self.summary = summarize(&self.notes);
         }
-        self.notes.push(MemoryNote { text });
-        self.trim_old_notes();
-        self.summary = summarize(&self.notes);
     }
 
     /// 按子串搜索 notes
@@ -213,7 +201,7 @@ impl SimpleMemory {
             .enumerate()
             .filter_map(|(index, note)| {
                 let score = score_note(query, &note.text);
-                (score > 0).then_some((index, RelevantMemory { note, score }))
+                (score > 0).then_some((index, RelevantMemory { note: note.clone(), score }))
             })
             .collect::<Vec<_>>();
 

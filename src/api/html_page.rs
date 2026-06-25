@@ -1049,7 +1049,20 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         }} else {{
             goalImg.src = '{}';
         }}
-    }})", page_data.microphone[2], ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0], PARAS.addr_str, PARAS.port, v, PARAS.addr_str, PARAS.port, v, ICON_GOAL1, ICON_GOAL0);
+    }})
+    // 记忆
+    document.getElementById('left-memory').addEventListener('click', function(event) {{
+        var para_num = document.getElementById('select-log-num').value;
+        var tmp_url = ';
+        var m = document.getElementById('input_query').value;
+        if (m !== '') {{ // 把问题输入框作为要自定义记住的内容，如果为空则表示将当前上下文加入到记忆体
+            m = encodeURIComponent(m);
+            document.getElementById('input_query').value = '';
+        }}
+        fetch(http://{}:{}{}/memory?num='+para_num+'&memory='+m).catch(error => {{ // 进行记忆
+            console.error('Failed memory:', error);
+        }});
+    }})", page_data.microphone[2], ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0], PARAS.addr_str, PARAS.port, v, PARAS.addr_str, PARAS.port, v, ICON_GOAL1, ICON_GOAL0, PARAS.addr_str, PARAS.port, v);
     result += r###"
     // 监听点击关闭语音模式按钮
     document.getElementById('left-microphone').addEventListener('click', function(event) {

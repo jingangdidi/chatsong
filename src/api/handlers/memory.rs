@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use axum::extract::{
     Query,
     OriginalUri,
 };
 use axum_extra::extract::cookie::CookieJar;
-use once_cell::sync::Lazy;
 use tracing::{event, Level};
 
 use crate::{
@@ -15,30 +13,42 @@ use crate::{
         update_qa_msg_num, // 客户端下拉选项`上下文消息数`改变时更新限制的问答对数量、限制的消息数量、提问是否包含prompt
     },
     api::handlers::chat::get_qa_msg_p,
+    memory::{
+        MEMORY,
+        SimpleMemory,
+    },
 };
-
-pub static MEMORY: Lazy<Mutex<HashMap<String, Option<String>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Handler for `/嵌套的前缀/memory` GET
 pub async fn memory(Query(params): Query<HashMap<String, String>>, uri: OriginalUri, jar: CookieJar) {
     // 获取uuid
     if let Some(c) = jar.get("srx-tzn") { // 获取cookie
         let uuid = c.value().to_string();
-        if let Some(m) = match params.get("memory") {
+        if let Some(m) = params.get("memory") {
             let for_memory = if m.trim().is_empty() {
                 event!(Level::INFO, "{} remember the current conversation", uuid);
-                update_qa_msg_num(&uuid, get_qa_msg_p(params.get("num"), false));
-                let messages = get_messages(&uuid);
-                messages.into_iter().map(|msg| format!("{:?}", msg)).collect::<Vec<String>>().join("\n")
+                match get_qa_msg_p(params.get("num"), false) {
+                    Ok(qa_msg_p) => {
+                        update_qa_msg_num(&uuid, qa_msg_p);
+                        let messages = get_messages(&uuid);
+                        messages.into_iter().map(|msg| format!("{:?}", msg)).collect::<Vec<String>>().join("\n")
+                    },
+                    Err(e) => {
+                        event!(Level::ERROR, "{} get_qa_msg_p error: {}", uuid, e);
+                        return
+                    },
+                }
             } else {
                 event!(Level::INFO, "{} Remember the following content: {}", uuid, m.trim());
                 m.trim().to_string()
             };
             let mut data = MEMORY.lock().unwrap();
             match data.get_mut(&uuid) {
-                Some(m) => *m = Some(for_memory),
+                Some(m) => m.remember(for_memory),
                 None => {
-                    data.insert(uuid, Some(for_memory));
+                    let mut m = SimpleMemory::new(100); // 最多100条记忆
+                    m.remember(for_memory);
+                    data.insert(uuid, m);
                 },
             }
         }

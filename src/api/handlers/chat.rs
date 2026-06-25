@@ -917,49 +917,49 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
 
 /// 提问时最多提交几对问答，或几个消息，以及是否包含prompt
 /// 返回(问答对数量, 消息数量, 是否包含prompt)
-pub fn get_qa_msg_p(params_num: &Option<String>, compression: bool) -> Option<(usize, usize, bool)> {
+pub fn get_qa_msg_p(params_num: Option<&String>, compression: bool) -> Result<Option<(usize, usize, bool)>, MyError> {
     match params_num {
         Some(n) => match n.as_str() {
-            "expanding" => Some((usize::MAX, 0, true)), // Some((无限制, 0, 包含prompt))
-            "unlimit" => Some((usize::MAX, usize::MAX, true)), // Some((无限制, 无限制, 包含prompt))
+            "expanding" => Ok(Some((usize::MAX, 0, true))), // Some((无限制, 0, 包含prompt))
+            "unlimit" => Ok(Some((usize::MAX, usize::MAX, true))), // Some((无限制, 无限制, 包含prompt))
             p_num_qa_msg => { // 格式：`数量qa`（指定数量个问答对，不包含prompt）、`p数量qa`（指定数量个问答对，包含prompt）、`数量`（指定数量个消息，不包含prompt）、`p数量`（指定数量个消息，包含prompt）
                 if p_num_qa_msg.ends_with("qa") { // 问答对
                     let p_num = p_num_qa_msg.strip_suffix("qa").unwrap(); // 这里可以直接unwrap
                     if p_num.starts_with("p") { // `p数量qa`（指定数量个问答对，包含prompt），例如：`p1qa`
                         let num = p_num.strip_prefix("p").unwrap().parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num.strip_prefix("p").unwrap().to_string(), to: "usize".to_string(), error: e})?;
                         if compression { // 总结压缩占1对QA，因此这里加1
-                            Some((num+1, 0, true)) // Some((指定问答对数量, 0, 包含prompt))
+                            Ok(Some((num+1, 0, true))) // Some((指定问答对数量, 0, 包含prompt))
                         } else {
-                            Some((num, 0, true)) // Some((指定问答对数量, 0, 包含prompt))
+                            Ok(Some((num, 0, true))) // Some((指定问答对数量, 0, 包含prompt))
                         }
                     } else { // `数量qa`（指定数量个问答对，不包含prompt），例如：`1qa`
                         let num = p_num.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num.to_string(), to: "usize".to_string(), error: e})?;
                         if compression { // 总结压缩占1对QA，因此这里加1
-                            Some((num+1, 0, false)) // Some((指定问答对数量, 0, 不包含prompt))
+                            Ok(Some((num+1, 0, false))) // Some((指定问答对数量, 0, 不包含prompt))
                         } else {
-                            Some((num, 0, false)) // Some((指定问答对数量, 0, 不包含prompt))
+                            Ok(Some((num, 0, false))) // Some((指定问答对数量, 0, 不包含prompt))
                         }
                     }
                 } else { // 视为指定的消息数
                     if p_num_qa_msg.starts_with("p") { // `p数量`（指定数量个消息，包含prompt），例如：`p1`
                         let num = p_num_qa_msg.strip_prefix("p").unwrap().parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.strip_prefix("p").unwrap().to_string(), to: "usize".to_string(), error: e})?;
                         if compression { // 总结压缩的prompt占1个消息，因此这里加1
-                            Some((0, num+1, true)) // Some((0, 指定消息数量, 包含prompt))
+                            Ok(Some((0, num+1, true))) // Some((0, 指定消息数量, 包含prompt))
                         } else {
-                            Some((0, num, true)) // Some((0, 指定消息数量, 包含prompt))
+                            Ok(Some((0, num, true))) // Some((0, 指定消息数量, 包含prompt))
                         }
                     } else { // `数量`（指定数量个消息，不包含prompt），例如：`1`
                         let num = p_num_qa_msg.parse::<usize>().map_err(|e| MyError::ParseStringError{from: p_num_qa_msg.to_string(), to: "usize".to_string(), error: e})?;
                         if compression { // 总结压缩的prompt占1个消息，因此这里加1
-                            Some((0, num+1, false)) // Some((0, 指定消息数量, 不包含prompt))
+                            Ok(Some((0, num+1, false))) // Some((0, 指定消息数量, 不包含prompt))
                         } else {
-                            Some((0, num, false)) // Some((0, 指定消息数量, 不包含prompt))
+                            Ok(Some((0, num, false))) // Some((0, 指定消息数量, 不包含prompt))
                         }
                     }
                 }
             },
         },
-        None => None, // 这里None表示不修改问答对或消息数、以及是否包含prompt
+        None => Ok(None), // 这里None表示不修改问答对或消息数、以及是否包含prompt
     }
 }
 
@@ -1023,7 +1023,7 @@ impl ClientPara {
         };
         // 提问时最多提交几对问答，或几个消息，以及是否包含prompt
         // 返回(问答对数量, 消息数量, 是否包含prompt)
-        let qa_msg_p: Option<(usize, usize, bool)> = get_qa_msg_p(params.get("num"), compression);
+        let qa_msg_p: Option<(usize, usize, bool)> = get_qa_msg_p(params.get("num"), compression)?;
         // 解析传递的uuid，并设置cookie
         let (uuid, cookie_jar, load_uuid/*, clear_page*/) = match prompt {
             Some(p) => {
