@@ -63,6 +63,7 @@ use crate::{
         goal::reset_goal,
     },
     skills::SelectedSkills,
+    memory::get_relevant_memory,
 };
 
 pub mod built_in_tools;
@@ -327,6 +328,7 @@ pub async fn run_tools(
     mut para_builder: ChatCompletionParametersBuilder,
     model: &str,
     raw_goal: Option<String>,
+    is_local: bool,
 ) -> Result<(), MyError> {
     // 初始化 Goal
     let (mut my_goal, goal_mode) = if let Some(g) = raw_goal {
@@ -460,6 +462,40 @@ pub async fn run_tools(
     let para_builder_for_sub_agent = para_builder.clone();
     para_builder.tools(tool_schema.clone());
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
+    // 如果只有用户提问，则提取用户的问题，获取记忆并注入
+    if history_messages.iter().all(|m| matches!(m, ChatMessage::User { .. })) {
+        let mut user_msg = Vec::new();
+        for m in &history_messages {
+            if let &ChatMessage::User{content: ct, ..} = &m {
+                if let ChatMessageContent::Text(c) = ct {
+                    user_msg.push(c.clone());
+                }
+            }
+        }
+        if !user_msg.is_empty() {
+            let query = user_msg.join("\n");
+            let memory = {
+                match get_relevant_memory(&uuid, &query, 10, is_local) {
+                    Some(memory) => Some(memory),
+                    None => if is_local {
+                        // 再尝试从 memory_old.json 中获取
+                        get_relevant_memory("local", &query, 10, false)
+                    } else {
+                        None
+                    }
+                }
+            };
+            if let Some(m) = memory {
+                event!(Level::INFO, "{} insert memory prompt: {}\n", uuid, m);
+                history_messages.push(
+                    ChatMessage::User{
+                        content: ChatMessageContent::Text(m),
+                        name: None,
+                    }
+                );
+            }
+        }
+    }
     // 插入 schedule_task 要调用的其他 tool
     let mut schedule_list_remove = false; // 是否仅查询或删除定时任务，此时不需要插入其他 tool，节省 token
     if let Some(other_all_tools) = other_tools {

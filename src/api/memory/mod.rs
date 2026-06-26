@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use tracing::{event, Level};
 
 use crate::{
     parse_paras::PARAS,
@@ -18,166 +19,89 @@ use crate::{
 
 pub static MEMORY: Lazy<Mutex<HashMap<String, SimpleMemory>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-/// 是否需要记忆
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MemoryDecision {
-    Remember, // 允许从本次任务中抽取记忆
-    Skip, // 跳过本次任务的记忆写入
-}
-
-/// 要提取记忆的原始对话内容
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Messages {
-    messages: Vec<String>,
-}
-
-impl Messages {
-    /// 用第一条用户消息创建
-    pub fn new_by_user(user_message: &str) -> Self {
-        let mut task = Self::default();
-        task.user(user_message);
-        task
-    }
-
-    /// 记录用户消息
-    pub fn user(&mut self, text: &str) {
-        self.messages.push(format!("User: {}", text));
-    }
-
-    /// 记录助手消息
-    pub fn assistant(&mut self, text: &str) {
-        self.messages.push(format!("Assistant: {}", text));
-    }
-
-    /// 记录工具调用和输出
-    pub fn tool(&mut self, name: &str, text: &str) {
-        self.messages
-            .push(format!("Tool({}): {}", name, text));
-    }
-
-    /// 获取完整信息，换行间隔，用于提取记忆
-    pub fn as_text(&self) -> String {
-        self.messages.join("\n")
-    }
-}
-
 /// 从对话中提取的一条记忆
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryNote {
-    pub text: String,
+    pub raw:     String, // 原始内容
+    pub summary: String, // 提取的记忆
 }
 
 /// 一条和当前问题相关的记忆命中结果
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelevantMemory {
-    pub note: MemoryNote, // 被命中的原始记忆
+    pub note:  MemoryNote, // 被命中的原始记忆
     pub score: usize, // 简单相关性分数。分数越高，越应该优先注入模型
-}
-
-/// 从对话中抽取记忆
-/// 这里只是示例，将用户最后一条消息作为提取的记忆，实际应该让LLM提取
-fn extract_memory(text: &str) -> Option<String> {
-    Some(text.to_string())
-}
-
-/// 根据已有 notes 重建短 summary
-/// 调用LLM把当前所有记忆一起总结压缩，这里只是示例
-fn summarize(notes: &[MemoryNote]) -> String {
-    if notes.is_empty() {
-        return String::new();
-    }
-
-    let mut summary = String::from("可用记忆摘要：\n");
-    for note in notes.iter().rev().take(8) {
-        summary.push_str("- ");
-        summary.push_str(&note.text);
-        summary.push('\n');
-    }
-    summary
 }
 
 /// 极简记忆体
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SimpleMemory {
-    summary:   String, // 当前所有 notes 总结的记忆内容，下次读取记忆时，直接将这个字符串注入 prompt
     notes:     Vec<MemoryNote>, // 从每个对话提取的记忆正文
     max_notes: usize, // notes 的数量上限
+    path:      String, // 该记忆的文件存储路径
+    #[serde(skip, default)]
+    pub save:  bool, // 本次加载后是否有更新，没有更新则退出时不需要保存，保存和加载json文件时忽略该字段，加载时默认设为false
 }
 
 impl SimpleMemory {
     /// 创建一个空记忆体
-    pub fn new(max_notes: usize) -> Self {
+    pub fn new(max_notes: usize, path: String) -> Self {
         Self {
-            summary: String::new(),
             notes: Vec::new(),
             max_notes: max_notes.max(10), // 至少10条记忆
+            path,
+            save: false,
         }
     }
 
     /// 把当前记忆体保存为 JSON 文件
     pub fn save_to_file(&self) -> Result<(), MyError> {
         let json = serde_json::to_string_pretty(self).map_err(|e| MyError::ToJsonStirngError{uuid: "memory".to_string(), error: e})?;
-        let memory_file = format!("{}/memory.json", PARAS.outpath);
-        fs::write(&memory_file, json).map_err(|e| MyError::WriteFileError{file: memory_file, error: e})
+        fs::write(&self.path, json).map_err(|e| MyError::WriteFileError{file: self.path.clone(), error: e})
     }
 
     /// 从 JSON 文件恢复记忆体
-    pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self, MyError> {
-        let json = fs::read_to_string(path)?;
+    pub fn load_from_file(file: &str) -> Result<Self, MyError> {
+        let json = fs::read_to_string(file)?;
         let mut memory = serde_json::from_str::<Self>(&json).map_err(|e| MyError::ResponseTextToJsonError{error: e})?;
-
         memory.max_notes = memory.max_notes.max(10); // 至少10条记忆
-        memory.trim_old_notes();
+        memory.trim_old_notes(false);
         Ok(memory)
     }
 
-    /// 舍弃旧记忆
-    fn trim_old_notes(&mut self) {
+    /// 舍弃uuid的旧记忆，如果是 memory.json 中的记忆，则将旧记忆移到 memory_old.json 中
+    fn trim_old_notes(&mut self, is_local: bool) -> Option<Vec<MemoryNote>> {
         if self.notes.len() > self.max_notes {
             let overflow = self.notes.len() - self.max_notes;
-            self.notes.drain(0..overflow);
+            let old = self.notes.drain(0..overflow);
+            if is_local {
+                Some(old.collect())
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
-    /// 任务结束时调用：根据明确决策决定是否学习
-    pub fn finish_task(&mut self, msg: Messages, decision: MemoryDecision) {
-        if decision != MemoryDecision::Skip {
-            let transcript = msg.as_text();
-            let Some(text) = extract_memory(&transcript) else {
-                return;
-            };
-
-            self.notes.push(MemoryNote { text });
-            self.trim_old_notes();
-            self.summary = summarize(&self.notes);
-        }
+    /// 将指定 Vec<MemoryNote> 加入到记忆中
+    pub fn append_memory(&mut self, notes: Vec<MemoryNote>) {
+        self.notes.extend(notes);
+        self.save = true;
     }
 
-    /// 调用 LLM 抽提总结指定字符串作为记忆
-    pub fn remember(&mut self, text: String) {
-        if !text.trim().is_empty() {
-            self.notes.push(MemoryNote { text });
-            self.trim_old_notes();
-            self.summary = summarize(&self.notes);
+    /// 调用 LLM 抽提总结指定字符串作为记忆，返回超出容量的旧记忆
+    /// text: 要提取记忆的原始内容
+    /// model_for_memory: (api_key, endpoint, 模型名称, 是否支持深度思考)
+    pub fn remember(&mut self, raw: String, summary: String, is_local: bool) -> Option<Vec<MemoryNote>> {
+        if !summary.trim().is_empty() {
+            // 调用 LLM 提取记忆
+            self.notes.push(MemoryNote { raw, summary });
+            self.save = true;
+            self.trim_old_notes(is_local)
+        } else {
+            None
         }
-    }
-
-    /// 按子串搜索 notes
-    pub fn search(&self, query: &str) -> Vec<&MemoryNote> {
-        let query = query.trim().to_lowercase();
-        if query.is_empty() {
-            return Vec::new();
-        }
-
-        self.notes
-            .iter()
-            .filter(|note| note.text.to_lowercase().contains(&query))
-            .collect()
-    }
-
-    /// 查看所有 notes
-    pub fn notes(&self) -> &[MemoryNote] {
-        &self.notes
     }
 
     /// 根据当前问题检索最相关的 notes 记忆
@@ -190,7 +114,7 @@ impl SimpleMemory {
     /// - 分数相同：越新的 note 越靠前
     ///
     /// 复杂项目里可以把这里替换成 BM25、tantivy、SQLite FTS、embedding 检索或混合检索
-    pub fn search_relevant(&self, query: &str, limit: usize) -> Vec<RelevantMemory> {
+    fn search_relevant(&self, query: &str, limit: usize) -> Vec<RelevantMemory> {
         if limit == 0 || query.trim().is_empty() {
             return Vec::new();
         }
@@ -200,7 +124,7 @@ impl SimpleMemory {
             .iter()
             .enumerate()
             .filter_map(|(index, note)| {
-                let score = score_note(query, &note.text);
+                let score = score_note(query, &note.summary);
                 (score > 0).then_some((index, RelevantMemory { note: note.clone(), score }))
             })
             .collect::<Vec<_>>();
@@ -215,53 +139,23 @@ impl SimpleMemory {
         scored.into_iter().take(limit).map(|(_, hit)| hit).collect()
     }
 
-    /// 对话开始前，获取所有记忆的总结，这里没有根据相关性筛选，是全部记忆的一个总结
-    pub fn prompt(&self) -> Option<String> {
-        let summary = self.summary.trim();
-        if summary.is_empty() {
-            return None;
-        }
-
-        Some(format!(
-            "## 记忆\n\
-             以下是过去任务留下的短摘要。仅在相关时使用；如果事实可能过期，请重新验证。\n\n\
-             {summary}"
-        ))
-    }
-
     /// 根据当前问题生成要注入模型的记忆 prompt
-    ///
     /// 这是推荐在 agent loop 开始时调用的方法
     /// 它会先根据 `current_query` 检索相关 notes，然后只注入前 `max_hits` 条记忆
-    pub fn prompt_for(&self, current_query: &str, max_hits: usize) -> Option<String> {
-        let summary = self.summary.trim();
+    fn relevant_memory_prompt(&self, current_query: &str, max_hits: usize) -> Option<String> {
         let hits = self.search_relevant(current_query, max_hits);
-
-        if summary.is_empty() && hits.is_empty() {
-            return None;
-        }
-
-        let mut prompt = String::from(
-            "## 记忆\n\
-             以下内容来自过去任务。只在和当前问题相关时使用；如果和当前问题冲突，以当前用户消息为准。\n",
-        );
-
-        if !summary.is_empty() {
-            prompt.push_str("\n### 全局状态\n");
-            prompt.push_str(summary);
-            prompt.push('\n');
-        }
-
-        if !hits.is_empty() {
-            prompt.push_str("\n### 与当前问题相关的记忆\n");
+        if hits.is_empty() {
+            None
+        } else {
+            let mut prompt = "## Memory\nThe following content is from previous tasks. Use it only when relevant to the current issue; if there is a conflict with the current user message, the current user message takes precedence.\n".to_string();
+            prompt.push_str("\n### Memories related to the current issue:\n");
             for hit in hits {
                 prompt.push_str("- ");
-                prompt.push_str(&hit.note.text);
+                prompt.push_str(&hit.note.summary);
                 prompt.push('\n');
             }
+            Some(prompt)
         }
-
-        Some(prompt)
     }
 }
 
@@ -362,4 +256,43 @@ fn is_cjk(ch: char) -> bool {
             | '\u{2B740}'..='\u{2B81F}'
             | '\u{2B820}'..='\u{2CEAF}'
     )
+}
+
+/// 获取相关记忆
+pub fn get_relevant_memory(uuid: &str, query: &str, max_hits: usize, is_local: bool) -> Option<String> {
+    let mut data = MEMORY.lock().unwrap();
+    let key = if is_local {
+        "local"
+    } else {
+        uuid
+    };
+    match data.get_mut(key) {
+        Some(memory) => memory.relevant_memory_prompt(query, max_hits),
+        None => {
+            let memory_file = if is_local {
+                format!("{}/memory.json", PARAS.outpath)
+            } else if key == "old" {
+                format!("{}/memory_old.json", PARAS.outpath)
+            } else {
+                format!("{}/{}/{}_memory.json", PARAS.outpath, key, key)
+            };
+            let memory_path = Path::new(&memory_file);
+            if memory_path.exists() && memory_path.is_file() {
+                match SimpleMemory::load_from_file(&memory_file) {
+                    Ok(memory) => {
+                        let result = memory.relevant_memory_prompt(query, max_hits);
+                        data.insert(key.to_string(), memory);
+                        result
+                    },
+                    Err(e) => {
+                        event!(Level::ERROR, "load memory file ({}) error: {}", memory_file, e);
+                        None
+                    },
+                }
+            } else {
+                event!(Level::WARN, "no memory in {}", key);
+                None
+            }
+        },
+    }
 }

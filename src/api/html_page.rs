@@ -271,7 +271,7 @@ impl PageInfo {
                 m_qa_token: ["message ".to_string(), ", Q&A pair ".to_string(), ", ".to_string(), " tokens".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "upload files".to_string(), // 上传文件的title
                 textarea:   "Input your query (Press Shift+Enter for line breaks)".to_string(), // 输入框内的提示信息
-                button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string(), "Insert new instruction during tool calling".to_string(), "Goal mode".to_string(), "Add the current conversation to memory".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆当前结果这7个按钮的title
+                button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string(), "Insert new instruction during tool calling".to_string(), "Goal mode".to_string(), "Add the current conversation or the unsent content in the input box to memory".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆当前结果这7个按钮的title
                 incognito:  ["Activate incognito mode, where the current conversation will not be locally preserved upon program termination and shall be irrevocably discarded, refreshing or reopening the current page will also erase the conversation history".to_string(), "Disable the incognito mode, and your current conversation will be preserved locally upon exiting the application, allowing you to resume seamlessly during your next session".to_string(), "Ac".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
@@ -431,7 +431,7 @@ impl PageInfo {
                 m_qa_token: ["第".to_string(), "条信息，第".to_string(), "对问答，".to_string(), "个token".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "上传文件".to_string(), // 上传文件的title
                 textarea:   "输入你的问题 (Shift+Enter换行)".to_string(), // 输入框内的提示信息
-                button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string(), "在调用工具期间插入新指令".to_string(), "开启/关闭 Goal 模式".to_string(), "当前对话添加到记忆".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、这7个按钮的title
+                button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string(), "在调用工具期间插入新指令".to_string(), "开启/关闭 Goal 模式".to_string(), "将当前对话或输入框内未发送的内容添加到记忆".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、这7个按钮的title
                 incognito:  ["开启无痕模式，关闭程序时，当前对话不会被保存在本地，直接舍弃，刷新或重新打开当前页面也将丢弃对话记录".to_string(), "关闭无痕模式，关闭程序时，当前对话会被保存在本地，下次可以接着提问".to_string(), "开启".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
@@ -1053,13 +1053,13 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     // 记忆
     document.getElementById('left-memory').addEventListener('click', function(event) {{
         var para_num = document.getElementById('select-log-num').value;
-        var tmp_url = ';
         var m = document.getElementById('input_query').value;
         if (m !== '') {{ // 把问题输入框作为要自定义记住的内容，如果为空则表示将当前上下文加入到记忆体
             m = encodeURIComponent(m);
             document.getElementById('input_query').value = '';
         }}
-        fetch(http://{}:{}{}/memory?num='+para_num+'&memory='+m).catch(error => {{ // 进行记忆
+        var para_model = document.getElementById('select-model').value;
+        fetch('http://{}:{}{}/memory?num='+para_num+'&memory='+m+'&model='+para_model).catch(error => {{ // 进行记忆
             console.error('Failed memory:', error);
         }});
     }})", page_data.microphone[2], ICON_MICROPHONE1, page_data.microphone[1], ICON_MICROPHONE0, page_data.microphone[0], PARAS.addr_str, PARAS.port, v, PARAS.addr_str, PARAS.port, v, ICON_GOAL1, ICON_GOAL0, PARAS.addr_str, PARAS.port, v);

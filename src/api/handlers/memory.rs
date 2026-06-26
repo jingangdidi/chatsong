@@ -1,30 +1,47 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::path::Path;
 
-use axum::extract::{
-    Query,
-    OriginalUri,
+use axum::{
+    extract::{
+        Query,
+        OriginalUri,
+        ConnectInfo,
+    },
+    http::StatusCode,
 };
 use axum_extra::extract::cookie::CookieJar;
 use tracing::{event, Level};
 
 use crate::{
+    parse_paras::PARAS,
+    error::MyError,
     info::{
         get_messages, // 获取指定uuid最近的指定数量个message
         update_qa_msg_num, // 客户端下拉选项`上下文消息数`改变时更新限制的问答对数量、限制的消息数量、提问是否包含prompt
     },
-    api::handlers::chat::get_qa_msg_p,
+    api::handlers::chat::{
+        get_qa_msg_p,
+        is_local_request,
+    },
     memory::{
         MEMORY,
         SimpleMemory,
     },
+    tools::built_in_tools::hacker_news::run_single_llm,
 };
 
 /// Handler for `/嵌套的前缀/memory` GET
-pub async fn memory(Query(params): Query<HashMap<String, String>>, uri: OriginalUri, jar: CookieJar) {
+pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(addr): ConnectInfo<SocketAddr>, uri: OriginalUri, jar: CookieJar) -> Result<StatusCode, MyError> {
     // 获取uuid
     if let Some(c) = jar.get("srx-tzn") { // 获取cookie
         let uuid = c.value().to_string();
+        // 提取并添加记忆
         if let Some(m) = params.get("memory") {
+            // 检查是否服务端所在电脑发起的请求
+            let ip = addr.ip();
+            let is_local = is_local_request(&ip);
+            // 获取要记住的内容
             let for_memory = if m.trim().is_empty() {
                 event!(Level::INFO, "{} remember the current conversation", uuid);
                 match get_qa_msg_p(params.get("num"), false) {
@@ -35,24 +52,145 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, uri: Original
                     },
                     Err(e) => {
                         event!(Level::ERROR, "{} get_qa_msg_p error: {}", uuid, e);
-                        return
+                        return Ok(StatusCode::OK)
                     },
                 }
             } else {
                 event!(Level::INFO, "{} Remember the following content: {}", uuid, m.trim());
                 m.trim().to_string()
             };
-            let mut data = MEMORY.lock().unwrap();
-            match data.get_mut(&uuid) {
-                Some(m) => m.remember(for_memory),
-                None => {
-                    let mut m = SimpleMemory::new(100); // 最多100条记忆
-                    m.remember(for_memory);
-                    data.insert(uuid, m);
+            // 获取用于提取记忆的模型，返回 (api_key, endpoint, model, reasoning)
+            let model_for_memory = match params.get("model") {
+                Some(model) => match PARAS.api.get_model_by_str(&model) {
+                    Ok(model_for_memory) => model_for_memory,
+                    Err(e) => {
+                        event!(Level::ERROR, "{} get model for memory error: {}", uuid, e);
+                        return Ok(StatusCode::OK)
+                    },
                 },
+                None => match PARAS.api.get_default_model() {
+                    Ok(model_for_memory) => model_for_memory,
+                    Err(e) => {
+                        event!(Level::ERROR, "{} get default model for memory error: {}", uuid, e);
+                        return Ok(StatusCode::OK)
+                    },
+                },
+            };
+            // 提取记忆
+            let memory_summary = extract_memory(&for_memory, model_for_memory).await?;
+            // 如果是服务端所在电脑发起的请求，key使用`local`存储到输出路径根路径下的`memory.json`，否则使用各自uuid并存储到各自uuid路径`uuid_memory.json`
+            let key = if is_local {
+                "local".to_string()
+            } else {
+                uuid
+            };
+            let mut data = MEMORY.lock().unwrap();
+            let old = match data.get_mut(&key) {
+                Some(memory) => memory.remember(for_memory, memory_summary, is_local),
+                None => {
+                    let memory_file = if is_local {
+                        format!("{}/memory.json", PARAS.outpath)
+                    } else {
+                        format!("{}/{}/{}_memory.json", PARAS.outpath, key, key)
+                    };
+                    let memory_path = Path::new(&memory_file);
+                    if memory_path.exists() && memory_path.is_file() {
+                        match SimpleMemory::load_from_file(&memory_file) {
+                            Ok(mut memory) => {
+                                let old = memory.remember(for_memory, memory_summary, is_local);
+                                data.insert(key, memory);
+                                old
+                            },
+                            Err(e) => {
+                                event!(Level::ERROR, "load memory file ({}) error: {}", memory_file, e);
+                                None
+                            },
+                        }
+                    } else {
+                        let mut memory = SimpleMemory::new(100, memory_file); // 设置最多100条记忆
+                        let old = memory.remember(for_memory, memory_summary, is_local);
+                        data.insert(key, memory);
+                        old
+                    }
+                },
+            };
+            // 如果是本地记忆，且移除了旧记忆，则将旧记忆加到 memory_old.json 中
+            if is_local {
+                if let Some(old_notes) = old {
+                    match data.get_mut("old") {
+                        Some(memory) => memory.append_memory(old_notes),
+                        None => {
+                            let memory_file = format!("{}/memory_old.json", PARAS.outpath);
+                            let memory_path = Path::new(&memory_file);
+                            if memory_path.exists() && memory_path.is_file() {
+                                match SimpleMemory::load_from_file(&memory_file) {
+                                    Ok(mut memory) => {
+                                        memory.append_memory(old_notes);
+                                        data.insert("old".to_string(), memory);
+                                    },
+                                    Err(e) => event!(Level::ERROR, "load old memory file ({}) error: {}", memory_file, e),
+                                }
+                            } else {
+                                let mut memory = SimpleMemory::new(usize::MAX, memory_file);
+                                memory.append_memory(old_notes);
+                                data.insert("old".to_string(), memory);
+                            }
+                        },
+                    }
+                }
             }
         }
     } else {
         event!(Level::INFO, "GET {}, set memory failed, no cookie", uri.path()); // 注意：`axum::http::Uri`只能捕获到`/hello`，不包含嵌套的`/嵌套的前缀`前缀，使用`OriginalUri`可以
     }
+    Ok(StatusCode::OK)
+}
+
+/// 提取记忆的prompt
+const MEMORY_PROMPT: &str = r###"You are a memory extraction assistant.
+
+Your task is to extract one concise long-term memory from the conversation.
+
+The host application has already decided that this conversation is allowed to be considered for memory. You do not decide whether learning is allowed. You only decide whether there is any useful memory content to extract.
+
+Extract a memory only if it is:
+- Stable beyond the current turn
+- Useful for future tasks or future conversations
+- Specific enough to act on
+- Supported by the user's messages or by verified work done in the conversation
+
+Prefer extracting:
+- User preferences, working style, communication style, constraints, or recurring instructions
+- Project-specific facts, architecture decisions, conventions, commands, paths, or workflows
+- Decisions that should be remembered later
+- Corrections from the user about how the assistant should behave
+- Reusable lessons learned from completed or verified work
+
+Do not extract:
+- Temporary task progress
+- One-off requests that are already completed
+- Generic conversation summaries
+- Unverified external information
+- Tool output dumps
+- Speculation, guesses, or uncertain claims
+- Secrets, credentials, API keys, tokens, private personal data, or sensitive information
+- Anything the user explicitly said not to remember
+
+Write the memory as a short, standalone statement. It must make sense without reading the original conversation.
+
+If multiple memories are possible, choose only the most useful one.
+
+If nothing should be remembered, output an empty string.
+
+Output only the final memory string. Do not include JSON, Markdown, headings, explanations, labels, quotes, or bullet points.
+
+Conversation:
+"###;
+
+/// 调用 LLM 从指定内容中抽取记忆
+/// text: 要提取记忆的原始内容
+/// model_for_memory: (api_key, endpoint, 模型名称, 是否支持深度思考)
+async fn extract_memory(text: &str, model_for_memory: (String, String, String, bool)) -> Result<String, MyError> {
+    let content = format!("{}{}", MEMORY_PROMPT, text);
+    run_single_llm("memory", content, model_for_memory.0, model_for_memory.1, model_for_memory.2).await
 }

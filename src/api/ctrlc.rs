@@ -4,6 +4,7 @@ use crate::{
     graph::save_graph,
     info::save_all_chat,
     parse_paras::PARAS,
+    memory::MEMORY,
 };
 
 /// 监听`ctrl-c`，在停止程序之前之前指定操作
@@ -60,4 +61,11 @@ pub async fn wait_for_signal() {
     save_all_chat(); // 退出前保存每个uuid的chat记录
     // kill mcp servers
     PARAS.mcp_servers.close_all().await;
+    // save memory
+    let data = MEMORY.lock().unwrap();
+    for memory in data.values() {
+        if memory.save {
+            let _ = memory.save_to_file();
+        }
+    }
 }

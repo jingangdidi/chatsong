@@ -274,7 +274,12 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool, model: &str) -> 
         for ((title, url, _), summary_opt) in articles.iter().zip(summaries.iter()) {
             let escaped_title = html_escape::encode_text(title);
             let summary = match summary_opt {
-                Some(s) => run_single_llm(uuid, &s, model).await?,
+                Some(s) => {
+                    // 根据模型名称获取(api_key, endpoint, 模型名称, 是否支持深度思考)
+                    let (api_key, endpoint, m, _) = PARAS.api.get_model_by_name(model)?;
+                    let content = format!("{}{}{}", SUMMARY_PROMPT, s, if PARAS.english { "" } else { "\n使用中文总结" });
+                    run_single_llm(uuid, content, api_key, endpoint, m).await?
+                },
                 None => "no comment".to_string(),
             };
             let escaped_summary = html_escape::encode_text(&summary);
@@ -297,7 +302,12 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool, model: &str) -> 
         for ((title, url, _), summary_opt) in articles.iter().zip(summaries.iter()) {
             let escaped_title = title.replace('|', "\\|");
             let summary = match summary_opt {
-                Some(s) => run_single_llm(uuid, &s, model).await?,
+                Some(s) => {
+                    // 根据模型名称获取(api_key, endpoint, 模型名称, 是否支持深度思考)
+                    let (api_key, endpoint, m, _) = PARAS.api.get_model_by_name(model)?;
+                    let content = format!("{}{}{}", SUMMARY_PROMPT, s, if PARAS.english { "" } else { "\n使用中文总结" });
+                    run_single_llm(uuid, content, api_key, endpoint, m).await?
+                },
                 None => "no comment".to_string(),
             };
             let escaped_summary = summary
@@ -317,9 +327,7 @@ pub async fn hacker_news_summaries(uuid: &str, save_html: bool, model: &str) -> 
 }
 
 /// 单词调用LLM
-async fn run_single_llm(uuid: &str, content: &str, m: &str) -> Result<String, MyError> {
-    // 根据模型名称获取(api_key, endpoint, 模型名称, 是否支持深度思考)
-    let (api_key, endpoint, model, _) = PARAS.api.get_model_by_name(m)?;
+pub async fn run_single_llm(uuid: &str, content: String, api_key: String, endpoint: String, model: String) -> Result<String, MyError> {
     // 使用api key初始化
     let mut client = Client::new(api_key.clone());
     client.set_base_url(&endpoint); // 从0.7.0开始舍弃了new_with_base
@@ -352,7 +360,7 @@ async fn run_single_llm(uuid: &str, content: &str, m: &str) -> Result<String, My
         //para_builder.extra_body(json!({"reasoning_split": false}));
     }
     let summary_prompt = ChatMessage::User{
-        content: ChatMessageContent::Text(format!("{}{}{}", SUMMARY_PROMPT, content, if PARAS.english { "" } else { "\n使用中文总结" })),
+        content: ChatMessageContent::Text(content),
         name: None,
     };
     call_llm(vec![summary_prompt], uuid.to_string(), client, para_builder, &model).await

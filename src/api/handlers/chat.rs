@@ -535,6 +535,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 if client_para.selected_tools.is_some() || client_para.selected_skills.is_some() {
                     let tmp_uuid = client_para.uuid.clone();
                     let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
+                    // 检查是否服务端所在电脑发起的请求
+                    let ip = addr.ip();
+                    let is_local = is_local_request(&ip);
                     // 从openai接收stream答案，并返回完整答案字符串
                     tokio::spawn(async move {
                         let tool_error = if client_para.plan_mode && client_para.selected_skills.is_none() { // 目前计划模式不支持skills
@@ -550,7 +553,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             } else {
                                 None
                             };
-                            run_tools(client_para.selected_tools, client_para.selected_skills, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model, raw_goal).await
+                            run_tools(client_para.selected_tools, client_para.selected_skills, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model, raw_goal, is_local).await
                         };
                         if let Err(e) = tool_error {
                             event!(Level::ERROR, "{} receive call tool result error: {}", tmp_uuid, e);
@@ -1305,7 +1308,7 @@ impl ClientPara {
 }
 
 /// 检查是否服务端所在电脑发起的请求
-fn is_local_request(ip: &IpAddr) -> bool {
+pub fn is_local_request(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
             // 本机 IPv4 地址
