@@ -89,7 +89,7 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
                 Some(memory) => memory.remember(for_memory, memory_summary, is_local),
                 None => {
                     let memory_file = if is_local {
-                        format!("{}/memory.json", PARAS.outpath)
+                        format!("{}/memory.json", PARAS.memory_dir)
                     } else {
                         format!("{}/{}/{}_memory.json", PARAS.outpath, key, key)
                     };
@@ -120,7 +120,7 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
                     match data.get_mut("old") {
                         Some(memory) => memory.append_memory(old_notes),
                         None => {
-                            let memory_file = format!("{}/memory_old.json", PARAS.outpath);
+                            let memory_file = format!("{}/memory_old.json", PARAS.memory_dir);
                             let memory_path = Path::new(&memory_file);
                             if memory_path.exists() && memory_path.is_file() {
                                 match SimpleMemory::load_from_file(&memory_file) {

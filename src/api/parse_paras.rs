@@ -146,6 +146,10 @@ struct Paras {
     #[argh(option, short = 'b')]
     bgc: Option<String>,
 
+    /// memory dir of memory.json, default: -o
+    #[argh(option, short = 'M')]
+    memory_dir: Option<String>,
+
     /// output path, default: ./chat-log
     #[argh(option, short = 'o')]
     outpath: Option<String>,
@@ -187,6 +191,7 @@ pub struct ParsedParas {
     pub mcp_servers:  McpServers,                  // mcp servers
     pub bgc:          String,                      // 页面背景色
     pub skills:       Skills,                      // skills
+    pub memory_dir:   String,                      // memory.json 存储路径，默认存储在-o指定的输出路径下
 }
 
 /// 解析参数
@@ -201,6 +206,16 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         } else {
             false
         }
+    };
+    let outpath = match para.outpath {
+        Some(o) => get_outpath(&o),
+        None => {
+            if other_para.outpath.is_empty() {
+                "./chat-log".to_string()
+            } else {
+                get_outpath(&other_para.outpath)
+            }
+        },
     };
     let out: ParsedParas = ParsedParas{
         api: api,
@@ -334,16 +349,7 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
             Some(w) => w.split(",").map(|s| s.to_string()).collect(),
             None => vec!["结束".to_string(), "stop".to_string()],
         },
-        outpath: match para.outpath { // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
-            Some(o) => get_outpath(&o),
-            None => {
-                if other_para.outpath.is_empty() {
-                    "./chat-log".to_string()
-                } else {
-                    get_outpath(&other_para.outpath)
-                }
-            },
-        },
+        outpath: outpath.clone(), // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
         tools: Tools::new(other_para.external_tools, english)?, // all tools
         mcp_servers: McpServers::new(other_para.mcp_servers, english), // mcp servers
         skills: {
@@ -380,6 +386,14 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
                 get_bg_color("1")
             } else {
                 get_bg_color(&other_para.bgc)
+            },
+        },
+        memory_dir: match para.memory_dir { // memory.json 存储路径，默认存储在-o指定的输出路径下
+            Some(m) => get_outpath(&m),
+            None => if let Some(m) = other_para.memory_path {
+                get_outpath(&m)
+            } else {
+                outpath
             },
         },
     };
@@ -644,6 +658,8 @@ struct Para {
     show_english:      bool,                    // true展示英文界面，false展示中文界面
     #[serde(default, skip_serializing_if = "Option::is_none")]
     skills_path:       Option<String>,          // skills路径
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    memory_path:       Option<String>,          // memory路径
     bgc:               String,                  // 页面背景色
     outpath:           String,                  // 问答结果输出路径
     model_config:      Vec<Config>,             // 模型参数
@@ -665,6 +681,7 @@ struct OptherPara {
     maxage:            String,                      // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                        // true展示英文界面，false展示中文界面
     skills_path:       Option<String>,              // skills路径
+    memory_path:       Option<String>,              // memory路径
     bgc:               String,                      // 页面背景色
     outpath:           String,                      // 问答结果输出路径
     prompt:            HashMap<usize, [String; 2]>, // key: 序号，value: [prompt名称, prompt内容]
@@ -802,6 +819,7 @@ impl Api {
                     google_search_key: all_para.google_search_key,                  // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
                     allowed_path:      all_para.allowed_path,                       // allowed path for tools, multiple paths separated by commas, default: ./
                     skills_path:       all_para.skills_path,                        // skills路径
+                    memory_path:       all_para.memory_path,                        // memory路径
                     bgc:               all_para.bgc,                                // 页面背景色
                     outpath:           all_para.outpath,                            // 问答结果输出路径
                     maxage:            all_para.maxage,                             // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK

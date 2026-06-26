@@ -486,7 +486,7 @@ pub async fn run_tools(
                 }
             };
             if let Some(m) = memory {
-                event!(Level::INFO, "{} insert memory prompt: {}\n", uuid, m);
+                //event!(Level::INFO, "{} insert memory prompt: {}\n", uuid, m);
                 history_messages.push(
                     ChatMessage::User{
                         content: ChatMessageContent::Text(m),

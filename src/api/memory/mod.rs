@@ -149,6 +149,7 @@ impl SimpleMemory {
         } else {
             let mut prompt = "## Memory\nThe following content is from previous tasks. Use it only when relevant to the current issue; if there is a conflict with the current user message, the current user message takes precedence.\n".to_string();
             prompt.push_str("\n### Memories related to the current issue:\n");
+            event!(Level::INFO, "got memory:\n{}", hits.iter().map(|m| format!("- score: {}, memory: {}", m.score, m.note.summary)).collect::<Vec<_>>().join("\n"));
             for hit in hits {
                 prompt.push_str("- ");
                 prompt.push_str(&hit.note.summary);
@@ -270,9 +271,9 @@ pub fn get_relevant_memory(uuid: &str, query: &str, max_hits: usize, is_local: b
         Some(memory) => memory.relevant_memory_prompt(query, max_hits),
         None => {
             let memory_file = if is_local {
-                format!("{}/memory.json", PARAS.outpath)
+                format!("{}/memory.json", PARAS.memory_dir)
             } else if key == "old" {
-                format!("{}/memory_old.json", PARAS.outpath)
+                format!("{}/memory_old.json", PARAS.memory_dir)
             } else {
                 format!("{}/{}/{}_memory.json", PARAS.outpath, key, key)
             };
