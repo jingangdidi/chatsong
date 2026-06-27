@@ -90,15 +90,26 @@ impl SimpleMemory {
         self.save = true;
     }
 
+    /// 判断一条候选记忆是否已经存在
+    /// 这里既检查规范化后的完全相同，也检查轻量 token 相似度
+    fn is_duplicate_memory(&self, summary: &str) -> bool {
+        self.notes.iter().any(|note| is_duplicate_note(&note.summary, summary))
+    }
+
     /// 调用 LLM 抽提总结指定字符串作为记忆，返回超出容量的旧记忆
     /// text: 要提取记忆的原始内容
     /// model_for_memory: (api_key, endpoint, 模型名称, 是否支持深度思考)
     pub fn remember(&mut self, raw: String, summary: String, is_local: bool) -> Option<Vec<MemoryNote>> {
         if !summary.trim().is_empty() {
-            // 调用 LLM 提取记忆
-            self.notes.push(MemoryNote { raw, summary });
-            self.save = true;
-            self.trim_old_notes(is_local)
+            if self.is_duplicate_memory(&summary) {
+                // 重复的记忆，不添加
+                None
+            } else {
+                // 添加新记忆
+                self.notes.push(MemoryNote { raw, summary });
+                self.save = true;
+                self.trim_old_notes(is_local)
+            }
         } else {
             None
         }
@@ -175,6 +186,80 @@ impl SimpleMemory {
             Some(prompt)
         }
     }
+}
+
+/// 判断相似度是否>=85%
+fn is_duplicate_note(existing: &str, candidate: &str) -> bool {
+    let existing = normalize_memory_text(existing);
+    let candidate = normalize_memory_text(candidate);
+
+    if existing.is_empty() || candidate.is_empty() {
+        return false;
+    }
+
+    if existing == candidate {
+        return true;
+    }
+
+    let existing_terms = tokenize(&existing).into_iter().collect::<HashSet<_>>();
+    let candidate_terms = tokenize(&candidate).into_iter().collect::<HashSet<_>>();
+    let smaller_len = existing_terms.len().min(candidate_terms.len());
+
+    if smaller_len < 3 {
+        return false;
+    }
+
+    let overlap = existing_terms.intersection(&candidate_terms).count();
+    overlap * 100 >= smaller_len * 85
+}
+
+/// 去除标点和连续空格
+fn normalize_memory_text(text: &str) -> String {
+    let mut normalized = String::new();
+    let mut previous_was_space = false;
+
+    for ch in text.trim().to_lowercase().chars() {
+        if ch.is_whitespace() {
+            if !previous_was_space {
+                normalized.push(' ');
+                previous_was_space = true;
+            }
+            continue;
+        }
+
+        if is_ignored_punctuation(ch) {
+            continue;
+        }
+
+        normalized.push(ch);
+        previous_was_space = false;
+    }
+
+    normalized.trim().to_string()
+}
+
+/// 判断中英文标点
+fn is_ignored_punctuation(ch: char) -> bool {
+    ch.is_ascii_punctuation()
+        || matches!(
+            ch,
+            '。' | '，'
+                | '、'
+                | '；'
+                | '：'
+                | '！'
+                | '？'
+                | '“'
+                | '”'
+                | '‘'
+                | '’'
+                | '（'
+                | '）'
+                | '《'
+                | '》'
+                | '【'
+                | '】'
+        )
 }
 
 /// 计算问题与记忆的相关性分数

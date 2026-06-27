@@ -1837,10 +1837,28 @@ pub fn create_uuid_dir(uuid: &str) -> Result<(), MyError> {
 
 /// 获取指定uuid对话的名称
 pub fn get_chat_name(uuid: &str) -> String {
-    let data = DATA.lock().unwrap();
-    match data.get(uuid) {
+    let mut data = DATA.lock().unwrap();
+    match data.get_mut(uuid) {
         Some(info) => info.chat_name.clone(),
-        None => "".to_string(),
+        None => {
+            let mut chat_name = String::new();
+            let tmp_log_file = get_latest_file(format!("{}/{}/", PARAS.outpath, uuid), ".log");
+            if !tmp_log_file.is_empty() {
+                if let Ok(s) = read_to_string(&tmp_log_file) {
+                    if let Ok(mut s) = serde_json::from_str::<Info>(&s) {
+                        // 这里要更新msg_len
+                        s.msg_len = s.messages.iter().filter(|m| !m.data.is_hide()).count();
+                        // 这里要更新num_q的qa数
+                        s.num_q.1 = s.get_qa_num_by_idx(s.messages.len()-1).0;
+                        // 更新每个message的idx_qa（该message属于第几个Q&A对）和idx_m（该message属于第几条信息）
+                        s.update_qa_msg_idx();
+                        chat_name = s.chat_name.clone();
+                        data.insert(uuid.to_string(), s);
+                    }
+                }
+            }
+            chat_name
+        },
     }
 }
 
