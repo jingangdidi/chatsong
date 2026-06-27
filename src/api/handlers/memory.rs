@@ -19,6 +19,7 @@ use crate::{
     info::{
         get_messages, // 获取指定uuid最近的指定数量个message
         update_qa_msg_num, // 客户端下拉选项`上下文消息数`改变时更新限制的问答对数量、限制的消息数量、提问是否包含prompt
+        label_remembered,
     },
     api::handlers::chat::{
         get_qa_msg_p,
@@ -42,13 +43,13 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
             let ip = addr.ip();
             let is_local = is_local_request(&ip);
             // 获取要记住的内容
-            let for_memory = if m.trim().is_empty() {
+            let (for_memory, from_context) = if m.trim().is_empty() {
                 event!(Level::INFO, "{} remember the current conversation", uuid);
                 match get_qa_msg_p(params.get("num"), false) {
                     Ok(qa_msg_p) => {
                         update_qa_msg_num(&uuid, qa_msg_p);
                         let messages = get_messages(&uuid);
-                        messages.into_iter().map(|msg| format!("{:?}", msg)).collect::<Vec<String>>().join("\n")
+                        (messages.into_iter().map(|msg| format!("{:?}", msg)).collect::<Vec<String>>().join("\n"), true)
                     },
                     Err(e) => {
                         event!(Level::ERROR, "{} get_qa_msg_p error: {}", uuid, e);
@@ -57,7 +58,7 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
                 }
             } else {
                 event!(Level::INFO, "{} Remember the following content: {}", uuid, m.trim());
-                m.trim().to_string()
+                (m.trim().to_string(), false)
             };
             // 获取用于提取记忆的模型，返回 (api_key, endpoint, model, reasoning)
             let model_for_memory = match params.get("model") {
@@ -82,7 +83,7 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
             let key = if is_local {
                 "local".to_string()
             } else {
-                uuid
+                uuid.clone()
             };
             let mut data = MEMORY.lock().unwrap();
             let old = match data.get_mut(&key) {
@@ -138,6 +139,10 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
                         },
                     }
                 }
+            }
+            // 最后将已提取记忆的对话标注为 remembered
+            if from_context {
+                label_remembered(&uuid);
             }
         }
     } else {

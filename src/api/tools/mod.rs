@@ -63,7 +63,10 @@ use crate::{
         goal::reset_goal,
     },
     skills::SelectedSkills,
-    memory::get_relevant_memory,
+    memory::{
+        get_relevant_memory,
+        get_all_memory,
+    },
 };
 
 pub mod built_in_tools;
@@ -624,6 +627,7 @@ pub async fn run_tools(
                         Some(client.clone()),
                         Some(para_builder_for_sub_agent.clone()),
                         true, // is main agent
+                        is_local,
                     ).await {
                         Ok(inner_result) => {
                             match inner_result {
@@ -837,6 +841,7 @@ pub async fn sub_agent(
     mut para_builder: ChatCompletionParametersBuilder,
     model: &str,
     tool_map: HashMap<String, Vec<String>>,
+    is_local: bool,
 ) -> Result<String, MyError> {
     let mut history_messages: Vec<ChatMessage> = vec![ChatMessage::User{
         content: ChatMessageContent::Text(prompt),
@@ -886,6 +891,7 @@ pub async fn sub_agent(
                         None,
                         None,
                         false, // is main agent
+                        is_local,
                     )).await {
                         Ok(inner_result) => {
                             match inner_result {
@@ -1003,6 +1009,7 @@ async fn run_sub_agent(
     client: Option<Client>,
     sender: Sender<Vec<u8>>,
     indirect: bool, // 是否主 agent 间接调用，比如主 agent 调用读取大文件，改为通过 sub-agent 间接调用
+    is_local: bool,
 ) -> Result<Result<(String, Option<String>), MyError>, MyError> {
     match PARAS.tools.run(name_id[1], paras) {
         Ok((prompt_tools, _)) => {
@@ -1045,6 +1052,7 @@ async fn run_sub_agent(
                 para_builder.unwrap(),
                 model,
                 tool_map,
+                is_local,
             )).await {
                 Ok(sub_agent_result) => Ok(Ok((if indirect { format!("Complete by calling the sub_agent:\n{}", sub_agent_result) } else { sub_agent_result }, None))),
                 Err(e) => Ok(Err(e)),
@@ -1079,6 +1087,7 @@ async fn try_call_tool(
     client: Option<Client>,
     para_builder: Option<ChatCompletionParametersBuilder>,
     is_main_agent: bool,
+    is_local: bool,
 ) -> Result<Result<(String, Option<String>), MyError>, MyError> {
     if name_id[0] == "activate_skill" {
         //let params: SkillParams = serde_json::from_str(paras).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
@@ -1157,6 +1166,7 @@ async fn try_call_tool(
                                     client,
                                     sender,
                                     false,
+                                    is_local,
                                 ).await
                             } else {
                                 Ok(PARAS.tools.run(name_id[1], paras))
@@ -1202,6 +1212,7 @@ async fn try_call_tool(
                             client,
                             sender,
                             true,
+                            is_local,
                         ).await
                     }
                 } else if is_main_agent && name_id[0] == "read_multiple_files" { // 读取多个文件时转为调用 sub-agent
@@ -1218,7 +1229,13 @@ async fn try_call_tool(
                         client,
                         sender,
                         true,
+                        is_local,
                     ).await
+                } else if name_id[0] == "get_all_memory" { // 获取所有记忆
+                    match PARAS.tools.run(name_id[1], paras) {
+                        Ok(_) => Ok(Ok((get_all_memory(if is_local { "local" } else { uuid }), None))),
+                        Err(e) => Ok(Err(e)),
+                    }
                 } else {
                     Ok(PARAS.tools.run(name_id[1], paras))
                 }

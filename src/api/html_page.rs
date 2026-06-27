@@ -744,12 +744,12 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                 <span id='d{}' class='for_focus_button del_btn' title='{}'>
                     {}
                 </span>
-                {}{}
+                {}{}{}
             </div>
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
                     <div class='chat-txt right' id='m{}' title='{}'></div>
-                    <div class='chat-icon'>\n", log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, log.time, log.id, tmp_title);
+                    <div class='chat-icon'>\n", log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, if log.remembered {"🧠 "} else {""}, log.time, log.id, tmp_title);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -763,13 +763,13 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         } else { // 答案
             result += &format!("            <!-- robot -->
             <div class='left-time'>
-                {}
+                {}{}
                 <span id='d{}' class='for_focus_button del_btn' title='{}'>
                     {}
                 </span>
             </div>
             <div class='gpt-chat-box'>
-                <div class='chat-icon'>\n", log.time, log.id, page_data.delete[1], ICON_DELETE);
+                <div class='chat-icon'>\n", log.time, if log.remembered {" 🧠"} else {""}, log.id, page_data.delete[1], ICON_DELETE);
             if log.is_img || log.is_voice {
                 result += &format!("                    <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_CHATGPT);
             } else {
@@ -2238,7 +2238,7 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
 "###;
     // 获取该uuid的chat记录，如果传递的err_str不是None，则表示无法获取chat记录
     let logs = match err_str {
-        Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: 0, time: "".to_string(), is_img: false, is_voice: false, is_web: false, idx_qa: 1, idx_m: 1, token: 0}],
+        Some(e) => vec![DisplayInfo{is_query: false, content:  e, id: 0, time: "".to_string(), is_img: false, is_voice: false, is_web: false, remembered: false, idx_qa: 1, idx_m: 1, token: 0}],
         None => {
             // 在保存当前chat记录之前，先去除当前uuid的messages末尾连续的问题，这些问题没有实际调用OpenAI api
             // pop_message_before_end(uuid); // 这里不要执行这一函数，只在关闭服务时执行，这里执行完，如果再继续输入问题，会因为id与服务端不对应而报错

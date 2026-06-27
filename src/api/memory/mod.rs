@@ -104,6 +104,23 @@ impl SimpleMemory {
         }
     }
 
+    /// 获取所有记忆
+    fn get_all_memory(&self) -> Option<String> {
+        if self.notes.is_empty() {
+            None
+        } else {
+            let mut prompt = "## Memory\nThe following content is from previous tasks. Use it only when relevant to the current issue; if there is a conflict with the current user message, the current user message takes precedence.\n".to_string();
+            prompt.push_str("\n### all memories:\n");
+            event!(Level::INFO, "got all memory:\n{}", self.notes.iter().map(|m| format!("- {}", m.summary)).collect::<Vec<_>>().join("\n"));
+            for note in &self.notes {
+                prompt.push_str("- ");
+                prompt.push_str(&note.summary);
+                prompt.push('\n');
+            }
+            Some(prompt)
+        }
+    }
+
     /// 根据当前问题检索最相关的 notes 记忆
     ///
     /// 这个实现没有依赖向量库或分词库，只做一个很小的相关性打分：
@@ -296,4 +313,15 @@ pub fn get_relevant_memory(uuid: &str, query: &str, max_hits: usize, is_local: b
             }
         },
     }
+}
+
+/// 获取所有记忆
+pub fn get_all_memory(key: &str) -> String {
+    let data = MEMORY.lock().unwrap();
+    if let Some(memory) = data.get(key) {
+        if let Some(m) = memory.get_all_memory() {
+            return m
+        }
+    }
+    "No memory".to_string()
 }

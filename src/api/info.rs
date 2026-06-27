@@ -92,14 +92,15 @@ impl DataType {
 /// 问答记录
 #[derive(Serialize, Deserialize)]
 pub struct ChatData {
-    id:      usize,       // 该信息的id，这个id是包含隐藏信息的序号，为了避免遍历获取到的不含隐藏信息的多个信息时，直接使用索引序号出现id不对应问题
-    message: ChatMessage, // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
-    time:    String,      // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
-    data:    DataType,    // 该问答记录的数据类型，比如网络搜索的内容、zip压缩包提取的代码、图片base64
-    is_web:  bool,        // 是否网络搜索
-    idx_qa:  usize,       // 该message属于第几个Q&A对
-    idx_m:   usize,       // 该message属于第几条信息
-    token:   u32,         // 该message的token数
+    id:         usize,       // 该信息的id，这个id是包含隐藏信息的序号，为了避免遍历获取到的不含隐藏信息的多个信息时，直接使用索引序号出现id不对应问题
+    message:    ChatMessage, // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
+    time:       String,      // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+    data:       DataType,    // 该问答记录的数据类型，比如网络搜索的内容、zip压缩包提取的代码、图片base64
+    is_web:     bool,        // 是否网络搜索
+    idx_qa:     usize,       // 该message属于第几个Q&A对
+    idx_m:      usize,       // 该message属于第几条信息
+    token:      u32,         // 该message的token数
+    remembered: bool,        // 是否已提取过记忆
 }
 
 impl ChatData {
@@ -133,7 +134,7 @@ impl ChatData {
             0
         };
         //ChatData{message, time: if is_web {format!("🌐 {time}")} else {time}, data, idx_qa, token} // 不管用，页面不显示emoji
-        ChatData{id, message, time, data, is_web, idx_qa, idx_m, token}
+        ChatData{id, message, time, data, is_web, idx_qa, idx_m, token, remembered: false}
     }
 
     /// convert uploaded image to User
@@ -301,6 +302,18 @@ impl Info {
             //self.messages.iter().skip(skip_pre).map(|m| m.message.clone()).collect()
             //self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().map(|m| m.message.clone()).collect()
             self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().filter(|m| !m.data.is_hide()).map(|m| m.get_real_message()).collect() // 先截取信息，然后再过滤掉截取后的信息中hide的信息
+        }
+    }
+
+    // 将指定范围内 message 标注为 remembered
+    fn label_remembered_by_range(&mut self, skip_pre: usize, skip_suf: usize) {
+        let len = self.messages.len();
+        if let Some(slice) = self.messages.get_mut(skip_pre..(len-skip_suf)) {
+            for message in slice {
+                if !message.data.is_hide() {
+                    message.remembered = true;
+                }
+            }
         }
     }
 
@@ -924,6 +937,28 @@ pub fn get_messages(uuid: &str) -> Vec<ChatMessage> {
     }
 }
 
+/// 指定 uuid 窗口范围内的消息标记为已提取了记忆 remembered
+pub fn label_remembered(uuid: &str) {
+    let mut data = DATA.lock().unwrap();
+    if let Some(info) = data.get_mut(uuid) {
+        let (skip_msg_num, skip_last_answer_num) = if info.qa_msg_p.0 == usize::MAX && info.qa_msg_p.1 == usize::MAX { // 没有对问答对或消息数进行限制
+            (0, 0)
+        } else { // 通过问答对或消息数进行了限制，需要跳过前指定数量个消息
+            // 获取(要忽略前几个消息数, 要保留的消息数, 最后要忽略的连续回答数)
+            // 理论上`skip_msg_num`可能为0，但不可能等于总消息数，`keep_msg_num`肯定大于0，最大就是总消息数
+            let (skip_msg_num, _, skip_last_answer_num, _) = if info.qa_msg_p.0 > 0 && info.qa_msg_p.0 < usize::MAX { // 对问答对数量进行限制
+                info.context_msg_num_by_qa()
+            } else if info.qa_msg_p.1 > 0 && info.qa_msg_p.1 < usize::MAX { // 对消息数量进行限制
+                info.context_msg_num()
+            } else {
+                unreachable!()
+            };
+            (skip_msg_num, skip_last_answer_num)
+        };
+        info.label_remembered_by_range(skip_msg_num, skip_last_answer_num);
+    }
+}
+
 /// 获取指定uuid调用tool的次数
 pub fn get_tool_calling_count(uuid: &str) -> usize {
     let data = DATA.lock().unwrap();
@@ -1242,16 +1277,17 @@ pub fn get_prompt_name(uuid: &str) -> String {
 
 /// 将之前问答记录显示到页面
 pub struct DisplayInfo {
-    pub is_query: bool,   // 是否是提问
-    pub content:  String, // 问题或答案字符串
-    pub id:       usize,  // 作为html中tag的id的序号
-    pub time:     String, // 时间
-    pub is_img:   bool,   // 是否是图片base64
-    pub is_voice: bool,   // 是否是语音base64
-    pub is_web:   bool,   // 是否网络搜索
-    pub idx_qa:   usize,  // 该message属于第几个Q&A对
-    pub idx_m:    usize,  // 该message属于第几条信息
-    pub token:    u32,    // 该message的token数
+    pub is_query:   bool,   // 是否是提问
+    pub content:    String, // 问题或答案字符串
+    pub id:         usize,  // 作为html中tag的id的序号
+    pub time:       String, // 时间
+    pub is_img:     bool,   // 是否是图片base64
+    pub is_voice:   bool,   // 是否是语音base64
+    pub is_web:     bool,   // 是否网络搜索
+    pub remembered: bool,   // 是否已提取记忆
+    pub idx_qa:     usize,  // 该message属于第几个Q&A对
+    pub idx_m:      usize,  // 该message属于第几条信息
+    pub token:      u32,    // 该message的token数
 }
 
 /// 读取指定uuid最新问答记录，提取字符串，用于在chat页面显示
@@ -1281,30 +1317,32 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((false, t.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  t.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    t.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, t.replace("\n", "srxtzn"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  t.replace("\n", "srxtzn"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    t.replace("\n", "srxtzn"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     }
                 },
@@ -1323,34 +1361,36 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((false, all_res.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  all_res.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    all_res.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                            id:         i,
+                            time  :     tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, all_res.replace("\n", "srxtzn"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  all_res.replace("\n", "srxtzn"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    all_res.replace("\n", "srxtzn"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, remembered: m.remembered, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
             },
             ChatMessage::User{content, ..} => match content {
                 ChatMessageContent::Text(t) => {
@@ -1363,30 +1403,32 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((true, tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: true,
-                            content:  tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                            id:       i,
-                            time:     tmp_time,
+                            is_query:   true,
+                            content:    tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                            id:         i,
+                            time:       tmp_time,
                             is_img,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((true, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: true,
-                            content:  tmp.replace("\n", "srxtzn"),
-                            id:       i,
-                            time:     tmp_time,
+                            is_query:   true,
+                            content:    tmp.replace("\n", "srxtzn"),
+                            id:         i,
+                            time:       tmp_time,
                             is_img,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     }
                 },
@@ -1413,34 +1455,36 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((true, tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: true,
-                            content:  tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                            id:       i,
-                            time:     tmp_time,
+                            is_query:   true,
+                            content:    tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                            id:         i,
+                            time:       tmp_time,
                             is_img,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((true, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: true,
-                            content:  tmp.replace("\n", "srxtzn"),
-                            id:       i,
-                            time:     tmp_time,
+                            is_query:   true,
+                            content:    tmp.replace("\n", "srxtzn"),
+                            id:         i,
+                            time:       tmp_time,
                             is_img,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: true, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: true, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, remembered: m.remembered, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
             },
             ChatMessage::Assistant{content, ..} => match content {
                 Some(c) => match c {
@@ -1455,30 +1499,32 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                         if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                             //logs.push((false, tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                             logs.push(DisplayInfo{
-                                is_query: false,
-                                content:  tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                                id:       i,
-                                time:     tmp_time,
+                                is_query:   false,
+                                content:    tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                                id:         i,
+                                time:       tmp_time,
                                 is_img,
                                 is_voice,
-                                is_web:   m.is_web,
-                                idx_qa:   m.idx_qa,
-                                idx_m:    m.idx_m,
-                                token:    m.token,
+                                is_web:     m.is_web,
+                                remembered: m.remembered,
+                                idx_qa:     m.idx_qa,
+                                idx_m:      m.idx_m,
+                                token:      m.token,
                             });
                         } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                             //logs.push((false, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
                             logs.push(DisplayInfo{
-                                is_query: false,
-                                content:  tmp.replace("\n", "srxtzn"),
-                                id:       i,
-                                time:     tmp_time,
+                                is_query:   false,
+                                content:    tmp.replace("\n", "srxtzn"),
+                                id:         i,
+                                time:       tmp_time,
                                 is_img,
                                 is_voice,
-                                is_web:   m.is_web,
-                                idx_qa:   m.idx_qa,
-                                idx_m:    m.idx_m,
-                                token:    m.token,
+                                is_web:     m.is_web,
+                                remembered: m.remembered,
+                                idx_qa:     m.idx_qa,
+                                idx_m:      m.idx_m,
+                                token:      m.token,
                             });
                         }
                     },
@@ -1505,34 +1551,36 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                         if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                             //logs.push((false, tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                             logs.push(DisplayInfo{
-                                is_query: false,
-                                content:  tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                                id:       i,
-                                time:     tmp_time,
+                                is_query:   false,
+                                content:    tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                                id:         i,
+                                time:       tmp_time,
                                 is_img,
-                                is_voice: false,
-                                is_web:   m.is_web,
-                                idx_qa:   m.idx_qa,
-                                idx_m:    m.idx_m,
-                                token:    m.token,
+                                is_voice:   false,
+                                is_web:     m.is_web,
+                                remembered: m.remembered,
+                                idx_qa:     m.idx_qa,
+                                idx_m:      m.idx_m,
+                                token:      m.token,
                             });
                         } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                             //logs.push((false, tmp.replace("\n", "srxtzn"), tmp_id, tmp_time));
                             logs.push(DisplayInfo{
-                                is_query: false,
-                                content:  tmp.replace("\n", "srxtzn"),
-                                id:       i,
-                                time:     tmp_time,
+                                is_query:   false,
+                                content:    tmp.replace("\n", "srxtzn"),
+                                id:         i,
+                                time:       tmp_time,
                                 is_img,
-                                is_voice: false,
-                                is_web:   m.is_web,
-                                idx_qa:   m.idx_qa,
-                                idx_m:    m.idx_m,
-                                token:    m.token,
+                                is_voice:   false,
+                                is_web:     m.is_web,
+                                remembered: m.remembered,
+                                idx_qa:     m.idx_qa,
+                                idx_m:      m.idx_m,
+                                token:      m.token,
                             });
                         }
                     },
-                    ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+                    ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, remembered: m.remembered, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
                 },
                 None => (),
             },
@@ -1541,30 +1589,32 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((false, t.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  t.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    t.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, t.replace("\n", "srxtzn"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  t.replace("\n", "srxtzn"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    t.replace("\n", "srxtzn"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     }
                 },
@@ -1583,36 +1633,38 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((false, all_res.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  all_res.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    all_res.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                         //logs.push((false, all_res.replace("\n", "srxtzn"), tmp_id, tmp_time));
                         logs.push(DisplayInfo{
-                            is_query: false,
-                            content:  all_res.replace("\n", "srxtzn"),
-                            id:       i,
-                            time:     tmp_time,
-                            is_img:   false,
-                            is_voice: false,
-                            is_web:   m.is_web,
-                            idx_qa:   m.idx_qa,
-                            idx_m:    m.idx_m,
-                            token:    m.token,
+                            is_query:   false,
+                            content:    all_res.replace("\n", "srxtzn"),
+                            id:         i,
+                            time:       tmp_time,
+                            is_img:     false,
+                            is_voice:   false,
+                            is_web:     m.is_web,
+                            remembered: m.remembered,
+                            idx_qa:     m.idx_qa,
+                            idx_m:      m.idx_m,
+                            token:      m.token,
                         });
                     }
                 },
-                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+                ChatMessageContent::None => logs.push(DisplayInfo{is_query: false, content: "".to_string(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, remembered: m.remembered, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
             },
-            ChatMessage::Tool{content: ChatMessageContent::Text(content_str), ..} => logs.push(DisplayInfo{is_query: false, content: content_str.clone(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
+            ChatMessage::Tool{content: ChatMessageContent::Text(content_str), ..} => logs.push(DisplayInfo{is_query: false, content: content_str.clone(), id: i, time: tmp_time, is_img: false, is_voice: false, is_web: m.is_web, remembered: m.remembered, idx_qa: m.idx_qa, idx_m: m.idx_m, token: m.token}),
             _ => unreachable!(),
         }
     }
@@ -1623,30 +1675,32 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                 if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                     //logs.push((true, p[1].replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), "m0".to_string(), info.messages[0].time.clone()));
                     logs.push(DisplayInfo{
-                        is_query: true,
-                        content:  p[1].replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
-                        id:       0,
-                        time:     info.messages[0].time.clone(),
-                        is_img:   false,
-                        is_voice: false,
-                        is_web:   false,
-                        idx_qa:   1,
-                        idx_m:    1,
-                        token:    0,
+                        is_query:   true,
+                        content:    p[1].replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"),
+                        id:         0,
+                        time:       info.messages[0].time.clone(),
+                        is_img:     false,
+                        is_voice:   false,
+                        is_web:     false,
+                        remembered: false,
+                        idx_qa:     1,
+                        idx_m:      1,
+                        token:      0,
                     });
                 } else { // 通过stream响应给客户端，需要将`\n`替换为`srxtzn`，客户端js会替换回来
                     //logs.push((true, p[1].replace("\n", "srxtzn"), "m0".to_string(), info.messages[0].time.clone()));
                     logs.push(DisplayInfo{
-                        is_query: true,
-                        content:  p[1].replace("\n", "srxtzn"),
-                        id:       0,
-                        time:     info.messages[0].time.clone(),
-                        is_img:   false,
-                        is_voice: false,
-                        is_web:   false,
-                        idx_qa:   1,
-                        idx_m:    1,
-                        token:    0,
+                        is_query:   true,
+                        content:    p[1].replace("\n", "srxtzn"),
+                        id:         0,
+                        time:       info.messages[0].time.clone(),
+                        is_img:     false,
+                        is_voice:   false,
+                        is_web:     false,
+                        remembered: false,
+                        idx_qa:     1,
+                        idx_m:      1,
+                        token:      0,
                     });
                 }
                 1
@@ -1663,55 +1717,59 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
     if logs.len() == 0 {
         // 问题1
         logs.push(DisplayInfo{
-            is_query: true,
-            content:  "Hello".to_string(),
-            id:       usize::MAX-3,
-            time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-            is_img:   false,
-            is_voice: false,
-            is_web:   false,
-            idx_qa:   0,
-            idx_m:    0,
-            token:    0,
+            is_query:   true,
+            content:    "Hello".to_string(),
+            id:         usize::MAX-3,
+            time:       Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            is_img:     false,
+            is_voice:   false,
+            is_web:     false,
+            remembered: false,
+            idx_qa:     0,
+            idx_m:      0,
+            token:      0,
         });
         // 回答1
         logs.push(DisplayInfo{
-            is_query: false,
-            content:  "Hello! How are you doing today? If there's anything you'd like to discuss or ask, feel free to let me know.".to_string(),
-            id:       usize::MAX-2,
-            time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-            is_img:   false,
-            is_voice: false,
-            is_web:   false,
-            idx_qa:   0,
-            idx_m:    0,
-            token:    0,
+            is_query:   false,
+            content:    "Hello! How are you doing today? If there's anything you'd like to discuss or ask, feel free to let me know.".to_string(),
+            id:         usize::MAX-2,
+            time:       Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            is_img:     false,
+            is_voice:   false,
+            is_web:     false,
+            remembered: false,
+            idx_qa:     0,
+            idx_m:      0,
+            token:      0,
         });
         // 问题2
         logs.push(DisplayInfo{
-            is_query: true,
-            content:  "what is chatgpt?".to_string(),
-            id:       usize::MAX-1,
-            time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-            is_img:   false,
-            is_voice: false,
-            is_web:   false,
-            idx_qa:   0,
-            idx_m:    0,
-            token:    0,
+            is_query:   true,
+            content:    "what is chatgpt?".to_string(),
+            id:         usize::MAX-1,
+            time:       Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            is_img:     false,
+            is_voice:   false,
+            is_web:     false,
+            remembered: false,
+            idx_qa:     0,
+            idx_m:      0,
+            token:      0,
         });
         // 回答2
         logs.push(DisplayInfo{
-            is_query: false,
-            content:  "ChatGPT is a conversational AI model developed by OpenAI. It's based on the GPT (Generative Pre-trained Transformer) architecture, specifically designed to understand and generate natural language text. ChatGPT can engage in conversations, answer questions, provide explanations, and assist with a wide range of inquiries. It's trained on diverse datasets from the internet, allowing it to generate human-like responses on various topics. However, it doesn't have real-time access to current events or the ability to browse the web, and its knowledge is based on information available up to its last training cut-off.".to_string(),
-            id:       usize::MAX,
-            time:     Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-            is_img:   false,
-            is_voice: false,
-            is_web:   false,
-            idx_qa:   0,
-            idx_m:    0,
-            token:    0,
+            is_query:   false,
+            content:    "ChatGPT is a conversational AI model developed by OpenAI. It's based on the GPT (Generative Pre-trained Transformer) architecture, specifically designed to understand and generate natural language text. ChatGPT can engage in conversations, answer questions, provide explanations, and assist with a wide range of inquiries. It's trained on diverse datasets from the internet, allowing it to generate human-like responses on various topics. However, it doesn't have real-time access to current events or the ability to browse the web, and its knowledge is based on information available up to its last training cut-off.".to_string(),
+            id:         usize::MAX,
+            time:       Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            is_img:     false,
+            is_voice:   false,
+            is_web:     false,
+            remembered: false,
+            idx_qa:     0,
+            idx_m:      0,
+            token:      0,
         });
     }
     (info.messages.len(), m_num, info.get_qa_num(true)-1, logs)

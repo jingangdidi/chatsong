@@ -19,6 +19,7 @@ pub mod hacker_news;
 pub mod schedule;
 pub mod sub_agent;
 pub mod goal;
+pub mod memory;
 
 //use sum::Sum;
 use filesystem::{
@@ -63,6 +64,7 @@ use hacker_news::HackerNews;
 use schedule::ScheduleTask;
 use sub_agent::SubAgent;
 use goal::UpdateGoalStatus;
+use memory::GetAllMemory;
 
 /// trait for built-in tools
 pub trait BuiltIn: Send + Sync {
@@ -94,6 +96,7 @@ pub enum Group {
     ScheduleTask,
     SubAgent,
     UpdateGoalStatus,
+    Memory,
 }
 
 impl Group {
@@ -108,6 +111,7 @@ impl Group {
             Group::ScheduleTask => "schedule task".to_string(),
             Group::SubAgent => "sub-agent".to_string(),
             Group::UpdateGoalStatus => "Update Goal Status".to_string(),
+            Group::Memory => "memory".to_string(),
         }
     }
 
@@ -122,6 +126,7 @@ impl Group {
             "schedule task" => Ok(Group::ScheduleTask),
             "sub-agent" => Ok(Group::SubAgent),
             "Update Goal Status" => Ok(Group::UpdateGoalStatus),
+            "memory" => Ok(Group::Memory),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
         }
     }
@@ -194,6 +199,8 @@ impl BuiltInTools {
             (Arc::new(SubAgent::new()), Group::SubAgent),
             // Update Goal Status
             (Arc::new(UpdateGoalStatus::new()), Group::UpdateGoalStatus),
+            // memory
+            (Arc::new(GetAllMemory::new()), Group::Memory),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool
         let mut groups: HashSet<Group> = HashSet::new(); // tool groups
