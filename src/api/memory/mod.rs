@@ -103,6 +103,7 @@ impl SimpleMemory {
         if !summary.trim().is_empty() {
             if self.is_duplicate_memory(&summary) {
                 // 重复的记忆，不添加
+                event!(Level::WARN, "Memory similarity exceeds >= 85%, do not add this memory:\n\nnew memory: {}\n\nall memory: {}", summary, self.notes.iter().map(|m| format!("- {}", m.summary)).collect::<Vec<_>>().join("\n"));
                 None
             } else {
                 // 添加新记忆
