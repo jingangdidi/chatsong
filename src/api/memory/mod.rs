@@ -20,21 +20,22 @@ use crate::{
 pub static MEMORY: Lazy<Mutex<HashMap<String, SimpleMemory>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// 从对话中提取的一条记忆
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryNote {
-    pub raw:     String, // 原始内容
-    pub summary: String, // 提取的记忆
+    pub raw:       String,           // 原始内容
+    pub summary:   String,           // 提取的记忆
+    pub embedding: Option<Vec<f64>>, // summary 对应的 embedding
 }
 
 /// 一条和当前问题相关的记忆命中结果
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct RelevantMemory {
     pub note:  MemoryNote, // 被命中的原始记忆
     pub score: usize, // 简单相关性分数。分数越高，越应该优先注入模型
 }
 
 /// 极简记忆体
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimpleMemory {
     notes:     Vec<MemoryNote>, // 从每个对话提取的记忆正文
     max_notes: usize, // notes 的数量上限
@@ -99,17 +100,41 @@ impl SimpleMemory {
     /// 调用 LLM 抽提总结指定字符串作为记忆，返回超出容量的旧记忆
     /// text: 要提取记忆的原始内容
     /// model_for_memory: (api_key, endpoint, 模型名称, 是否支持深度思考)
-    pub fn remember(&mut self, raw: String, summary: String, is_local: bool) -> Option<Vec<MemoryNote>> {
+    pub fn remember(&mut self, raw: String, summary: String, summary_embedding: Option<Vec<f64>>, is_local: bool) -> Option<Vec<MemoryNote>> {
         if !summary.trim().is_empty() {
-            if self.is_duplicate_memory(&summary) {
-                // 重复的记忆，不添加
-                event!(Level::WARN, "Memory similarity exceeds >= 85%, do not add this memory:\n\nnew memory: {}\n\nall memory: {}", summary, self.notes.iter().map(|m| format!("- {}", m.summary)).collect::<Vec<_>>().join("\n"));
-                None
+            // 尝试通过 embedding 模型计算 summary 的 embedding 向量
+            let (add, embedding) = match summary_embedding {
+                Some(embedding) => (
+                    // 计算 embedding 相似度，判断当前 summary 是否与记忆体中的记忆重复
+                    !self.notes.iter().any(|note| {
+                        note.embedding.as_ref().map_or(false, |emb| {
+                            let simi = cosine_similarity(&embedding, &emb);
+                            if simi > 0.8 {
+                                event!(Level::WARN, "Memory similarity {:.4} > 0.8, do not add this memory.\nnew memory: {}\nold memory: {}", simi, summary, note.summary);
+                                true
+                            } else {
+                                false
+                            }
+                        })
+                    }),
+                    Some(embedding),
+                ),
+                None => (true, None),
+            };
+            if add {
+                if self.is_duplicate_memory(&summary) {
+                    // 重复的记忆，不添加
+                    event!(Level::WARN, "Memory similarity >= 80%, do not add this memory.\nnew memory: {}\nall memory:\n{}", summary, self.notes.iter().map(|m| format!("- {}", m.summary)).collect::<Vec<_>>().join("\n"));
+                    None
+                } else {
+                    // 添加新记忆
+                    self.notes.push(MemoryNote { raw, summary, embedding });
+                    self.save = true;
+                    self.trim_old_notes(is_local)
+                }
             } else {
-                // 添加新记忆
-                self.notes.push(MemoryNote { raw, summary });
-                self.save = true;
-                self.trim_old_notes(is_local)
+                //event!(Level::WARN, "Memory similarity > 0.8, do not add this memory:\n\nnew memory: {}\n\nall memory: {}", summary, self.notes.iter().map(|m| format!("- {}", m.summary)).collect::<Vec<_>>().join("\n"));
+                None
             }
         } else {
             None
@@ -189,7 +214,7 @@ impl SimpleMemory {
     }
 }
 
-/// 判断相似度是否>=85%
+/// 判断相似度是否>=80%
 fn is_duplicate_note(existing: &str, candidate: &str) -> bool {
     let existing = normalize_memory_text(existing);
     let candidate = normalize_memory_text(candidate);
@@ -211,7 +236,7 @@ fn is_duplicate_note(existing: &str, candidate: &str) -> bool {
     }
 
     let overlap = existing_terms.intersection(&candidate_terms).count();
-    overlap * 100 >= smaller_len * 85
+    overlap * 100 >= smaller_len * 80
 }
 
 /// 去除标点和连续空格
@@ -410,4 +435,19 @@ pub fn get_all_memory(key: &str) -> String {
         }
     }
     "No memory".to_string()
+}
+
+/// Computes the cosine similarity between two embedding vector
+/// https://en.wikipedia.org/wiki/Cosine_similarity
+/// https://github.com/gaspiman/cosine_similarity/blob/master/cosine.go
+fn cosine_similarity(vec_a: &[f64], vec_b: &[f64]) -> f64 {
+    let mut ab: f64 = 0.0;
+    let mut sum_a: f64 = 0.0;
+    let mut sum_b: f64 = 0.0;
+    for (i, j) in vec_a.iter().zip(vec_b.iter()) {
+        ab += i * j;
+        sum_a += i.powf(2.0);
+        sum_b += j.powf(2.0);
+    }
+    ab / (sum_a.sqrt() * sum_b.sqrt())
 }

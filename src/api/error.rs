@@ -35,6 +35,7 @@ use openai_dive::v1::{
             AudioTranslationParametersBuilderError,
             AudioTranscriptionParametersBuilderError,
         },
+        embedding::EmbeddingParametersBuilderError,
     },
     error::APIError,
 };
@@ -131,6 +132,10 @@ pub enum MyError {
     // 初始化声音提取文本错误
     #[error("Error - AudioTranscriptionParametersBuilder: {error}")]
     AudioTranscriptionError{error: AudioTranscriptionParametersBuilderError},
+
+    // embedding 错误
+    #[error("Error - embedding: {error}")]
+    EmbeddingError{error: EmbeddingParametersBuilderError},
 
     // api错误
     #[error("Error - {uuid} OpenAI APIError: {error}")]

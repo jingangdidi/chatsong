@@ -285,7 +285,7 @@ impl Info {
         // 是否保存重置为false，下次加载时就是false
         self.save = false;
         // Info对象转json字符串
-        let chat_log_json_str = serde_json::to_string(&self).map_err(|e| MyError::ToJsonStirngError{uuid: self.uuid.clone(), error: e})?;
+        let chat_log_json_str = serde_json::to_string_pretty(&self).map_err(|e| MyError::ToJsonStirngError{uuid: self.uuid.clone(), error: e})?;
         // 加上指定的输出路径
         let file_with_path = format!("{}/{}", PARAS.outpath, self.file);
         // 保存chat记录

@@ -591,7 +591,7 @@ pub async fn not_use_stream(
 }
 
 // print and update total token usage
-fn get_print_token(usage: Usage, uuid: &str) -> Option<(u32, u32, u32)> {
+pub fn get_print_token(usage: Usage, uuid: &str) -> Option<(u32, u32, u32)> {
     // 缓存命中的token数
     let cached_tokens = match usage.prompt_tokens_details {
         Some(details) => details.cached_tokens.unwrap_or(0),

@@ -862,4 +862,41 @@ impl Api {
             self.get_default_model()
         }
     }
+
+    /// 获取 embedding 模型
+    pub fn get_embedding_modle(&self, modle_name: Option<String>) -> Option<(String, String, String)> {
+        let name = modle_name.unwrap_or("embedding".to_string());
+        if let Some(n) = self.models.iter().find(|(_, v)| if name == "embedding" {v.1.contains("embedding")} else {v.1 == name}).map(|(k, _)| *k) {
+            if let Ok(modle_info) = self.get_model_by_usize(n) { // (api_key, endpoint, 模型名称, 是否支持深度思考)
+                Some((modle_info.0, modle_info.1, modle_info.2))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+        /*
+        if let Some(name) = modle_name { // 获取指定名称的模型
+            if let Some(n) = self.models.iter().find(|(_, v)| v.1 == name).map(|(k, _)| *k) {
+                if let Ok(modle_info) = self.get_model_by_usize(n) { // (api_key, endpoint, 模型名称, 是否支持深度思考)
+                    Some((modle_info.0, modle_info.1, modle_info.2))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else { // 为指定名称则获取模型名称含有 embedding 的模型
+            if let Some(n) = self.models.iter().find(|(_, v)| v.1.contains("embedding")).map(|(k, _)| *k) {
+                if let Ok(modle_info) = self.get_model_by_usize(n) { // (api_key, endpoint, 模型名称, 是否支持深度思考)
+                    Some((modle_info.0, modle_info.1, modle_info.2))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        */
+    }
 }

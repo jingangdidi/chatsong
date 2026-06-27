@@ -211,7 +211,7 @@ impl Graph {
     /// 保存当前图结构
     fn save_graph(&self, outpath: &str) -> Result<(), MyError> {
         // 图结构转json字符串
-        let graph_json_str = serde_json::to_string(&self).map_err(|e| MyError::ToJsonStirngError{uuid: "save graph".to_string(), error: e})?;
+        let graph_json_str = serde_json::to_string_pretty(&self).map_err(|e| MyError::ToJsonStirngError{uuid: "save graph".to_string(), error: e})?;
         // 保存图结构的json字符串
         let graph_file = format!("{}/{}.graph", outpath, Local::now().format("%Y-%m-%d_%H-%M-%S").to_string());
         write(&graph_file, graph_json_str).map_err(|e| MyError::WriteFileError{file: graph_file, error: e})?;
