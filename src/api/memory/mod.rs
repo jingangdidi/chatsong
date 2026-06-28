@@ -204,6 +204,7 @@ impl SimpleMemory {
                     // 添加新记忆
                     self.notes.push(MemoryNote { raw, summary, reserved: false, embedding });
                     self.save = true;
+                    event!(Level::INFO, "push new memory successful, current memory number: {}", self.notes.len());
                     self.trim_old_notes(is_local)
                 }
             } else {
