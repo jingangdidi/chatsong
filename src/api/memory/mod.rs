@@ -4,7 +4,8 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde_json::value::RawValue;
 use tracing::{event, Level};
 
 use crate::{
@@ -24,14 +25,44 @@ pub static MEMORY: Lazy<Mutex<HashMap<String, SimpleMemory>>> = Lazy::new(|| Mut
 pub struct MemoryNote {
     pub raw:       String,           // 原始内容
     pub summary:   String,           // 提取的记忆
+    pub reserved:  bool,             // 是否一直保留该记忆，不被移除，程序不会修改这个值，只能自己手动编辑
+    #[serde(serialize_with = "serialize_embedding_raw", deserialize_with = "deserialize_embedding_raw")]
     pub embedding: Option<Vec<f64>>, // summary 对应的 embedding
+}
+
+/// 对 MemoryNote 的 embedding 进行自定义序列化，使数值在一行显示
+fn serialize_embedding_raw<S>(emb: &Option<Vec<f64>>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match emb {
+        Some(vec) => {
+            // 1. 生成紧凑的 JSON 数组字符串 (例如 "[0.1, 0.2]")
+            let json_string = serde_json::to_string(vec).map_err(serde::ser::Error::custom)?;
+            // 2. 将其包装为 RawValue 并序列化
+            // RawValue 会直接输出其内容，而不会被 PrettyFormatter 再次格式化
+            let raw = RawValue::from_string(json_string).map_err(serde::ser::Error::custom)?;
+            raw.serialize(s)
+        }
+        None => s.serialize_none(),
+    }
+}
+
+/// 对 MemoryNote 的 embedding 进行自定义反序列化
+fn deserialize_embedding_raw<'de, D>(d: D) -> Result<Option<Vec<f64>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // 反序列化时，RawValue 会自动处理，或者你可以直接用普通逻辑
+    let opt: Option<Vec<f64>> = Option::deserialize(d)?;
+    Ok(opt)
 }
 
 /// 一条和当前问题相关的记忆命中结果
 #[derive(Debug, Clone)]
 pub struct RelevantMemory {
     pub note:  MemoryNote, // 被命中的原始记忆
-    pub score: usize, // 简单相关性分数。分数越高，越应该优先注入模型
+    pub score: f64, // 简单相关性分数。分数越高，越应该优先注入模型
 }
 
 /// 极简记忆体
@@ -62,14 +93,17 @@ impl SimpleMemory {
     }
 
     /// 从 JSON 文件恢复记忆体
-    pub fn load_from_file(file: &str) -> Result<Self, MyError> {
+    pub fn load_from_file(file: &str, is_local: bool) -> Result<Self, MyError> {
         let json = fs::read_to_string(file)?;
         let mut memory = serde_json::from_str::<Self>(&json).map_err(|e| MyError::ResponseTextToJsonError{error: e})?;
         memory.max_notes = memory.max_notes.max(10); // 至少10条记忆
-        memory.trim_old_notes(false);
+        if !file.contains("memory_old.json") {
+            memory.trim_old_notes(is_local);
+        }
         Ok(memory)
     }
 
+    /*
     /// 舍弃uuid的旧记忆，如果是 memory.json 中的记忆，则将旧记忆移到 memory_old.json 中
     fn trim_old_notes(&mut self, is_local: bool) -> Option<Vec<MemoryNote>> {
         if self.notes.len() > self.max_notes {
@@ -80,6 +114,46 @@ impl SimpleMemory {
             } else {
                 None
             }
+        } else {
+            None
+        }
+    }
+    */
+
+    /// 舍弃uuid的旧记忆，如果是 memory.json 中的记忆，则将旧记忆移到 memory_old.json 中
+    fn trim_old_notes(&mut self, is_local: bool) -> Option<Vec<MemoryNote>> {
+        // 先统计 reserved == false 的条目总数
+        let false_count = self.notes.iter().filter(|n| !n.reserved).count();
+
+        if false_count <= self.max_notes {
+            // 不超过上限，无需清理
+            return None;
+        }
+
+        let overflow = false_count - self.max_notes; // 需要移除的个数
+        let mut new_notes = Vec::with_capacity(self.notes.len());
+        let mut removed = Vec::with_capacity(overflow);
+        let mut removed_count = 0usize;
+
+        for note in self.notes.drain(..) {
+            if note.reserved {
+                // 永远保留的记忆
+                new_notes.push(note);
+            } else {
+                // 非保留记忆：如果还没移除够 overflow 个，则移除；否则保留
+                if removed_count < overflow {
+                    removed.push(note);
+                    removed_count += 1;
+                } else {
+                    new_notes.push(note);
+                }
+            }
+        }
+
+        self.notes = new_notes;
+
+        if is_local {
+            Some(removed)
         } else {
             None
         }
@@ -128,7 +202,7 @@ impl SimpleMemory {
                     None
                 } else {
                     // 添加新记忆
-                    self.notes.push(MemoryNote { raw, summary, embedding });
+                    self.notes.push(MemoryNote { raw, summary, reserved: false, embedding });
                     self.save = true;
                     self.trim_old_notes(is_local)
                 }
@@ -168,7 +242,7 @@ impl SimpleMemory {
     /// - 分数相同：越新的 note 越靠前
     ///
     /// 复杂项目里可以把这里替换成 BM25、tantivy、SQLite FTS、embedding 检索或混合检索
-    fn search_relevant(&self, query: &str, limit: usize) -> Vec<RelevantMemory> {
+    fn search_relevant(&self, query: &str, embedding: Option<Vec<f64>>, limit: usize) -> Vec<RelevantMemory> {
         if limit == 0 || query.trim().is_empty() {
             return Vec::new();
         }
@@ -178,15 +252,18 @@ impl SimpleMemory {
             .iter()
             .enumerate()
             .filter_map(|(index, note)| {
-                let score = score_note(query, &note.summary);
-                (score > 0).then_some((index, RelevantMemory { note: note.clone(), score }))
+                let score = match (&embedding, &note.embedding) {
+                    (Some(vec_a), Some(vec_b)) => cosine_similarity(&vec_a, &vec_b), // 有 embedding 模型，使用 embedding 计算相似度
+                    _ => score_note(query, &note.summary), // 没有 embedding 模型，使用关键词占比计算相似度
+                };
+                (score > 0.0).then_some((index, RelevantMemory { note: note.clone(), score }))
             })
             .collect::<Vec<_>>();
 
         scored.sort_by(|(left_index, left), (right_index, right)| {
             right
                 .score
-                .cmp(&left.score) // score 大的排前面
+                .total_cmp(&left.score) // score 大的排前面
                 .then_with(|| right_index.cmp(left_index)) // score 相同则最新的记忆排前面
         });
 
@@ -196,14 +273,14 @@ impl SimpleMemory {
     /// 根据当前问题生成要注入模型的记忆 prompt
     /// 这是推荐在 agent loop 开始时调用的方法
     /// 它会先根据 `current_query` 检索相关 notes，然后只注入前 `max_hits` 条记忆
-    fn relevant_memory_prompt(&self, current_query: &str, max_hits: usize) -> Option<String> {
-        let hits = self.search_relevant(current_query, max_hits);
+    fn relevant_memory_prompt(&self, current_query: &str, embedding: Option<Vec<f64>>, max_hits: usize) -> Option<String> {
+        let hits = self.search_relevant(current_query, embedding, max_hits);
         if hits.is_empty() {
             None
         } else {
             let mut prompt = "## Memory\nThe following content is from previous tasks. Use it only when relevant to the current issue; if there is a conflict with the current user message, the current user message takes precedence.\n".to_string();
             prompt.push_str("\n### Memories related to the current issue:\n");
-            event!(Level::INFO, "got memory:\n{}", hits.iter().map(|m| format!("- score: {}, memory: {}", m.score, m.note.summary)).collect::<Vec<_>>().join("\n"));
+            event!(Level::INFO, "got memory:\n{}", hits.iter().map(|m| format!("- score: {:.4}, memory: {}", m.score, m.note.summary)).collect::<Vec<_>>().join("\n"));
             for hit in hits {
                 prompt.push_str("- ");
                 prompt.push_str(&hit.note.summary);
@@ -289,11 +366,11 @@ fn is_ignored_punctuation(ch: char) -> bool {
 }
 
 /// 计算问题与记忆的相关性分数
-fn score_note(query: &str, note: &str) -> usize {
+fn score_note(query: &str, note: &str) -> f64 {
     let query = query.trim().to_lowercase();
     let note = note.to_lowercase();
     if query.is_empty() || note.is_empty() {
-        return 0;
+        return 0.0;
     }
 
     let mut score = 0;
@@ -310,7 +387,7 @@ fn score_note(query: &str, note: &str) -> usize {
         }
     }
 
-    score
+    score as f64
 }
 
 /// 单字符1分，多字符4分
@@ -388,7 +465,7 @@ fn is_cjk(ch: char) -> bool {
 }
 
 /// 获取相关记忆
-pub fn get_relevant_memory(uuid: &str, query: &str, max_hits: usize, is_local: bool) -> Option<String> {
+pub fn get_relevant_memory(uuid: &str, query: &str, embedding: Option<Vec<f64>>, max_hits: usize, is_local: bool) -> Option<String> {
     let mut data = MEMORY.lock().unwrap();
     let key = if is_local {
         "local"
@@ -396,7 +473,7 @@ pub fn get_relevant_memory(uuid: &str, query: &str, max_hits: usize, is_local: b
         uuid
     };
     match data.get_mut(key) {
-        Some(memory) => memory.relevant_memory_prompt(query, max_hits),
+        Some(memory) => memory.relevant_memory_prompt(query, embedding, max_hits),
         None => {
             let memory_file = if is_local {
                 format!("{}/memory.json", PARAS.memory_dir)
@@ -407,9 +484,9 @@ pub fn get_relevant_memory(uuid: &str, query: &str, max_hits: usize, is_local: b
             };
             let memory_path = Path::new(&memory_file);
             if memory_path.exists() && memory_path.is_file() {
-                match SimpleMemory::load_from_file(&memory_file) {
+                match SimpleMemory::load_from_file(&memory_file, is_local) {
                     Ok(memory) => {
-                        let result = memory.relevant_memory_prompt(query, max_hits);
+                        let result = memory.relevant_memory_prompt(query, embedding, max_hits);
                         data.insert(key.to_string(), memory);
                         result
                     },

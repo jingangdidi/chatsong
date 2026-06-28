@@ -61,6 +61,7 @@ use crate::{
             reset_new_instruction,
         },
         goal::reset_goal,
+        memory::get_embedding,
     },
     skills::SelectedSkills,
     memory::{
@@ -477,12 +478,18 @@ pub async fn run_tools(
         }
         if !user_msg.is_empty() {
             let query = user_msg.join("\n");
+            // 计算 embedding
+            let embedding = if let Ok(embedding) = get_embedding(&uuid, query.clone()).await {
+                embedding
+            } else {
+                None
+            };
             let memory = {
-                match get_relevant_memory(&uuid, &query, 10, is_local) {
+                match get_relevant_memory(&uuid, &query, embedding.clone(), 10, is_local) {
                     Some(memory) => Some(memory),
                     None => if is_local {
                         // 再尝试从 memory_old.json 中获取
-                        get_relevant_memory("local", &query, 10, false)
+                        get_relevant_memory("local", &query, embedding, 10, false)
                     } else {
                         None
                     }

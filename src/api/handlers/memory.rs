@@ -109,7 +109,7 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
                     };
                     let memory_path = Path::new(&memory_file);
                     if memory_path.exists() && memory_path.is_file() {
-                        match SimpleMemory::load_from_file(&memory_file) {
+                        match SimpleMemory::load_from_file(&memory_file, is_local) {
                             Ok(mut memory) => {
                                 let old = memory.remember(for_memory, memory_summary, embedding, is_local);
                                 data.insert(key, memory);
@@ -137,7 +137,7 @@ pub async fn memory(Query(params): Query<HashMap<String, String>>, ConnectInfo(a
                             let memory_file = format!("{}/memory_old.json", PARAS.memory_dir);
                             let memory_path = Path::new(&memory_file);
                             if memory_path.exists() && memory_path.is_file() {
-                                match SimpleMemory::load_from_file(&memory_file) {
+                                match SimpleMemory::load_from_file(&memory_file, is_local) {
                                     Ok(mut memory) => {
                                         memory.append_memory(old_notes);
                                         data.insert("old".to_string(), memory);
@@ -214,7 +214,7 @@ async fn extract_memory(text: &str, model_for_memory: (String, String, String, b
 }
 
 /// 调用 embedding 模型，计算指定字符串的 embedding 向量
-async fn get_embedding(uuid: &str, text: String) -> Result<Option<Vec<f64>>, MyError> {
+pub async fn get_embedding(uuid: &str, text: String) -> Result<Option<Vec<f64>>, MyError> {
     // 获取 embedding 模型
     if let Some((api_key, endpoint, model)) = PARAS.api.get_embedding_modle(None) {
         // 使用api key初始化
