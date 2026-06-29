@@ -69,6 +69,257 @@ const KATEX_CSS: &str = include_str!("../../assets/css/katex.min.css");
 /// https://cdn.jsdelivr.net/npm/marked-katex-extension@5.1.8/lib/index.umd.js
 const KATEX_EXT_JS: &str = include_str!("../../assets/js/marked-katex-extension.js");
 
+/// 左侧水平定位横线
+const BAR: &str = r###"// 初始化左侧问题索引。
+        // 注意：当前文件里的 markhigh() 会先把 m0/m1/m2/m3 的内容填充到页面中，
+        // 所以这里必须放在 markhigh() 后面，才能读取到真实的问题和回答文本。
+        initChatQuestionRail();
+
+        function initChatQuestionRail() {
+            const scroller = document.getElementById('scrolldown');
+            if (!scroller) return;
+
+            // 如果重复初始化，先移除旧的索引栏和预览框，避免页面上出现重复短线。
+            document.getElementById('chatQuestionRail')?.remove();
+            document.getElementById('chatQuestionPreview')?.remove();
+
+            const rail = document.createElement('div');
+            rail.id = 'chatQuestionRail';
+            rail.className = 'chat-question-rail';
+
+            const preview = document.createElement('div');
+            preview.id = 'chatQuestionPreview';
+            preview.className = 'chat-question-preview';
+
+            document.body.appendChild(rail);
+            document.body.appendChild(preview);
+
+            // pairs 和 markers 会随着动态问答变化而重建。
+            let pairs = [];
+            let markers = [];
+            let currentActiveIndex = 0;
+            let rebuildTimer = null;
+
+            // 摘要文本只保留前面一小段，避免 hover 浮层太长。
+            const cut = (text, len) => {
+                text = text.replace(/\\s+/g, ' ').trim();
+                return text.length > len ? text.slice(0, len) + '...' : text;
+            };
+
+            // 计算某个消息块在滚动容器内部的绝对 top，而不是在 window 里的 top。
+            const getTargetTop = (el) => {
+                return el.getBoundingClientRect().top -
+                    scroller.getBoundingClientRect().top +
+                    scroller.scrollTop;
+            };
+
+            const hidePreview = () => {
+                preview.style.display = 'none';
+            };
+
+            const showPreview = (marker, pair) => {
+                preview.replaceChildren();
+
+                const question = document.createElement('div');
+                question.className = 'preview-question';
+                question.textContent = `问：${cut(pair.questionText, 80)}`;
+
+                const answer = document.createElement('div');
+                answer.className = 'preview-answer';
+                answer.textContent = `答：${cut(pair.answerText, 140)}`;
+
+                preview.appendChild(question);
+                preview.appendChild(answer);
+                preview.style.display = 'block';
+
+                // 让预览框尽量贴近短线，同时不超出浏览器上下边界。
+                const markerRect = marker.getBoundingClientRect();
+                const previewHeight = preview.offsetHeight;
+                const top = Math.min(
+                    window.innerHeight - previewHeight - 12,
+                    Math.max(12, markerRect.top - 12)
+                );
+                preview.style.top = `${top}px`;
+            };
+
+            const readQuestionPairs = () => {
+                const isQuestionBox = (node) => node.classList.contains('user-chat-box');
+                const isAnswerBox = (node) => node.classList.contains('gpt-chat-box');
+                const getQuestionText = (box) => box.querySelector('.chat-txt.right')?.textContent || '';
+                const getAnswerText = (box) => box.querySelector('.chat-txt.left')?.textContent || '';
+
+                // 只按对话区的直接子节点分组，忽略时间节点等非消息节点。
+                // 连续多个问题消息归为同一组，随后连续多个回答消息也归为同一组。
+                const messageBoxes = Array.from(scroller.children).filter((node) => {
+                    return isQuestionBox(node) || isAnswerBox(node);
+                });
+                const groupedPairs = [];
+                let index = 0;
+
+                while (index < messageBoxes.length) {
+                    // 如果前面有孤立回答，跳过；短线只为问题开头的一组问答创建。
+                    while (index < messageBoxes.length && !isQuestionBox(messageBoxes[index])) {
+                        index += 1;
+                    }
+
+                    if (index >= messageBoxes.length) break;
+
+                    const questionBoxes = [];
+                    const answerBoxes = [];
+
+                    while (index < messageBoxes.length && isQuestionBox(messageBoxes[index])) {
+                        questionBoxes.push(messageBoxes[index]);
+                        index += 1;
+                    }
+
+                    while (index < messageBoxes.length && isAnswerBox(messageBoxes[index])) {
+                        answerBoxes.push(messageBoxes[index]);
+                        index += 1;
+                    }
+
+                    groupedPairs.push({
+                        index: groupedPairs.length,
+                        questionBoxes,
+                        answerBoxes,
+                        // 点击短线时定位到这一组中的第一条问题消息。
+                        questionBox: questionBoxes[0],
+                        answerBox: answerBoxes[0],
+                        questionText: questionBoxes.map(getQuestionText).filter(Boolean).join('\\n\\n'),
+                        answerText: answerBoxes.map(getAnswerText).filter(Boolean).join('\\n\\n')
+                    });
+                }
+
+                return groupedPairs;
+            };
+
+            const createMarker = (pair) => {
+                const marker = document.createElement('button');
+                marker.type = 'button';
+                marker.className = 'chat-question-marker';
+                //marker.title = `第 ${pair.index + 1} 对问答`;
+                marker.title = `${pair.index + 1}`;
+                marker.setAttribute('aria-label', `跳转到第 ${pair.index + 1} 对问答`);
+
+                marker.addEventListener('mouseenter', () => {
+                    // hover 只显示临时预览；真正的选中高亮由点击或滚动位置决定。
+                    setHoverMarker(marker);
+                    showPreview(marker, pair);
+                });
+                marker.addEventListener('focus', () => {
+                    // 键盘聚焦也只显示预览，不改写 active 状态。
+                    setHoverMarker(marker);
+                    showPreview(marker, pair);
+                });
+                marker.addEventListener('mouseleave', () => {
+                    clearHoverMarker();
+                    hidePreview();
+                });
+                marker.addEventListener('blur', () => {
+                    clearHoverMarker();
+                    hidePreview();
+                });
+
+                marker.addEventListener('click', () => {
+                    // 点击短线后立即切换高亮，不必等 smooth scroll 的滚动事件触发。
+                    setActiveMarker(pair.index);
+                    scroller.scrollTo({
+                        top: getTargetTop(pair.questionBox) - 12,
+                        behavior: 'smooth'
+                    });
+                });
+
+                rail.appendChild(marker);
+                return marker;
+            };
+
+            function rebuildQuestionMarkers() {
+                clearHoverMarker();
+                hidePreview();
+
+                pairs = readQuestionPairs();
+                markers = [];
+                rail.replaceChildren();
+
+                pairs.forEach((pair) => {
+                    markers.push(createMarker(pair));
+                });
+
+                currentActiveIndex = Math.min(currentActiveIndex, Math.max(0, pairs.length - 1));
+                layoutMarkers();
+            }
+
+            function scheduleQuestionMarkerRebuild() {
+                window.clearTimeout(rebuildTimer);
+                rebuildTimer = window.setTimeout(rebuildQuestionMarkers, 80);
+            }
+
+            function setHoverMarker(hoveredMarker) {
+                rail.classList.add('is-hovering');
+                markers.forEach((marker) => {
+                    marker.classList.toggle('is-hovered', marker === hoveredMarker);
+                });
+            }
+
+            function clearHoverMarker() {
+                rail.classList.remove('is-hovering');
+                markers.forEach((marker) => {
+                    marker.classList.remove('is-hovered');
+                });
+            }
+
+            function layoutMarkers() {
+                // 短线使用 CSS flex 在左侧固定间距居中排列。
+                // 这里不再按滚动比例设置 top，避免只有两条短线时一条在顶部、一条在底部。
+                updateActiveMarker();
+            }
+
+            function setActiveMarker(activeIndex) {
+                if (!markers.length) return;
+
+                currentActiveIndex = Math.min(Math.max(activeIndex, 0), markers.length - 1);
+                markers.forEach((marker, index) => {
+                    marker.classList.toggle('active', index === currentActiveIndex);
+                });
+            }
+
+            function updateActiveMarker() {
+                if (!pairs.length) return;
+
+                const currentTop = scroller.scrollTop + 40;
+                const isAtBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+                let activeIndex = 0;
+
+                // 当页面已经滚到底部时，最后一个问题可能无法滚到顶部附近。
+                // 这时直接高亮最后一条短线，避免一直停留在第一条。
+                if (isAtBottom) {
+                    setActiveMarker(pairs.length - 1);
+                    return;
+                }
+
+                pairs.forEach((pair, index) => {
+                    if (getTargetTop(pair.questionBox) <= currentTop) {
+                        activeIndex = index;
+                    }
+                });
+
+                setActiveMarker(activeIndex);
+            }
+
+            scroller.addEventListener('scroll', updateActiveMarker, { passive: true });
+            window.addEventListener('resize', layoutMarkers);
+
+            // 监听动态问答增删或内容填充：新增一对问答后，左侧短线会自动增加。
+            const questionObserver = new MutationObserver(scheduleQuestionMarkerRebuild);
+            questionObserver.observe(scroller, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+
+            // 初始化当前短线；后续动态变化由 MutationObserver 自动重建。
+            rebuildQuestionMarkers();
+        }"###;
+
 /// 页面显示的信息，true是英文，false是中文，创建页面时填充进去
 static PAGE: Lazy<RwLock<HashMap<bool, PageInfo>>> = Lazy::new(|| RwLock::new(HashMap::from([(true, PageInfo::new(true)), (false, PageInfo::new(false))])));
 
@@ -955,12 +1206,13 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         document.getElementById('show-in-token').value = '{}';
         document.getElementById('show-out-token').value = '{}';
 ", prompt_name, uuid, token[0], token[1]);
-    result += "    </script>
+    result += &format!("        {}
+    </script>
 </body>
 
 <!-- js -->
 <script type='module'>
-";
+", BAR);
     if !chat_name.is_empty() {
         result += &format!("    // 对话名称\n    document.getElementById('input-chat-name').value = \"{}\";\n", chat_name);
     }
@@ -2379,16 +2631,17 @@ pub fn create_download_page(uuid: &str, err_str: Option<String>) -> String {
             }}", log.id);
         }
     }
-    result += r###"        }
+    result += &format!("        }}
         window.onload = markhigh();
         function copy(id) {{
             // https://code-boxx.com/strip-remove-html-tags-javascript/
             var textToCopy = document.getElementById(id).textContent;
             navigator.clipboard.writeText(textToCopy);
         }}
+        {}
     </script>
 </body>
 </html>
-"###;
+", BAR);
     result
 }

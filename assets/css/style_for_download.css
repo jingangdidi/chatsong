@@ -200,6 +200,91 @@
         width: 4vw;
     }
 
+    /* 左侧问题索引栏：固定在窗口左侧，里面每一条短线对应一轮用户提问 */
+    .chat-question-rail {
+        position: fixed;
+        left: 10px;
+        top: 24px;
+        bottom: 24px;
+        width: 34px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 14px;
+        z-index: 9999;
+    }
+
+    /* 左侧短线本体：用 button 便于点击和键盘聚焦 */
+    .chat-question-marker {
+        position: relative;
+        left: 0px;
+        flex: 0 0 auto;
+        width: 20px;
+        height: 5px;
+        border: 0;
+        padding: 0;
+        border-radius: 999px;
+        background: #8f9092;
+        cursor: pointer;
+        transition: width .2s ease, background .2s ease;
+    }
+
+    .chat-question-marker::before {
+        content: '';
+        position: absolute;
+        left: -10px;          /* 水平扩大，原宽度20，扩大后共40px */
+        right: -10px;
+        top: -7px;            /* 向上扩散7px（间距14px的一半） */
+        bottom: -7px;         /* 向下扩散7px */
+        pointer-events: auto; /* 确保事件被捕获 */
+        z-index: -1;          /* 不遮挡按钮本身的视觉 */
+    }
+
+    /* 当前选中的短线：只改变颜色，长度保持不变 */
+    .chat-question-marker.active {
+        background: var(--textarea-border-color);
+    }
+
+    /* hover 期间，暂时隐藏原 active 的视觉高亮，只保留 hover 项高亮 */
+    .chat-question-rail.is-hovering .chat-question-marker.active:not(.is-hovered) {
+        background: #8f9092;
+    }
+
+    /* 鼠标经过或键盘聚焦的短线：临时改变颜色和长度，不改变真正的选中项 */
+    .chat-question-marker.is-hovered,
+    .chat-question-marker:hover,
+    .chat-question-marker:focus-visible {
+        width: 40px;
+        background: var(--textarea-border-color);
+    }
+
+    /* hover 预览浮层：显示问题和回答的开头 */
+    .chat-question-preview {
+        position: fixed;
+        left: 50px;
+        max-width: 420px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #222;
+        color: #fff;
+        font-size: 13px;
+        line-height: 1.5;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+        display: none;
+        pointer-events: none;
+        z-index: 10000;
+    }
+
+    .chat-question-preview .preview-question {
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .chat-question-preview .preview-answer {
+        color: #ddd;
+    }
+
     /* 回答靠左，提问靠右 */
     .left, .right {
         font-size: 16px;
