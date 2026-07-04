@@ -92,6 +92,8 @@ candle-transformers = { git = "https://github.com/jingangdidi/candle", package =
 rand = { version = "0.10", optional = true }
 isolang = { version = "2.4", features = ["english_names", "lowercase_names"], optional = true }
 tempfile = { version = "3", optional = true }
+memmap2 = { version = "0.9.3", features = ["stable_deref_trait"], optional = true }
+safetensors = { version = "0.4.1", optional = true }
 
 [features]
 default = []
@@ -104,6 +106,6 @@ asr = ["qwen3-asr", "tokenizers", "rodio", "cpal", "hound", "rubato"]
 asr-cuda = ["qwen3-asr/cuda", "tokenizers", "rodio", "cpal", "hound", "rubato"]
 asr-metal = ["qwen3-asr/metal", "tokenizers", "rodio", "cpal", "hound", "rubato"]
 
-tts = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato"]
-tts-cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato"]
-tts-metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato"]
+tts = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors"]
+tts-cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors"]
+tts-metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors"]

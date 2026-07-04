@@ -1,7 +1,12 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
-use candle_core::{DType, Device};
+use candle_core::{DType, Device, Tensor};
+use memmap2::MmapOptions;
+use safetensors::{
+    SafeTensors,
+    tensor::Dtype,
+};
 use tokio::sync::mpsc::{
     Sender,
     Receiver,
@@ -57,6 +62,7 @@ pub async fn run_omni_tts(
     path: &str,
     ref_audio: Option<PathBuf>,
     ref_text: Option<String>,
+    ref_rms: Option<f64>,
     mut rx_tts_string: Receiver<(String, Option<String>, Option<String>)>,
     tx_tts_audio: Sender<(Vec<f32>, usize, oneshot::Sender<()>)>,
 ) -> Result<(), anyhow::Error> {
@@ -124,59 +130,98 @@ pub async fn run_omni_tts(
 
     // 6. Process reference audio if provided
     let (ref_audio_tokens, ref_text, ref_rms) = if let Some(ref_audio_path) = ref_audio {
-        let sampling_rate = audio_config.sample_rate();
-        let wav = load_wav(ref_audio_path, sampling_rate)?;
-
-        // Compute RMS for volume normalization
-        let rms = (wav.sqr()?.mean_all()?.sqrt()?.to_scalar::<f32>()?) as f64;
-
-        // Normalize quiet audio before encoding (matches Python create_voice_clone_prompt)
-        let wav = if rms > 0.0 && rms < 0.1 {
-            (&wav * (0.1 / rms))?
-        } else {
-            wav
-        };
-
-        // Trim long audio (>20s) — only when ref_text not provided (auto-transcribe case)
-        // When ref_text IS provided, warn but don't trim (matches Python behavior)
-        let max_ref_seconds = 20.0;
-        let wav_dur = wav.dim(1)? as f64 / sampling_rate as f64;
-        let wav = if wav_dur > max_ref_seconds && ref_text.is_none() {
-            let max_samples = (max_ref_seconds * sampling_rate as f64) as usize;
-            event!(Level::INFO, "Trimming reference audio from {wav_dur:.1}s to {max_ref_seconds}s");
-            wav.narrow(1, 0, max_samples.min(wav.dim(1)?))?
-        } else if wav_dur > max_ref_seconds {
-            event!(Level::WARN, "Reference audio is {wav_dur:.1}s (>{max_ref_seconds}s). Long references may degrade quality.");
-            wav
-        } else {
-            wav
-        };
-
-        // Silence removal
-        let wav = remove_silence(&wav, sampling_rate, 200, 100, 200)?;
-
-        // Clip to multiple of hop_length
-        let hop_length = audio_config.hop_length();
-        let len = wav.dim(1)?;
-        let clip = len % hop_length;
-        let wav = if clip > 0 {
-            wav.narrow(1, 0, len - clip)?
-        } else {
-            wav
-        };
-
-        // Encode reference audio to tokens (audio tokenizer is on CPU)
-        let tokens = audio_tokenizer.encode(&wav.unsqueeze(0)?)?;
-        let tokens = tokens.squeeze(0)?; // (8, T)
-
+        let safetensors_path = ref_audio_path.with_extension("safetensors");
+        let json_path = ref_audio_path.with_extension("json");
         let ref_text_str = ref_text.clone().unwrap_or_default();
-        let ref_text_str = if ref_text_str.is_empty() {
-            return Err(anyhow!("ref audio need ref text".to_string()))
-        } else {
-            add_punctuation(&ref_text_str)
-        };
 
-        (Some(tokens), Some(ref_text_str), Some(rms))
+        if safetensors_path.exists() && json_path.exists() {
+            // 从 safetensors 文件导入 ref audio
+            let token_tensor = {
+                let audio_file = std::fs::File::open(&safetensors_path)?;
+                let buffer = unsafe { MmapOptions::new().map(&audio_file)? };
+                let tensors = SafeTensors::deserialize(&buffer)?;
+                let tensor_view = tensors.tensor("ref_audio")?;
+                let dtype = match tensor_view.dtype() {
+                    Dtype::U8 => DType::U8,
+                    Dtype::F16 => DType::F16,
+                    Dtype::BF16 => DType::BF16,
+                    Dtype::U32 => DType::U32,
+                    Dtype::F32 => DType::F32,
+                    Dtype::F64 => DType::F64,
+                    Dtype::I64 => DType::I64,
+                    _ => unreachable!(),
+                };
+                Tensor::from_raw_buffer(tensor_view.data(), dtype, tensor_view.shape(), &device)?
+            };
+
+            event!(Level::INFO, "Load reference audio data from '{}'", safetensors_path.display());
+            (Some(token_tensor), Some(ref_text_str), ref_rms)
+        } else { // 该音频同路径下没有同名的 safetensors 文件和 json 文件，则直接从 ref audio 文件中提取，让后保存 safetensors 文件和 json 文件，下次就不需要 ref audio 音频文件了，文件体积更小，且相当于对原是 ref audio 做了加密，不可直接播放
+            let sampling_rate = audio_config.sample_rate();
+            let wav = load_wav(ref_audio_path, sampling_rate)?;
+
+            // Compute RMS for volume normalization
+            let rms = (wav.sqr()?.mean_all()?.sqrt()?.to_scalar::<f32>()?) as f64;
+
+            // Normalize quiet audio before encoding (matches Python create_voice_clone_prompt)
+            let wav = if rms > 0.0 && rms < 0.1 {
+                (&wav * (0.1 / rms))?
+            } else {
+                wav
+            };
+
+            // Trim long audio (>20s) — only when ref_text not provided (auto-transcribe case)
+            // When ref_text IS provided, warn but don't trim (matches Python behavior)
+            let max_ref_seconds = 20.0;
+            let wav_dur = wav.dim(1)? as f64 / sampling_rate as f64;
+            let wav = if wav_dur > max_ref_seconds && ref_text.is_none() {
+                let max_samples = (max_ref_seconds * sampling_rate as f64) as usize;
+                event!(Level::INFO, "Trimming reference audio from {wav_dur:.1}s to {max_ref_seconds}s");
+                wav.narrow(1, 0, max_samples.min(wav.dim(1)?))?
+            } else if wav_dur > max_ref_seconds {
+                event!(Level::WARN, "Reference audio is {wav_dur:.1}s (>{max_ref_seconds}s). Long references may degrade quality.");
+                wav
+            } else {
+                wav
+            };
+
+            // Silence removal
+            let wav = remove_silence(&wav, sampling_rate, 200, 100, 200)?;
+
+            // Clip to multiple of hop_length
+            let hop_length = audio_config.hop_length();
+            let len = wav.dim(1)?;
+            let clip = len % hop_length;
+            let wav = if clip > 0 {
+                wav.narrow(1, 0, len - clip)?
+            } else {
+                wav
+            };
+
+            // Encode reference audio to tokens (audio tokenizer is on CPU)
+            let tokens = audio_tokenizer.encode(&wav.unsqueeze(0)?)?;
+            let tokens = tokens.squeeze(0)?; // (8, T)
+
+            // 将 tokens 保存至 safetensors 文件，存储在 ref_audio_path 同路径下，名称与 ref_audio 相同
+            tokens.save_safetensors("ref_audio", &safetensors_path)?;
+            event!(Level::INFO, "Saved reference audio to {}", safetensors_path.display());
+
+            let ref_text_str = if ref_text_str.is_empty() {
+                return Err(anyhow!("ref audio need ref text".to_string()))
+            } else {
+                add_punctuation(&ref_text_str)
+            };
+
+            // 将 ref_text_str 和 rms 保存至 json 文件，存储在 ref_audio_path 同路径下，名称与 ref_audio 相同
+            let meta = serde_json::json!({
+                "ref_text": ref_text_str.clone(),
+                "rms": rms,
+            });
+            let meta_json = serde_json::to_string_pretty(&meta)?;
+            std::fs::write(&json_path, meta_json)?;
+
+            (Some(tokens), Some(ref_text_str), Some(rms))
+        }
     } else {
         (None, None, None)
     };

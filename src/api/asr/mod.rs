@@ -142,14 +142,40 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         }
     });
 
+    // tts声音克隆要用的参考音频
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let ref_audio: Option<PathBuf> = PARAS.ref_audio.clone();
+    // tts声音克隆要用的参考音频文本
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let ref_text: Arc<RwLock<Option<String>>> = Arc::new(RwLock::new(None));
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let ref_text_clone = ref_text.clone();
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let mut ref_rms: Option<f64> = None;
+
     // channel for send audio data to asr
     let (tx_asr, rx_asr) = channel::<(Vec<f32>, Vec<f32>, bool)>(1);
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
     {
-        if let Some(ref_path) = PARAS.ref_audio.clone() {
-            let ref_audio_data = read_wav_sample_resample(&ref_path, 16000)?;
-            if let Err(_) = tx_asr.send((ref_audio_data, Vec::new(), true)).await {
-                event!(Level::ERROR, "asr receiver dropped");
+        if let Some(ref_path) = ref_audio.clone() {
+            let safetensors_path = ref_path.with_extension("safetensors");
+            let json_path = ref_path.with_extension("json");
+            if safetensors_path.exists() && json_path.exists() {
+                // 从 json 文件导入 ref audio 的文本 和 rms 值
+                let meta_content = std::fs::read_to_string(&json_path)?;
+                let meta: Value = serde_json::from_str(&meta_content).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+                let ref_text = meta["ref_text"].as_str().unwrap_or("").to_string();
+                // 写入 ref audo 的文本内容
+                let mut tmp_text = ref_text_clone.write().unwrap();
+                *tmp_text = Some(ref_text);
+                drop(tmp_text);
+                // 写入 ref audio 的 rms
+                ref_rms = Some(meta["rms"].as_f64().unwrap_or(0.0));
+            } else { // 从 ref audio 文件提取对应文本
+                let ref_audio_data = read_wav_sample_resample(&ref_path, 16000)?;
+                if let Err(_) = tx_asr.send((ref_audio_data, Vec::new(), true)).await {
+                    event!(Level::ERROR, "asr receiver dropped");
+                }
             }
         }
     }
@@ -174,15 +200,6 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         }
     });
 
-    // tts声音克隆要用的参考音频
-    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-    let ref_audio: Option<PathBuf> = PARAS.ref_audio.clone();
-    // tts声音克隆要用的参考音频文本
-    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-    let ref_text: Arc<RwLock<Option<String>>> = Arc::new(RwLock::new(None));
-    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-    let ref_text_clone = ref_text.clone();
-
     // tts model
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
     let tts_dir = PARAS.tts_dir.clone();
@@ -197,7 +214,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
             }
         }
         let tmp_ref_text = ref_text.read().unwrap().clone();
-        if let Err(e) = run_omni_tts(&tts_dir, ref_audio, tmp_ref_text, rx_tts_string, tx_tts_audio).await {
+        if let Err(e) = run_omni_tts(&tts_dir, ref_audio, tmp_ref_text, ref_rms, rx_tts_string, tx_tts_audio).await {
             event!(Level::ERROR, "tts error: {}", e);
             exit(1);
         }
@@ -227,6 +244,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         ];
         let mut today = "".to_string();
         let mut today_current: String;
+        let mut tts_sample_rate = 0;
         let mut audio_save_path = format!("{}/audio_{}", outpath, today);
 
         /*
@@ -373,6 +391,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                 history_msg.push(
                                     ChatMessage::Assistant {
                                         content: Some(ChatMessageContent::Text(answer.clone())),
+                                        reasoning: None,
                                         reasoning_content: None,
                                         refusal: None,
                                         name: None,
@@ -444,6 +463,9 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                                 event!(Level::ERROR, "play tts receiver dropped");
                                             }
                                         }
+                                        if tts_sample_rate == 0 {
+                                            tts_sample_rate = sample_rate as u32;
+                                        }
                                     }
                                 }
                                 // save tts anwser
@@ -451,7 +473,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                     event!(Level::ERROR, "save tts anwser error: {:?}", e);
                                 }
                                 // save tts audio
-                                if let Err(e) = write_wav_sample(&whole_tts_audio, max_sample_rate, audio_id, false, &audio_save_path) {
+                                if let Err(e) = write_wav_sample(&whole_tts_audio, tts_sample_rate, audio_id, false, &audio_save_path) {
                                     event!(Level::ERROR, "save tts audio error: {:?}", e);
                                 }
                                 // save user question and llm answer to ``
@@ -663,7 +685,7 @@ fn create_tokenizer_json(path: String) -> Result<(), MyError> {
 /// run llm
 async fn run_llm(messages: Vec<ChatMessage>) -> Result<String, MyError> {
     // 获取指定模型的api-key
-    let (api_key, endpoint, model, thinking) = PARAS.api.get_model_by_usize(17)?;
+    let (api_key, endpoint, model, thinking) = PARAS.api.get_model_by_usize(2)?;
     // 使用api key初始化
     let mut client = Client::new(api_key.clone());
     client.set_base_url(&endpoint);

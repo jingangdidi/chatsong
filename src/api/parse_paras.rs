@@ -328,7 +328,11 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
             Some(r) => {
                 let tmp_path = PathBuf::from(&r);
                 if !(tmp_path.exists() && tmp_path.is_file()) {
-                    return Err(MyError::FileNotExistError{file: r})
+                    let safetensors_path = tmp_path.with_extension("safetensors");
+                    let json_path = tmp_path.with_extension("json");
+                    if !(safetensors_path.exists() && json_path.exists()) {
+                        return Err(MyError::FileNotExistError{file: r})
+                    }
                 }
                 Some(tmp_path)
             },
@@ -342,12 +346,12 @@ pub fn parse_para() -> Result<ParsedParas, MyError> {
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         wake_words: match para.wake_words { // 语音asr唤醒词
             Some(w) => w.split(",").map(|s| s.to_string()).collect(),
-            None => vec!["你好".to_string(), "hello".to_string()],
+            None => vec!["你好".to_string(), "嘿".to_string(), "hello".to_string()],
         },
         #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
         stop_words: match para.stop_words { // 语音asr结束词
             Some(w) => w.split(",").map(|s| s.to_string()).collect(),
-            None => vec!["结束".to_string(), "stop".to_string()],
+            None => vec!["结束".to_string(), "停".to_string(), "stop".to_string()],
         },
         outpath: outpath.clone(), // 输出结果路径，不存在则创建，已存在则删除其中的空uuid文件夹，默认./chat-log，不需要加上`/`或`\`后缀（加上了会自动去除），保存chat记录、生成的图片、音频等
         tools: Tools::new(other_para.external_tools, english)?, // all tools
