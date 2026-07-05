@@ -16,12 +16,12 @@ use tracing::{event, Level};
 
 mod config;
 mod models;
-mod utils;
+pub mod utils;
 
 use config::{HiggsAudioV2Config, OmniVoiceConfig};
 use models::higgs_audio_v2::HiggsAudioV2Tokenizer;
 use models::omnivoice::{GenerateRequest, GenerationConfig, OmniVoice};
-use utils::audio::{fade_and_pad, load_wav, remove_silence, /*save_wav*/};
+use utils::audio::{fade_and_pad, load_audio, remove_silence, /*save_wav*/};
 use utils::duration::RuleDurationEstimator;
 use utils::text::{add_punctuation, combine_text, is_cjk};
 use utils::voice_design::resolve_instruct;
@@ -158,7 +158,7 @@ pub async fn run_omni_tts(
             (Some(token_tensor), Some(ref_text_str), ref_rms)
         } else { // 该音频同路径下没有同名的 safetensors 文件和 json 文件，则直接从 ref audio 文件中提取，让后保存 safetensors 文件和 json 文件，下次就不需要 ref audio 音频文件了，文件体积更小，且相当于对原是 ref audio 做了加密，不可直接播放
             let sampling_rate = audio_config.sample_rate();
-            let wav = load_wav(ref_audio_path, sampling_rate)?;
+            let wav = load_audio(ref_audio_path, sampling_rate)?;
 
             // Compute RMS for volume normalization
             let rms = (wav.sqr()?.mean_all()?.sqrt()?.to_scalar::<f32>()?) as f64;

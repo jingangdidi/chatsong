@@ -2,7 +2,7 @@
 use std::path::Path;
 
 #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-use hound::WavReader;
+use crate::tts::omni_voice::utils::audio::load_audio_helper;
 
 use hound::{
     WavSpec,
@@ -44,7 +44,11 @@ pub fn resample_audio(samples: Vec<f32>, source_sr: f64, target_sr: f64) -> Resu
 
 // read wav file
 #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-pub fn read_wav_sample_resample(path: &Path, target_sr: u32) -> Result<Vec<f32>, MyError> {
+pub fn read_audio_sample_resample(path: &Path, target_sr: u32) -> Result<Vec<f32>, MyError> {
+    /*
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    use hound::WavReader;
+
     let mut reader = WavReader::open(path).map_err(|e| MyError::WavError{error: e})?;
     let spec = reader.spec();
     let channels = spec.channels as usize;
@@ -77,6 +81,8 @@ pub fn read_wav_sample_resample(path: &Path, target_sr: u32) -> Result<Vec<f32>,
     };
 
     Ok(mono)
+    */
+    load_audio_helper(path, target_sr as usize).map_err(|e| MyError::OtherError{info: format!("load audio file error: {:?}", e)})
 }
 
 // save wav file

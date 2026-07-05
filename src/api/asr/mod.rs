@@ -83,7 +83,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-use utils::read_wav_sample_resample;
+use utils::read_audio_sample_resample;
 
 /// 全局变量，可以修改，存储当前开启语音模式的uuid
 pub static AUDIO: Lazy<Mutex<Option<(String, mpsc::UnboundedSender<String>)>>> = Lazy::new(|| Mutex::new(None));
@@ -154,6 +154,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     let mut ref_rms: Option<f64> = None;
 
     // channel for send audio data to asr
+    println!("0001");
     let (tx_asr, rx_asr) = channel::<(Vec<f32>, Vec<f32>, bool)>(1);
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
     {
@@ -172,13 +173,14 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                 // 写入 ref audio 的 rms
                 ref_rms = Some(meta["rms"].as_f64().unwrap_or(0.0));
             } else { // 从 ref audio 文件提取对应文本
-                let ref_audio_data = read_wav_sample_resample(&ref_path, 16000)?;
+                let ref_audio_data = read_audio_sample_resample(&ref_path, 16000)?;
                 if let Err(_) = tx_asr.send((ref_audio_data, Vec::new(), true)).await {
                     event!(Level::ERROR, "asr receiver dropped");
                 }
             }
         }
     }
+    println!("0002");
 
     // channel for receive string from asr
     let (tx_asr_string, mut rx_asr_string) = channel::<(String, String, Vec<f32>, bool)>(10);
@@ -322,21 +324,45 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                     */
                 }
                 if run_llm_tts {
-                    if whole_string.contains("开启新对话") || whole_string.contains("start new chat") {
+                    let play_reply = if whole_string.contains("开启新对话") || whole_string.contains("start new chat") {
                         history_msg = vec![
                             ChatMessage::User{
                                 content: ChatMessageContent::Text(CHAT_PROMPT.replace("是日常聊天助手", &role)),
                                 name: None,
                             },
                         ];
+                        if let Err(_) = tx_tts_string.send(("好的，已成功开启新对话".to_string(), None, Some("Chinese".to_string()))).await {
+                            event!(Level::ERROR, "tts receiver dropped");
+                        }
                         run_llm_tts = false;
                         event!(Level::INFO, "start new chat successfully");
+                        true
                     } else if whole_string.contains("不记录历史") || whole_string.contains("without history") {
+                        if let Err(_) = tx_tts_string.send(("好的，已停止记录对话历史".to_string(), None, Some("Chinese".to_string()))).await {
+                            event!(Level::ERROR, "tts receiver dropped");
+                        }
                         with_history = false;
                         event!(Level::INFO, "change to no history mode successfully");
+                        true
                     } else if whole_string.contains("记录历史") || whole_string.contains("with history") {
+                        if let Err(_) = tx_tts_string.send(("好的，已开始记录对话历史".to_string(), None, Some("Chinese".to_string()))).await {
+                            event!(Level::ERROR, "tts receiver dropped");
+                        }
                         with_history = true;
                         event!(Level::INFO, "change to history mode successfully");
+                        true
+                    } else {
+                        false
+                    };
+                    if play_reply {
+                        if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
+                            ack_tts_tx.send(()).unwrap(); // 发送确认
+                            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
+                            if let Err(_) = play_tx.send((audio_data, sample_rate as u32, Some(ack_tx))) {
+                                event!(Level::ERROR, "play tts receiver dropped");
+                            }
+                            ack_rx.await.unwrap(); // 等待最后一段音频播放完
+                        }
                     }
                 }
                 if run_llm_tts {

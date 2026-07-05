@@ -18,9 +18,8 @@
 //! and fade/padding of audio tensors. Audio is represented as candle
 //! [`Tensor`] with shape `(1, num_samples)` and dtype `F32`.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use candle_core::{DType, Device, Tensor};
-use hound::{SampleFormat, WavReader, /*WavSpec, WavWriter*/};
 /*
 use rubato::{
     Async, FixedAsync, Resampler, SincInterpolationParameters, SincInterpolationType,
@@ -36,10 +35,14 @@ use rubato::{
 };
 use std::path::Path;
 
+/*
+use anyhow::{bail, Context, Result};
+use hound::{SampleFormat, WavReader, /*WavSpec, WavWriter*/};
+
 /// Load a WAV file, convert to f32 mono, and resample to `target_sr`.
 ///
 /// Returns a tensor of shape `(1, T)` on [`Device::Cpu`].
-pub fn load_wav(path: impl AsRef<Path>, target_sr: usize) -> Result<Tensor> {
+pub fn load_wav0(path: impl AsRef<Path>, target_sr: usize) -> Result<Tensor> {
     let path = path.as_ref();
     let reader = WavReader::open(path)
         .with_context(|| format!("Failed to open WAV file: {}", path.display()))?;
@@ -90,6 +93,202 @@ pub fn load_wav(path: impl AsRef<Path>, target_sr: usize) -> Result<Tensor> {
     };
 
     // Build tensor of shape (1, T).
+    let len = mono.len();
+    Tensor::from_vec(mono, (1, len), &Device::Cpu).map_err(Into::into)
+}
+*/
+
+use symphonia::core::{
+    audio::{
+        AudioBuffer,
+        AudioBufferRef,
+        Signal,
+    },
+    codecs::{
+        CODEC_TYPE_NULL,
+        DecoderOptions,
+    },
+    errors::Error as symphonia_error,
+    formats::FormatOptions,
+    io::MediaSourceStream,
+    meta::MetadataOptions,
+    probe::Hint,
+    sample::Sample,
+};
+use std::fs::File;
+
+/// 辅助函数：将某个音频缓冲区中的样本转换为 f32 并累加混音到 mono_samples
+fn convert_and_mix<T>(
+    buf: &AudioBuffer<T>,
+    channels: usize,
+    mono_samples: &mut Vec<f32>,
+    convert: impl Fn(T) -> f32,
+) where
+    T: Copy + Sample,
+{
+    match channels {
+        1 => {
+            let ch = buf.chan(0);
+            mono_samples.extend(ch.iter().copied().map(&convert));
+        }
+        2 => {
+            let ch0 = buf.chan(0);
+            let ch1 = buf.chan(1);
+            for (a, b) in ch0.iter().zip(ch1.iter()) {
+                mono_samples.push((convert(*a) + convert(*b)) * 0.5);
+            }
+        }
+        _ => {
+            // 多于两个声道：取所有声道平均
+            let frames: Vec<Vec<T>> = (0..channels)
+                .map(|c| buf.chan(c).to_vec())
+                .collect();
+            let frame_len = frames[0].len();
+            for i in 0..frame_len {
+                let sum: f32 = frames.iter().map(|ch| convert(ch[i])).sum();
+                mono_samples.push(sum / channels as f32);
+            }
+        }
+    }
+}
+
+/// 加载音频文件（支持多种格式，包括视频文件中的音频），返回 Vec<f32>
+pub fn load_audio_helper(path: impl AsRef<Path>, target_sr: usize) -> Result<Vec<f32>> {
+    let path = path.as_ref();
+
+    // 1. 打开文件并创建媒体流
+    let file = File::open(path)?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    // 2. 探测格式
+    let hint = Hint::new();
+    let format_opts = FormatOptions::default();
+    let metadata_opts = MetadataOptions::default();
+    let decoder_opts = DecoderOptions::default();
+
+    // Probe the media source
+    let probed = symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts)?;
+
+    // Get the instantiated format reader
+    let mut format = probed.format;
+
+    // 3. 找到第一个音频轨道
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .ok_or_else(|| anyhow::anyhow!("No audio track found in: {}", path.display()))?;
+
+    // Store the track identifier, it will be used to filter packets
+    let track_id = track.id;
+    let original_sample_rate = track.codec_params.sample_rate.unwrap_or(44100) as usize;
+    let channels = track.codec_params.channels.map(|c| c.count()).unwrap_or(1);
+
+    // 4. 创建解码器
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &decoder_opts)
+        .with_context(|| format!("Failed to create decoder for: {}", path.display()))?;
+
+    // 5. 解码并混音为单声道
+    let mut mono_samples: Vec<f32> = Vec::new();
+
+    loop {
+        // Get the next packet from the media format
+        let packet = match format.next_packet() {
+            Ok(pkt) => pkt,
+            Err(symphonia_error::ResetRequired) => {
+                decoder.reset();
+                continue;
+            }
+            Err(symphonia_error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                break;
+            }
+            Err(err) => return Err(err)?,
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        let buf = decoder
+            .decode(&packet)
+            .with_context(|| "Failed to decode audio packet")?;
+
+        // 根据音频格式转换为 f32 并混音为单声道
+        match buf {
+            AudioBufferRef::U8(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                (x as f32 - 128.0) / 128.0
+            }),
+            AudioBufferRef::U16(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                (x as f32 - 32768.0) / 32768.0
+            }),
+            AudioBufferRef::U24(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                (x.inner() as f32 - 8388608.0) / 8388608.0
+            }),
+            AudioBufferRef::U32(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                (x as f32 - 2147483648.0) / 2147483648.0
+            }),
+            AudioBufferRef::S8(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                x as f32 / 128.0
+            }),
+            AudioBufferRef::S16(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                x as f32 / 32768.0
+            }),
+            AudioBufferRef::S24(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                x.inner() as f32 / 8388608.0
+            }),
+            AudioBufferRef::S32(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| {
+                x as f32 / 2147483648.0
+            }),
+            AudioBufferRef::F32(buf) => convert_and_mix(&buf, channels, &mut mono_samples, |x| x),
+            AudioBufferRef::F64(buf) => {
+                // f64 可能需要标准化
+                let ch0 = buf.chan(0);
+                let max_abs = if channels == 2 {
+                    let ch1 = buf.chan(1);
+                    ch0.iter()
+                        .zip(ch1.iter())
+                        .map(|(&a, &b)| (a + b) / 2.0)
+                        .fold(0.0_f64, |max, x| max.max(x.abs()))
+                } else {
+                    ch0.iter().fold(0.0_f64, |max, &x| max.max(x.abs()))
+                };
+
+                // 标准化因子（如果峰值 > 1.0）
+                let scale = if max_abs > 1.0 { 1.0 / max_abs } else { 1.0 };
+
+                if channels == 2 {
+                    let ch0 = buf.chan(0);
+                    let ch1 = buf.chan(1);
+                    for (a, b) in ch0.iter().zip(ch1.iter()) {
+                        let avg = (a + b) / 2.0;
+                        mono_samples.push((avg as f32) * scale as f32);
+                    }
+                } else {
+                    for &sample in ch0.iter() {
+                        mono_samples.push((sample as f32) * scale as f32);
+                    }
+                }
+            },
+        }
+    }
+
+    // 6. 重采样（如果需要）
+    if original_sample_rate != target_sr {
+        resample(&mono_samples, original_sample_rate, target_sr).context("Failed to resample audio")
+    } else {
+        Ok(mono_samples)
+    }
+}
+
+/// 加载音频文件（支持多种格式，包括视频文件中的音频）
+/// 混音为单声道，重采样到 target_sr，返回形状为 (1, T) 的 Tensor
+///
+/// 依赖库：symphonia (需要 features = ["all"] 或所需格式)
+pub fn load_audio(path: impl AsRef<Path>, target_sr: usize) -> Result<Tensor> {
+    let mono = load_audio_helper(path, target_sr)?;
+
+    // 构建 Tensor (1, T)
     let len = mono.len();
     Tensor::from_vec(mono, (1, len), &Device::Cpu).map_err(Into::into)
 }
