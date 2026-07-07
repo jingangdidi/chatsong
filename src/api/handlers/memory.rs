@@ -217,6 +217,7 @@ async fn extract_memory(text: &str, model_for_memory: (String, String, String, b
 pub async fn get_embedding(uuid: &str, text: String) -> Result<Option<Vec<f64>>, MyError> {
     // 获取 embedding 模型
     if let Some((api_key, endpoint, model)) = PARAS.api.get_embedding_modle(None) {
+        event!(Level::INFO, "{} memory embedding by {}", uuid, model);
         // 使用api key初始化
         let mut client = Client::new(api_key);
         client.set_base_url(&endpoint); // 从0.7.0开始舍弃了new_with_base
@@ -225,9 +226,9 @@ pub async fn get_embedding(uuid: &str, text: String) -> Result<Option<Vec<f64>>,
         para_builder.model(&model);
         para_builder.input(EmbeddingInput::String(text));
         para_builder.encoding_format(EmbeddingEncodingFormat::Float);
-        para_builder.dimensions(1024_u32);
+        //para_builder.dimensions(1024_u32); // 本地部署的 Qwen3-Embedding-0.6B 指定这个参数会在 create 时卡住无返回，使用 curl 测试指定 dimensions 则会报错，这里不指定，直接使用默认
         let parameters = para_builder.build().map_err(|e| MyError::EmbeddingError{error: e})?;
-        let result = client.embeddings().create(parameters).await.map_err(|e| MyError::ApiError{uuid: "embedding".to_string(), error: e})?;
+        let result = client.embeddings().create(parameters).await.map_err(|e| MyError::ApiError{uuid: uuid.to_string(), error: e})?;
         // +----------------------------+                     +---------------------------------+     +----------------------+
         // | struct EmbeddingResponse { |                     | struct Embedding {              |     | EmbeddingOutput {    |
         // |     object: String,        | always 'embedding'  |     index: u32,                 |     |     Float(Vec<f64>), |
