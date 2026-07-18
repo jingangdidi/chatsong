@@ -37,6 +37,7 @@ pub enum DataType {
     Image(String),                 // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
     Voice,                         // 音频文件
     Normal,                        // 常规问题
+    CallTool(Vec<ChatMessage>),       // 调用工具时，不会把原始调用工具的内容显示在页面，但是发送历史记录时，最好传递原是的工具调用信息，因此这里存储下
     Hide((usize, Option<String>)), // 隐藏该信息，(隐藏前DataType的索引, 隐藏前存储的字符串)，该信息被用户删除了，显示chat记录、获取上下文时忽略该信息
 }
 
@@ -67,6 +68,16 @@ impl DataType {
             },
             DataType::Normal   => {
                 *self = DataType::Hide((3, None));
+                true
+            },
+            DataType::CallTool(messages) => {
+                match serde_json::to_string(messages) {
+                    Ok(call_tool_str) => *self = DataType::Hide((4, Some(call_tool_str))),
+                    Err(e) => {
+                        event!(Level::ERROR, "hide call tool messages error: {:?}", e);
+                        *self = DataType::Hide((4, Some(format!("{:?}", e))));
+                    },
+                }
                 true
             },
             DataType::Hide(_)  => false, // 已经隐藏过了
@@ -138,22 +149,24 @@ impl ChatData {
     }
 
     /// convert uploaded image to User
-    fn get_real_message(&self) -> ChatMessage {
-        if let DataType::Image(b64) = &self.data {
-            ChatMessage::User {
-                content: ChatMessageContent::ContentPart(vec![ChatMessageContentPart::Image(
-                    ChatMessageImageContentPart {
-                        r#type: "image_url".to_string(),
-                        image_url: ImageUrlType {
-                            url: b64.clone(), // Either a URL of the image or the base64 encoded image data
-                            detail: None,
+    fn get_real_message(&self) -> Vec<ChatMessage> {
+        match &self.data {
+            DataType::Image(b64) => {
+                vec![ChatMessage::User {
+                    content: ChatMessageContent::ContentPart(vec![ChatMessageContentPart::Image(
+                        ChatMessageImageContentPart {
+                            r#type: "image_url".to_string(),
+                            image_url: ImageUrlType {
+                                url: b64.clone(), // Either a URL of the image or the base64 encoded image data
+                                detail: None,
+                            },
                         },
-                    },
-                )]),
-                name: None,
-            }
-        } else {
-            self.message.clone()
+                    )]),
+                    name: None,
+                }]
+            },
+            DataType::CallTool(messages) => messages.clone(),
+            _ => vec![self.message.clone()],
         }
     }
 }
@@ -297,11 +310,11 @@ impl Info {
     fn get_inner_messages(&self, skip_pre: usize, skip_suf: usize) -> Vec<ChatMessage> {
         if skip_pre == 0 && skip_suf == 0 {
             //self.messages.iter().map(|m| m.message.clone()).collect()
-            self.messages.iter().filter(|m| !m.data.is_hide()).map(|m| m.get_real_message()).collect() // 过滤掉hide的信息
+            self.messages.iter().filter(|m| !m.data.is_hide()).flat_map(|m| m.get_real_message()).collect() // 过滤掉hide的信息
         } else {
             //self.messages.iter().skip(skip_pre).map(|m| m.message.clone()).collect()
             //self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().map(|m| m.message.clone()).collect()
-            self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().filter(|m| !m.data.is_hide()).map(|m| m.get_real_message()).collect() // 先截取信息，然后再过滤掉截取后的信息中hide的信息
+            self.messages[skip_pre..(self.messages.len()-skip_suf)].iter().filter(|m| !m.data.is_hide()).flat_map(|m| m.get_real_message()).collect() // 先截取信息，然后再过滤掉截取后的信息中hide的信息
         }
     }
 
@@ -1398,7 +1411,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                         DataType::Raw(s) => (s.clone(), false), // 要进行网络搜索、解析url、解析上传的html、从上传的pdf提取内容、从上传的zip文件提取内容时，存储输入要搜索的问题、url、html文件名、pdf文件名、zip文件名。展示chat记录时展示这个内容，而不是搜索、解析、提取的内容
                         DataType::Image(s) => (s.clone(), true), // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
                         DataType::Normal | DataType::Voice => (t.clone(), false), // 常规问题
-                        DataType::Hide(_) => unreachable!(),
+                        DataType::Hide(_) | DataType::CallTool(_) => unreachable!(),
                     };
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((true, tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
@@ -1450,7 +1463,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                             }
                             (all_res, false)
                         },
-                        DataType::Hide(_) => unreachable!(),
+                        DataType::Hide(_) | DataType::CallTool(_) => unreachable!(),
                     };
                     if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
                         //logs.push((true, tmp.replace("\\", "\\\\").replace("`", "\\`").replace("{", "\\{").replace("}", "\\}").replace("</scrip", "/scrip"), tmp_id, tmp_time));
@@ -1493,7 +1506,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                             DataType::Raw(s) => (s.clone(), false, false), // 要进行网络搜索、解析url、解析上传的html、从上传的pdf提取内容、从上传的zip文件提取内容时，存储输入要搜索的问题、url、html文件名、pdf文件名、zip文件名。展示chat记录时展示这个内容，而不是搜索、解析、提取的内容
                             DataType::Image(s) => (s.clone(), true, false), // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
                             DataType::Voice => (VOICE.to_string(), false, true), // 传输音频图标base64
-                            DataType::Normal => (t.clone(), false, false), // 常规问题
+                            DataType::Normal | DataType::CallTool(_) => (t.clone(), false, false), // 常规问题、调用工具的结果
                             DataType::Hide(_) => unreachable!(),
                         };
                         if for_template { // 给模板使用，注意这里对“`”做转义，因为js代码中两个“`”之间的字符串可以含有多行，“{”和“}”也做转义，html的“<script>”标签中的js代码中不能出现“</script>”，否则会报错，因此这里也对“</script>”做修改
@@ -1532,7 +1545,7 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
                         let (tmp, is_img) = match &m.data {
                             DataType::Raw(s) => (s.clone(), false), // 要进行网络搜索、解析url、解析上传的html、从上传的pdf提取内容、从上传的zip文件提取内容时，存储输入要搜索的问题、url、html文件名、pdf文件名、zip文件名。展示chat记录时展示这个内容，而不是搜索、解析、提取的内容
                             DataType::Image(s) => (s.clone(), true), // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
-                            DataType::Normal | DataType::Voice => { // 常规问题
+                            DataType::Normal | DataType::Voice | DataType::CallTool(_) => { // 常规问题、调用工具
                                 let mut all_res = "".to_string();
                                 for res in res_vec {
                                     match res {

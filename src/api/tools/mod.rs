@@ -724,8 +724,13 @@ pub async fn run_tools(
                         audio: None,
                         tool_calls: None,
                     };
+                    let mut call_tool_vec = Vec::new();
+                    if is_first {
+                        call_tool_vec.push(raw_message.clone());
+                    }
+                    call_tool_vec.push(ChatMessage::Tool{content: ChatMessageContent::Text(result.clone()), tool_call_id: j.2.clone()});
                     let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                    insert_message(&uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
+                    insert_message(&uuid, message, None, tmp_time, false, DataType::CallTool(call_tool_vec), None, model, None);
 
                     // 如果是绘图，则把图片显示在页面
                     if name_id[0] == "image_generation" || name_id[0] == "edit_image" {
