@@ -18,6 +18,7 @@ use crate::api::handlers::{
     get_items_id::get_items_id,
     get_items::get_items,
     goal::goal,
+    speaker::speaker,
     demo_json::{get_demo_json, put_demo_json},
     demo_csv::get_demo_csv,
     index::index,
@@ -65,6 +66,7 @@ pub fn configure() -> Router {
         .route("/instruction", get(instruction)) // GET /v1/instruction，插入新指令
         .route("/memory", get(memory)) // GET /v1/memory，记忆
         .route("/goal", get(goal)) // GET /v1/goal，goal模式
+        .route("/speaker", get(speaker)) // GET /v1/speaker，speaker模式
         .route("/upload", post(upload)) // POST /v1/upload，上传文件
         .route("/usage", get(usage)) // GET /v1/usage，查看使用说明
         .layer(DefaultBodyLimit::max(1024*1024*100)) // 设置上传文件大小限制为1024*1024*100=104857600=100M

@@ -88,6 +88,26 @@ use utils::read_audio_sample_resample;
 /// 全局变量，可以修改，存储当前开启语音模式的uuid
 pub static AUDIO: Lazy<Mutex<Option<(String, mpsc::UnboundedSender<String>)>>> = Lazy::new(|| Mutex::new(None));
 
+/// 要朗读的内容
+pub struct TextToTts {
+    pub query: Option<String>,
+    pub answer: String,
+    pub language: String,
+    pub audio_save_path: Option<String>,
+    pub audio_id: Option<usize>,
+}
+
+/// 要朗读的内容
+#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+pub static TEXT_TO_TTS: Lazy<Mutex<Option<Sender<TextToTts>>>> = Lazy::new(|| Mutex::new(None));
+
+/// 接收TTS语音
+#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+pub static TTS_RX: Lazy<Mutex<Option<Receiver<(Vec<f32>, usize, oneshot::Sender<()>)>>>> = Lazy::new(|| Mutex::new(None));
+
+#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+static SEPS: &[&str; 4] = &["，", "。", "！", "？"];
+
 //static START_WORDS: &[&str; 8] = &["你好，", "你好", "狗屁，", "狗屁", "hello,", "hello", "Hello,", "Hello"];
 //static STOP_WORDS: &[&str; 8] = &["，结束。", "。结束。", "结束。", "，结束", "。结束", "结束？", "stop", "stop."];
 
@@ -154,7 +174,6 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     let mut ref_rms: Option<f64> = None;
 
     // channel for send audio data to asr
-    println!("0001");
     let (tx_asr, rx_asr) = channel::<(Vec<f32>, Vec<f32>, bool)>(1);
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
     {
@@ -180,7 +199,6 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
             }
         }
     }
-    println!("0002");
 
     // channel for receive string from asr
     let (tx_asr_string, mut rx_asr_string) = channel::<(String, String, Vec<f32>, bool)>(10);
@@ -191,7 +209,12 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
 
     // channel for receive audio data and sample rate from tts
     #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-    let (tx_tts_audio, mut rx_tts_audio) = channel::<(Vec<f32>, usize, oneshot::Sender<()>)>(100);
+    let (tx_tts_audio, rx_tts_audio) = channel::<(Vec<f32>, usize, oneshot::Sender<()>)>(100);
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    {
+        let mut guard = TTS_RX.lock().await;
+        *guard = Some(rx_tts_audio);
+    }
 
     // asr model
     let asr_dir = PARAS.asr_dir.clone();
@@ -209,7 +232,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     tokio::spawn(async move {
         loop {
             let tmp_ref_text = ref_text.read().unwrap().clone();
-            if ref_audio.is_some() && tmp_ref_text.is_some() {
+            if ref_audio.is_none() || (ref_audio.is_some() && tmp_ref_text.is_some()) {
                 break
             } else {
                 sleep(Duration::from_millis(500)).await;
@@ -219,6 +242,126 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         if let Err(e) = run_omni_tts(&tts_dir, ref_audio, tmp_ref_text, ref_rms, rx_tts_string, tx_tts_audio).await {
             event!(Level::ERROR, "tts error: {}", e);
             exit(1);
+        }
+    });
+
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let tx_tts_string_clone = tx_tts_string.clone();
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let play_tx_clone = play_tx.clone();
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    let tx_start_clone2 = tx_start_clone.clone();
+    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+    tokio::spawn(async move {
+        let (tx_speak, mut rx_speak) = channel::<TextToTts>(100);
+        let mut guard = TEXT_TO_TTS.lock().await;
+        *guard = Some(tx_speak);
+        drop(guard);
+        let mut whole_tts_audio: Vec<f32> = Vec::new(); // 存储回答的音频数据
+        let mut tts_sample_rate = 0;
+        while let Some(speak_data) = rx_speak.recv().await {
+            // stop receive microphone audio
+            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
+            let _ = tx_start_clone2.try_send((false, ack_tx));
+            ack_rx.await.unwrap(); // 等待接收方确认
+
+            //for t in speak_data.answer.replace("\n\n", "\n").replace("\n", "。").split("。") {
+            let sub_answer: Vec<String> = speak_data.answer.replace("\n\n", "\n").split("\n").map(|a| a.to_string()).collect();
+            let mut sub_len = sub_answer.len();
+            for (i, t) in sub_answer.into_iter().enumerate() {
+                if i == 0 {
+                    // 第一段拆分出第一个逗号或句号前的内容，先处理这部分，减少语音回复的等待时间
+                    let mut idx_sep = (usize::MAX, "");
+                    for s in SEPS {
+                        if let Some(idx) = t.find(s) {
+                            if idx < idx_sep.0 {
+                                idx_sep = (idx, s);
+                            }
+                        }
+                    }
+                    if idx_sep.1.is_empty() {
+                        if let Err(_) = tx_tts_string_clone.send((t, None, Some(speak_data.language.clone()))).await {
+                            event!(Level::ERROR, "tts receiver dropped");
+                        }
+                    } else {
+                        let parts = t.split(idx_sep.1).map(|s| s.to_string()).collect::<Vec<_>>();
+                        sub_len += parts.len()-1;
+                        for p in parts {
+                            if let Err(_) = tx_tts_string_clone.send((p, None, Some(speak_data.language.clone()))).await {
+                                event!(Level::ERROR, "tts receiver dropped");
+                            }
+                        }
+                    }
+                } else {
+                    if let Err(_) = tx_tts_string_clone.send((t, None, Some(speak_data.language.clone()))).await {
+                        event!(Level::ERROR, "tts receiver dropped");
+                    }
+                }
+                /*
+                //if let Err(e) = run_tts_voice_clone("./moss-tts-nano-candle".to_string(), &t) {
+                if let Err(e) = run_tts_voice_clone("./OmniVoice".to_string(), &t, Some("Chinese".to_string())) {
+                    // tts error: Error - Qwen3-TTS: DriverError(CUDA_ERROR_UNSUPPORTED_PTX_VERSION, "the provided PTX was compiled with an unsupported toolchain.")
+                    event!(Level::ERROR, "tts error: {}", e);
+                }
+                */
+            }
+            for i in 0..sub_len {
+                //if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
+                let mut guard = TTS_RX.lock().await;
+                if let Some(rx_tts_audio) = guard.as_mut() {
+                    if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
+                        ack_tts_tx.send(()).unwrap(); // 发送确认
+                        whole_tts_audio.extend(audio_data.clone());
+                        /*
+                        let source = SamplesBuffer::new(1, sample_rate as u32, audio_data);
+                        sink.append(source);
+                        */
+                        if i + 1 == sub_len {
+                            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
+                            if let Err(_) = play_tx_clone.send((audio_data, sample_rate as u32, Some(ack_tx))) {
+                                event!(Level::ERROR, "play tts receiver dropped");
+                            }
+                            ack_rx.await.unwrap(); // 等待最后一段音频播放完
+                        } else {
+                            if let Err(_) = play_tx_clone.send((audio_data, sample_rate as u32, None)) {
+                                event!(Level::ERROR, "play tts receiver dropped");
+                            }
+                        }
+                        if tts_sample_rate == 0 {
+                            tts_sample_rate = sample_rate as u32;
+                        }
+                    }
+                }
+            }
+            if let (Some(query), Some(audio_save_path), Some(audio_id)) = (speak_data.query, speak_data.audio_save_path, speak_data.audio_id) {
+                // save tts anwser
+                if let Err(e) = write(format!("{}/model_{}.txt", audio_save_path, audio_id), &speak_data.answer) {
+                    event!(Level::ERROR, "save tts anwser error: {:?}", e);
+                }
+                // save tts audio
+                if let Err(e) = write_wav_sample(&whole_tts_audio, tts_sample_rate, audio_id, false, &audio_save_path) {
+                    event!(Level::ERROR, "save tts audio error: {:?}", e);
+                }
+                // save user question and llm answer to ``
+                if let Err(e) = append_line(&audio_save_path, format!("{}\t{}\t{}", audio_id, query, speak_data.answer.replace("\n", ""))) {
+                    event!(Level::ERROR, "append line to {}/all.txt error: {:?}", audio_save_path, e);
+                }
+            }
+            whole_tts_audio.clear();
+            // The sound plays in a separate thread. This call will block the current thread until the sink has finished playing all its queued sounds.
+            //sink.sleep_until_end();
+            /*
+            if let Err(e) = run_tts_voice_clone("./OmniVoice".to_string(), &speak_data.answer, Some("Chinese".to_string())) {
+                // tts error: Error - Qwen3-TTS: DriverError(CUDA_ERROR_UNSUPPORTED_PTX_VERSION, "the provided PTX was compiled with an unsupported toolchain.")
+                event!(Level::ERROR, "tts error: {}", e);
+            }
+            */
+            // start receive microphone audio
+            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
+            if let Err(e) = tx_start_clone2.try_send((true, ack_tx)) {
+                event!(Level::INFO, "asr finished, start receive microphone audio error: {:?}", e);
+            }
+            ack_rx.await.unwrap(); // 等待接收方确认
         }
     });
 
@@ -236,8 +379,8 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         let mut audio_id = get_audio_id(); // 音频问答编号
         let mut whole_string = String::new(); // 存储提问的字符串数据
         let mut whole_uer_audio: Vec<f32> = Vec::new(); // 存储提问的音频数据
-        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
-        let mut whole_tts_audio: Vec<f32> = Vec::new(); // 存储回答的音频数据
+        //#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+        //let mut whole_tts_audio: Vec<f32> = Vec::new(); // 存储回答的音频数据
         let mut history_msg: Vec<ChatMessage> = vec![ // 存储聊天记录
             ChatMessage::User{
                 content: ChatMessageContent::Text(CHAT_PROMPT.replace("是日常聊天助手", &role)),
@@ -246,7 +389,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         ];
         let mut today = "".to_string();
         let mut today_current: String;
-        let mut tts_sample_rate = 0;
+        //let mut tts_sample_rate = 0;
         let mut audio_save_path = format!("{}/audio_{}", outpath, today);
 
         /*
@@ -324,13 +467,14 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                     */
                 }
                 if run_llm_tts {
-                    let play_reply = if whole_string.contains("开启新对话") || whole_string.contains("start new chat") {
+                    let _play_reply = if whole_string.contains("开启新对话") || whole_string.contains("start new chat") {
                         history_msg = vec![
                             ChatMessage::User{
                                 content: ChatMessageContent::Text(CHAT_PROMPT.replace("是日常聊天助手", &role)),
                                 name: None,
                             },
                         ];
+                        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
                         if let Err(_) = tx_tts_string.send(("好的，已成功开启新对话".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
@@ -338,6 +482,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         event!(Level::INFO, "start new chat successfully");
                         true
                     } else if whole_string.contains("不记录历史") || whole_string.contains("without history") {
+                        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
                         if let Err(_) = tx_tts_string.send(("好的，已停止记录对话历史".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
@@ -345,6 +490,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         event!(Level::INFO, "change to no history mode successfully");
                         true
                     } else if whole_string.contains("记录历史") || whole_string.contains("with history") {
+                        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
                         if let Err(_) = tx_tts_string.send(("好的，已开始记录对话历史".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
@@ -354,14 +500,18 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                     } else {
                         false
                     };
-                    if play_reply {
-                        if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
-                            ack_tts_tx.send(()).unwrap(); // 发送确认
-                            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
-                            if let Err(_) = play_tx.send((audio_data, sample_rate as u32, Some(ack_tx))) {
-                                event!(Level::ERROR, "play tts receiver dropped");
+                    #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+                    if _play_reply {
+                        let mut guard = TTS_RX.lock().await;
+                        if let Some(rx_tts_audio) = guard.as_mut() {
+                            if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
+                                ack_tts_tx.send(()).unwrap(); // 发送确认
+                                let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
+                                if let Err(_) = play_tx.send((audio_data, sample_rate as u32, Some(ack_tx))) {
+                                    event!(Level::ERROR, "play tts receiver dropped");
+                                }
+                                ack_rx.await.unwrap(); // 等待最后一段音频播放完
                             }
-                            ack_rx.await.unwrap(); // 等待最后一段音频播放完
                         }
                     }
                 }
@@ -429,92 +579,16 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
 
                             #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
                             {
-                                //for t in answer.replace("\n\n", "\n").replace("\n", "。").split("。") {
-                                let sub_answer: Vec<String> = answer.replace("\n\n", "\n").split("\n").map(|a| a.to_string()).collect();
-                                let mut sub_len = sub_answer.len();
-                                for (i, t) in sub_answer.into_iter().enumerate() {
-                                    if i == 0 {
-                                        // 第一段拆分出第一个逗号或句号前的内容，先处理这部分，减少语音回复的等待时间
-                                        let seps = ["，", "。", "！", "？"];
-                                        let mut idx_sep = (usize::MAX, "");
-                                        for s in seps {
-                                            if let Some(idx) = t.find(s) {
-                                                if idx < idx_sep.0 {
-                                                    idx_sep = (idx, s);
-                                                }
-                                            }
-                                        }
-                                        if idx_sep.1.is_empty() {
-                                            if let Err(_) = tx_tts_string.send((t, None, Some(_language.clone()))).await {
-                                                event!(Level::ERROR, "tts receiver dropped");
-                                            }
-                                        } else {
-                                            let parts = t.split(idx_sep.1).map(|s| s.to_string()).collect::<Vec<_>>();
-                                            sub_len += parts.len()-1;
-                                            for p in parts {
-                                                if let Err(_) = tx_tts_string.send((p, None, Some(_language.clone()))).await {
-                                                    event!(Level::ERROR, "tts receiver dropped");
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        if let Err(_) = tx_tts_string.send((t, None, Some(_language.clone()))).await {
-                                            event!(Level::ERROR, "tts receiver dropped");
-                                        }
-                                    }
-                                    /*
-                                    //if let Err(e) = run_tts_voice_clone("./moss-tts-nano-candle".to_string(), &t) {
-                                    if let Err(e) = run_tts_voice_clone("./OmniVoice".to_string(), &t, Some("Chinese".to_string())) {
-                                        // tts error: Error - Qwen3-TTS: DriverError(CUDA_ERROR_UNSUPPORTED_PTX_VERSION, "the provided PTX was compiled with an unsupported toolchain.")
-                                        event!(Level::ERROR, "tts error: {}", e);
-                                    }
-                                    */
+                                let guard = TEXT_TO_TTS.lock().await;
+                                if let Some(tx) = guard.as_ref() {
+                                    let _ = tx.send(TextToTts{
+                                        query: Some(whole_string.clone()),
+                                        answer: answer.clone(),
+                                        language: _language.clone(),
+                                        audio_save_path: Some(audio_save_path.clone()),
+                                        audio_id: Some(audio_id),
+                                    }).await;
                                 }
-                                for i in 0..sub_len {
-                                    if let Some((audio_data, sample_rate, ack_tts_tx)) = rx_tts_audio.recv().await {
-                                        ack_tts_tx.send(()).unwrap(); // 发送确认
-                                        whole_tts_audio.extend(audio_data.clone());
-                                        /*
-                                        let source = SamplesBuffer::new(1, sample_rate as u32, audio_data);
-                                        sink.append(source);
-                                        */
-                                        if i + 1 == sub_len {
-                                            let (ack_tx, ack_rx) = oneshot::channel(); // 创建应答通道
-                                            if let Err(_) = play_tx.send((audio_data, sample_rate as u32, Some(ack_tx))) {
-                                                event!(Level::ERROR, "play tts receiver dropped");
-                                            }
-                                            ack_rx.await.unwrap(); // 等待最后一段音频播放完
-                                        } else {
-                                            if let Err(_) = play_tx.send((audio_data, sample_rate as u32, None)) {
-                                                event!(Level::ERROR, "play tts receiver dropped");
-                                            }
-                                        }
-                                        if tts_sample_rate == 0 {
-                                            tts_sample_rate = sample_rate as u32;
-                                        }
-                                    }
-                                }
-                                // save tts anwser
-                                if let Err(e) = write(format!("{}/model_{}.txt", audio_save_path, audio_id), &answer) {
-                                    event!(Level::ERROR, "save tts anwser error: {:?}", e);
-                                }
-                                // save tts audio
-                                if let Err(e) = write_wav_sample(&whole_tts_audio, tts_sample_rate, audio_id, false, &audio_save_path) {
-                                    event!(Level::ERROR, "save tts audio error: {:?}", e);
-                                }
-                                // save user question and llm answer to ``
-                                if let Err(e) = append_line(&audio_save_path, format!("{}\t{}\t{}", audio_id, whole_string, answer.replace("\n", ""))) {
-                                    event!(Level::ERROR, "append line to {}/all.txt error: {:?}", audio_save_path, e);
-                                }
-                                whole_tts_audio.clear();
-                                // The sound plays in a separate thread. This call will block the current thread until the sink has finished playing all its queued sounds.
-                                //sink.sleep_until_end();
-                                /*
-                                if let Err(e) = run_tts_voice_clone("./OmniVoice".to_string(), &answer, Some("Chinese".to_string())) {
-                                    // tts error: Error - Qwen3-TTS: DriverError(CUDA_ERROR_UNSUPPORTED_PTX_VERSION, "the provided PTX was compiled with an unsupported toolchain.")
-                                    event!(Level::ERROR, "tts error: {}", e);
-                                }
-                                */
                             }
                         }
                     }

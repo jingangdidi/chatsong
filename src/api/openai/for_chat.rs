@@ -30,7 +30,10 @@ use crate::{
         update_token,
         get_messages, // 获取指定uuid最近的指定数量个message
     },
-    api::handlers::chat::MainData,
+    api::handlers::{
+        chat::MainData,
+        speaker::use_speaker,
+    },
     error::MyError,
 };
 
@@ -38,6 +41,8 @@ use crate::{
 use crate::asr::AUDIO;
 #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
 use tokio::sync::mpsc;
+#[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+use crate::asr::{TextToTts, TEXT_TO_TTS};
 
 pub static STOP_NOTIFY: Lazy<Notify> = Lazy::new(|| Notify::new());
 
@@ -388,6 +393,20 @@ pub async fn use_stream(
                 event!(Level::WARN, "channel send error: {:?}", e);
             } else {
                 event!(Level::WARN, "{} no response result", uuid);
+            }
+        } else if is_local && use_speaker() { // 朗读答案
+            #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+            {
+                let guard = TEXT_TO_TTS.lock().await;
+                if let Some(tx) = guard.as_ref() {
+                    let _ = tx.send(TextToTts{
+                        query: None,
+                        answer: whole_answer.clone(),
+                        language: "Chinese".to_string(),
+                        audio_save_path: None,
+                        audio_id: None,
+                    }).await;
+                }
             }
         }
         // 记录答案
