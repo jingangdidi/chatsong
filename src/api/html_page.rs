@@ -20,8 +20,17 @@ use crate::{
 /// 将svg图片编码为base64使用，注意要加上“data:image/svg+xml;base64,”前缀，notepad++设置编码为“以UTF-8无BOM格式编码”
 /// https://base64.run/
 const ICON_SHORTCUT: &str = include_str!("../../assets/image/robot-7.txt");
-const ICON_USER: &str = include_str!("../../assets/image/user-icon-1.txt");
-const ICON_CHATGPT: &str = include_str!("../../assets/image/robot-1.txt");
+
+//const ICON_USER: &str = include_str!("../../assets/image/user-icon-1.txt");
+//const ICON_CHATGPT: &str = include_str!("../../assets/image/robot-1.txt");
+
+const ICON_USER: &str = include_str!("../../assets/image/morty-svgrepo-com.txt");
+const ICON_CHATGPT: &str = include_str!("../../assets/image/rick-svgrepo-com.txt");
+
+//const ICON_USER: &str = include_str!("../../assets/image/face-with-monocle-svgrepo-com.txt");
+//const ICON_CHATGPT: &str = include_str!("../../assets/image/thinking-face-svgrepo-com.txt");
+//const ICON_CHATGPT: &str = include_str!("../../assets/image/zany-face-svgrepo-com.txt");
+
 const ICON_DOWNLOAD: &str = include_str!("../../assets/image/download-square-svgrepo-com.txt");
 const ICON_UPLOAD: &str = include_str!("../../assets/image/attachment-2-svgrepo-com.txt");
 const ICON_HELP: &str = include_str!("../../assets/image/help-svgrepo-com.txt");
