@@ -758,6 +758,11 @@
         background: var(--textarea-border-color);
     }
 
+    /* 消息 id 范围命中的短线：蓝色边框阴影，不改变短线尺寸 */
+    .chat-question-marker.range-highlight {
+        box-shadow: 0 0 8px 4px rgba(113, 158, 206, 0.5);
+    }
+
     /* hover 预览浮层：显示问题和回答的开头 */
     .chat-question-preview {
         position: fixed;

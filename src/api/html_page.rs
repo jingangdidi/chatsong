@@ -110,6 +110,8 @@ const BAR: &str = r###"// 初始化左侧问题索引。
             let markers = [];
             let currentActiveIndex = 0;
             let rebuildTimer = null;
+            let rangeStartMessageId = null;
+            let rangeEndMessageId = null;
 
             // 摘要文本只保留前面一小段，避免 hover 浮层太长。
             const cut = (text, len) => {
@@ -255,6 +257,8 @@ const BAR: &str = r###"// 初始化左侧问题索引。
                     markers.push(createMarker(pair));
                 });
 
+                applyMessageRangeHighlight();
+
                 currentActiveIndex = Math.min(currentActiveIndex, Math.max(0, pairs.length - 1));
                 layoutMarkers();
             }
@@ -277,6 +281,45 @@ const BAR: &str = r###"// 初始化左侧问题索引。
                     marker.classList.remove('is-hovered');
                 });
             }
+
+            function setMessageRangeHighlight(startId, endId) {
+                rangeStartMessageId = Number(startId);
+                rangeEndMessageId = Number(endId);
+                applyMessageRangeHighlight();
+            }
+
+            function applyMessageRangeHighlight() {
+                const hasRange = Number.isFinite(rangeStartMessageId) && Number.isFinite(rangeEndMessageId);
+                const start = hasRange ? Math.min(rangeStartMessageId, rangeEndMessageId) : null;
+                const end = hasRange ? Math.max(rangeStartMessageId, rangeEndMessageId) : null;
+                const highlightedPairIndexes = new Set();
+
+                markers.forEach((marker) => {
+                    marker.classList.remove('range-highlight');
+                });
+
+                if (!hasRange) return;
+
+                for (let i = start; i <= end; i += 1) {
+                    const msgDiv = document.getElementById('m' + i);
+                    if (!msgDiv) continue;
+
+                    const messageBox = msgDiv.closest('.user-chat-box, .gpt-chat-box');
+                    const pairIndex = pairs.findIndex((pair) => {
+                        return pair.questionBoxes.includes(messageBox) || pair.answerBoxes.includes(messageBox);
+                    });
+
+                    if (pairIndex >= 0) {
+                        highlightedPairIndexes.add(pairIndex);
+                    }
+                }
+
+                highlightedPairIndexes.forEach((pairIndex) => {
+                    markers[pairIndex]?.classList.add('range-highlight');
+                });
+            }
+
+            window.setMessageRangeHighlight = setMessageRangeHighlight;
 
             function layoutMarkers() {
                 // 短线使用 CSS flex 在左侧固定间距居中排列。
@@ -2324,6 +2367,7 @@ print(b)
                         // 将窗口范围内的消息的头像border高亮
                         clearAvatarHighlight();
                         highlightMessageAvatars(jsonData.context_start, jsonData.context_end);
+                        window.setMessageRangeHighlight(jsonData.context_start, jsonData.context_end);
                         // 更新语音模式图标
                         const microphoneDiv = document.getElementById('left-microphone');
                         const microphoneImg = document.getElementById('microphone');
