@@ -1201,7 +1201,7 @@ async fn try_call_tool(
                     }
                 } else if is_main_agent && name_id[0] == "read_file" { // 读取大文件时转为调用 sub-agent
                     let read_file_para: ReadFileParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
-                    // 小文件（<4000）和 md 文件可以直接读取，大文件则通过 sub_agent 读取
+                    // 小文件（<500k）和 md 文件可以直接读取，大文件则通过 sub_agent 读取
                     let file_path = Path::new(&read_file_para.file_path);
                     let ext = if let Some(ext) = file_path.extension() {
                         Some(ext.to_ascii_lowercase().to_str().unwrap().to_string())
@@ -1209,7 +1209,7 @@ async fn try_call_tool(
                         None
                     };
                     let metadata = file_path.metadata()?;
-                    if metadata.len() < 4000 || if let Some(e) = ext { e == "md" } else { false } { // 直接读取
+                    if metadata.len() < 500000 || if let Some(e) = ext { e == "md" } else { false } { // 直接读取
                         Ok(PARAS.tools.run(name_id[1], paras))
                     } else { // 通过 sub_agent 读取
                         event!(Level::INFO, "{} main agent read_file by sub-agent", uuid);
