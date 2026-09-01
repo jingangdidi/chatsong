@@ -3,10 +3,12 @@ use std::process::exit;
 
 #[cfg(feature = "code-completion")]
 use arboard::Clipboard;
+use chrono::{Days, Local, TimeZone};
 use tokio::net::TcpListener;
 #[cfg(feature = "code-completion")]
 use tokio::sync::mpsc;
 use tokio::task;
+use tokio::time::sleep;
 use tracing::{event, Level};
 use tracing_subscriber::{
     filter::EnvFilter,
@@ -27,6 +29,9 @@ use chatsong::{
         tools::built_in_tools::schedule::start_scheduler,
     },
     ctrlc::wait_for_signal,
+    graph::save_graph,
+    info::save_all_chat,
+    memory::MEMORY,
 };
 
 #[cfg(feature = "code-completion")]
@@ -106,6 +111,12 @@ async fn main() {
         handles.push(handle);
     }
 
+    // 每天凌晨0点保存一次chat记录和记忆
+    let handle = task::spawn(async {
+        run_daily_at_midnight().await;
+    });
+    handles.push(handle);
+
     // 初始化调度管道，65秒扫描一次任务，定时任务间隔最好不要少于1分钟
     start_scheduler(65); // 内部有个 loop 循环，每65秒检查一次定时任务，定时任务下次运行时间<当前扫描时间则执行，并监听增加、删除、查看任务
 
@@ -133,5 +144,49 @@ async fn main() {
     if let Err(e) = axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>()).await {
         println!("{}", e); // 这里不要用`{:?}`，会打印结构体而不是打印指定的错误信息
         exit(1);
+    }
+}
+
+/// 每天凌晨0点保存一次chat记录和记忆
+async fn run_daily_at_midnight() {
+    loop {
+        let now = Local::now();
+
+        // 明天的日期
+        let tomorrow = now
+            .date_naive()
+            .checked_add_days(Days::new(1))
+            .expect("date overflow");
+
+        // 明天本地时间 00:00:00
+        let naive_midnight = tomorrow
+            .and_hms_opt(0, 0, 0)
+            .expect("invalid date");
+
+        let next_midnight = Local
+            .from_local_datetime(&naive_midnight)
+            .earliest()
+            .expect("wrong local date");
+
+        // chrono::Duration 转换为 std::time::Duration
+        let wait_duration = next_midnight
+            .signed_duration_since(now)
+            .to_std()
+            .expect("wrong duration");
+
+        event!(Level::INFO, "next save time: {}, wait {:?}", next_midnight, wait_duration);
+        sleep(wait_duration).await;
+
+        // 保存图文件
+        save_graph();
+        // 保存每个uuid的chat记录
+        save_all_chat();
+        // save memory
+        let data = MEMORY.lock().unwrap();
+        for memory in data.values() {
+            if memory.save {
+                let _ = memory.save_to_file();
+            }
+        }
     }
 }

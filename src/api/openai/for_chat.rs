@@ -203,11 +203,12 @@ pub async fn use_stream(
                         };
                         let c = match (tmp_content, tmp_reasoning_content_merge) {
                             (Some(ChatMessageContent::Text(c)), None) => { // 答案
+                                //println!("answer: {}", c);
                                 if start_stop_think == 0 && THOUGHT_START.contains(&c.as_ref()) {
                                     think = true;
                                     start_stop_think = 1; // 开始思维链
                                     None
-                                } else if start_stop_think == 7 {
+                                } else if start_stop_think == 2 || start_stop_think == 7 { // 这里加上判断2，避免只有一个思考过程时，start_stop_think 一直是2，前端把所有内容都显示为思考
                                     start_stop_think = 4; // 结束思维链
                                     whole_answer += &c;
                                     Some(c)
@@ -223,7 +224,8 @@ pub async fn use_stream(
                                     Some(c)
                                 }
                             },
-                            (None, Some(c)) => { // 思考过程
+                            (None, Some(c)) => { // 思考过程，如果只有一个思考过程，比如 OpenAI 就简单一句思考过程，会导致 start_stop_think 一直是2，没有再次运行到这里变为7，导致前端每个token前都会多一行`thinking ...`
+                                //println!("think: {}", c);
                                 if start_stop_think == 0 {
                                     think = true;
                                     start_stop_think = 2; // 开始思维链

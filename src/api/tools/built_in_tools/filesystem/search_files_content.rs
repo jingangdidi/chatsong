@@ -198,7 +198,10 @@ impl SearchFilesContent {
             &matcher,
             file_path,
             UTF8(|line_number, line| {
-                let actual_match = matcher.find(line.as_bytes())?.unwrap();
+                //let actual_match = matcher.find(line.as_bytes())?.unwrap();
+                let Some(actual_match) = matcher.find(line.as_bytes())? else {
+                    return Ok(true);
+                };
                 result.matches.push(ContentMatchResult {
                     line_number,
                     start_pos: actual_match.start(),
