@@ -650,7 +650,11 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
         None => {
             let chat_name = match chat_name {
                 Some(n) => if n.is_empty() {
-                    get_chat_name_from_user_msg(&message)
+                    if qa_msg_p.map(|(_, _, p)| p).unwrap_or(false) { // 开启新对话，第一条是 prompt，不提取对话名称
+                        None
+                    } else { // 开启新对话，第一条不是 prompt，提取对话名称
+                        get_chat_name_from_user_msg(&message)
+                    }
                 } else {
                     Some(n)
                 },

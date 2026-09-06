@@ -2228,7 +2228,7 @@ print(b)
         var para_num = document.getElementById("select-log-num").value;
         // 使用选择的prompt开启新对话
         var para_prompt = document.getElementById("select-prompt").value;
-        if (para_prompt !== '保持当前对话' && para_prompt !== 'keep current chat') {
+        if (para_prompt !== '-1') {
             para_chat_name = ''; // 开启新对话跳转时，不使用当前对话的名称
         }
         // 使用选择生成音频的声音
