@@ -18,6 +18,8 @@ pub mod run_x;
 pub mod hacker_news;
 pub mod schedule;
 pub mod sub_agent;
+#[cfg(feature = "screen-capture")]
+pub mod screen_capture;
 pub mod goal;
 pub mod memory;
 
@@ -65,6 +67,8 @@ use run_x::{
 use hacker_news::HackerNews;
 use schedule::ScheduleTask;
 use sub_agent::SubAgent;
+#[cfg(feature = "screen-capture")]
+use screen_capture::ScreenCapture;
 use goal::UpdateGoalStatus;
 use memory::GetAllMemory;
 
@@ -97,6 +101,8 @@ pub enum Group {
     HackerNews,
     ScheduleTask,
     SubAgent,
+    #[cfg(feature = "screen-capture")]
+    ScreenCapture,
     UpdateGoalStatus,
     Memory,
 }
@@ -112,6 +118,8 @@ impl Group {
             Group::HackerNews => "Hacker News".to_string(),
             Group::ScheduleTask => "schedule task".to_string(),
             Group::SubAgent => "sub-agent".to_string(),
+            #[cfg(feature = "screen-capture")]
+            Group::ScreenCapture => "screen capture".to_string(),
             Group::UpdateGoalStatus => "Update Goal Status".to_string(),
             Group::Memory => "memory".to_string(),
         }
@@ -127,6 +135,8 @@ impl Group {
             "Hacker News" => Ok(Group::HackerNews),
             "schedule task" => Ok(Group::ScheduleTask),
             "sub-agent" => Ok(Group::SubAgent),
+            #[cfg(feature = "screen-capture")]
+            "screen capture" => Ok(Group::ScreenCapture),
             "Update Goal Status" => Ok(Group::UpdateGoalStatus),
             "memory" => Ok(Group::Memory),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
@@ -201,6 +211,9 @@ impl BuiltInTools {
             (Arc::new(ScheduleTask::new()), Group::ScheduleTask),
             // sub-agent
             (Arc::new(SubAgent::new()), Group::SubAgent),
+            // screen capture
+            #[cfg(feature = "screen-capture")]
+            (Arc::new(ScreenCapture::new()), Group::ScreenCapture),
             // Update Goal Status
             (Arc::new(UpdateGoalStatus::new()), Group::UpdateGoalStatus),
             // memory

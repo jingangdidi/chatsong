@@ -98,6 +98,9 @@ safetensors = { version = "0.4.1", optional = true }
 #symphonia = { version = "0.5.4", features = ["all-codecs", "all-formats"], optional = true }
 symphonia = { version = "0.5.4", features = ["isomp4", "mp3", "aac"], optional = true } # https://docs.rs/symphonia/latest/src/symphonia/lib.rs.html#165
 
+# screen capture
+xcap = { version = "0.9.8", optional = true }
+
 [features]
 default = []
 
@@ -112,3 +115,5 @@ asr-metal = ["qwen3-asr/metal", "tokenizers", "rodio", "cpal", "hound", "rubato"
 tts = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
 tts-cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
 tts-metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
+
+screen-capture = ["xcap"]
