@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use serde::Deserialize; // Serialize
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value}; // https://docs.rs/serde_json/latest/serde_json/enum.Value.html
 use xcap::Monitor;
 
@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// A rectangle relative to the selected monitor's top-left corner.
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 struct CaptureRegion {
     x: u32,
     y: u32,
@@ -22,10 +22,11 @@ struct CaptureRegion {
     height: u32,
 }
 
-#[derive(Deserialize)]
-struct Params {
+#[derive(Deserialize, Serialize)]
+pub struct Params {
     /// Destination PNG path. It must be inside an allowed directory.
-    path: String,
+    #[serde(default)]
+    pub path: String,
 
     /// XCap monitor ID. When omitted, the primary monitor is used. 默认主屏
     #[serde(default)]
@@ -62,10 +63,12 @@ impl BuiltIn for ScreenCapture {
         json!({
             "type": "object",
             "properties": {
+                /*
                 "path": {
                     "type": "string",
                     "description": "Destination path for the screenshot. It must be inside an allowed directory and end with .png."
                 },
+                */
                 "monitor_id": {
                     "type": "integer",
                     "minimum": 0,
@@ -84,7 +87,8 @@ impl BuiltIn for ScreenCapture {
                     "additionalProperties": false
                 }
             },
-            "required": ["path"],
+            //"required": ["path"],
+            "required": [],
             "additionalProperties": false
         })
     }

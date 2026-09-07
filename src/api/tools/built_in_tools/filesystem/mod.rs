@@ -15,6 +15,8 @@ pub mod mermaid;
 pub mod move_file;
 pub mod read_file;
 pub mod read_multiple_files;
+#[cfg(feature = "screen-capture")]
+pub mod screen_capture;
 pub mod search_files;
 pub mod search_files_content;
 pub mod tail_file;
@@ -41,6 +43,8 @@ pub use mermaid::Mermaid;
 pub use move_file::MoveFile;
 pub use read_file::ReadFile;
 pub use read_multiple_files::ReadMultipleFiles;
+#[cfg(feature = "screen-capture")]
+pub use screen_capture::ScreenCapture;
 pub use search_files::SearchFiles;
 pub use search_files_content::SearchFilesContent;
 pub use tail_file::TailFile;

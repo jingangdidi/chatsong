@@ -80,6 +80,7 @@ use built_in_tools::{
         edit_file::Params,
         read_file::Params as ReadFileParams,
         read_multiple_files::Params as ReadMultipleFilesParams,
+        screen_capture::Params as ScreenCaptureParams,
         image_generation::image_generation,
         edit_image::edit_image,
     },
@@ -1180,6 +1181,19 @@ async fn try_call_tool(
                                     false,
                                     is_local,
                                 ).await
+                            } else if name_id[0] == "screen_capture" {
+                                let params: ScreenCaptureParams = match parse_tool_args::<ScreenCaptureParams>(paras, ArgFixSpec{ array_fields: None, object_fields: None }) {
+                                    Ok(mut p) => {
+                                        p.path = format!("{}/{}/screen_capture.png", PARAS.outpath, uuid); // 将输出路径固定到当前uuid输出路径
+                                        p
+                                    },
+                                    Err(e) => return Ok(Err(e)),
+                                };
+                                let new_run_para = match serde_json::to_string(&params) {
+                                    Ok(n) => n,
+                                    Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
+                                };
+                                Ok(PARAS.tools.run(name_id[1], &new_run_para))
                             } else {
                                 Ok(PARAS.tools.run(name_id[1], paras))
                             }
