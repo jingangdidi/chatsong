@@ -33,6 +33,7 @@ impl SingleExternalTool {
         if !self.args.is_empty() {
             tool_cmd.args(&self.args);
         }
+        println!("args: {:?}", args);
         if !args.is_empty() {
             let mut args_vec: Vec<String> = Vec::new();
             let mut value: String;
@@ -55,9 +56,13 @@ impl SingleExternalTool {
                         Value::Object(_) => return Err(MyError::OtherError{info: format!("external tool args value only support string, number, boolean, not Object: {}", args)}),
                     }
                     // push to vec
-                    args_vec.push(format!("--{k}"));
-                    if !value.is_empty() {
+                    if value == "positional" { // 位置参数，没有`--`或`-`
                         args_vec.push(value);
+                    } else {
+                        args_vec.push(format!("--{k}"));
+                        if !value.is_empty() {
+                            args_vec.push(value);
+                        }
                     }
                 }
             } else {
