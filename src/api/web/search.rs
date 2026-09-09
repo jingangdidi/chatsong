@@ -50,7 +50,7 @@ pub fn get_search_parse_result(uuid: &str, q: String) -> (Option<String>, String
         if PARAS.engine_key.is_empty() {
             (None, "When using a web search, it is essential to specify the -e parameter in command line or google_engine_key in config.txt".to_string())
         } else if PARAS.search_key.is_empty() {
-            (None, "When using a web search, it is essential to specify the -s parameter in command kine or google_search_key in config.txt".to_string())
+            (None, "When using a web search, it is essential to specify the -s parameter in command line or google_search_key in config.txt".to_string())
         } else {
             match search_web(uuid, &query, "10", is_en) { // 这里固定取前10个搜索结果
                 Ok(res) => (Some(res), "".to_string()),
