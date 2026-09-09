@@ -1,14 +1,18 @@
 use std::collections::HashMap;
-use std::io::Read;
 use std::process::{Command, Stdio};
 
 use serde::Deserialize;
 use serde_json::Value;
+use tracing::{event, Level};
 use uuid::Uuid;
 
 use crate::{
     error::MyError,
     tools::MyTools,
+    tools::{
+        parse_tool_args,
+        ArgFixSpec,
+    },
 };
 
 /// single external tool
@@ -33,11 +37,11 @@ impl SingleExternalTool {
         if !self.args.is_empty() {
             tool_cmd.args(&self.args);
         }
-        println!("args: {:?}", args);
         if !args.is_empty() {
             let mut args_vec: Vec<String> = Vec::new();
             let mut value: String;
-            let json_value: Value = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
+            let json_value: Value = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
+            //let json_value: Value = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
             if let Value::Object(map) = json_value {
                 for (k, v) in map {
                     // get value
@@ -56,7 +60,7 @@ impl SingleExternalTool {
                         Value::Object(_) => return Err(MyError::OtherError{info: format!("external tool args value only support string, number, boolean, not Object: {}", args)}),
                     }
                     // push to vec
-                    if value == "positional" { // 位置参数，没有`--`或`-`
+                    if k.starts_with("positional") { // 位置参数，没有`--`或`-`
                         args_vec.push(value);
                     } else {
                         args_vec.push(format!("--{k}"));
@@ -68,44 +72,51 @@ impl SingleExternalTool {
             } else {
                 return Err(MyError::OtherError{info: format!("external tool args `{:?}` must be object", args)})
             }
-            //println!("\n\n{:?}\n\n", args_vec);
+            event!(Level::INFO, "external tool raw json args: {}, args: {:?}", args, args_vec);
             tool_cmd.args(&args_vec);
         }
         tool_cmd
             .stdout(Stdio::piped()) // pipe stdout
-            .stderr(Stdio::piped()); // pipe stderr
-        let mut tool_cmd = tool_cmd
+            .stderr(Stdio::piped()) // pipe stderr
+            // 强制 Python 的标准输入输出使用 UTF-8
+            .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONUTF8", "1");
+        let tool_cmd = tool_cmd
             .spawn()
-            .map_err(|e| MyError::CommandError{info: format!("failed to execute {} ({}): {:?}", &self.name, &self.command, e)})?;
-        // wait and check status
-        let status = tool_cmd.wait()?;
-        if !status.success() {
-            return Err(MyError::CommandError{info: format!("execute {} ({}) failed with status: {}", &self.name, &self.command, status)})
-        }
+            .map_err(|e| MyError::CommandError{info: format!("failed to execute {} ({}): {:?}", &self.name, &self.command, e)})?
+            .wait_with_output()
+            .map_err(|e| MyError::CommandError{info: format!("failed while waiting for {} ({}): {}", self.name, self.command, e)})?;
         // stderr
-        let stderr: Option<String> = if let Some(mut stderr) = tool_cmd.stderr {
-            let mut buffer = String::new();
-            stderr.read_to_string(&mut buffer)?;
-            if buffer.is_empty() {
+        let stderr: Option<String> = {
+            let buffer = String::from_utf8_lossy(&tool_cmd.stderr);
+            if buffer.trim().is_empty() {
                 None
             } else {
-                Some(format!("stderr:\n{:?}", buffer.trim()))
+                Some(format!("stderr:\n{}", buffer.trim()))
             }
-        } else {
-            None
         };
         // stdout
-        let stdout: Option<String> = if let Some(mut stdout) = tool_cmd.stdout {
-            let mut buffer = String::new();
-            stdout.read_to_string(&mut buffer)?;
-            if buffer.is_empty() {
+        let stdout: Option<String> = {
+            let buffer = String::from_utf8_lossy(&tool_cmd.stdout);
+            if buffer.trim().is_empty() {
                 None
             } else {
-                Some(format!("stdout:\n{:?}", buffer.trim()))
+                Some(format!("stdout:\n{}", buffer.trim()))
             }
-        } else {
-            None
         };
+        // 在收集 stderr/stdout 后再检查失败状态
+        if !tool_cmd.status.success() {
+            return Err(MyError::CommandError {
+                info: format!(
+                    "execute {} ({}) failed with status: {}\n{}\n{}",
+                    &self.name,
+                    &self.command,
+                    tool_cmd.status,
+                    stdout.as_deref().unwrap_or(""),
+                    stderr.as_deref().unwrap_or(""),
+                ),
+            });
+        }
         // result
         Ok(match (stderr, stdout) {
             (Some(e), Some(o)) => (format!("{e}\n{o}"), None),
