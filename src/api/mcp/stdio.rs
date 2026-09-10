@@ -59,7 +59,7 @@ impl StdIoTransport {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn()?;
+        let mut child = cmd.spawn().map_err(|e| MyError::McpError{info: format!("Failed to spawn {}: {}", command, e)})?;
         // stdin
         let stdin = child
             .stdin
@@ -97,17 +97,22 @@ impl StdIoTransport {
             "params": params
         });
         // Send request via stdin
+        println!("1");
         let request_line = serde_json::to_string(&request_body).map_err(|e| MyError::JsonToStringError{error: e.into()})? + "\n";
         let mut stdin = self.stdin.lock().await;
-        stdin.write_all(request_line.as_bytes()).await?;
+        println!("2: {}", request_line);
+        stdin.write_all(request_line.as_bytes()).await.map_err(|e| MyError::McpError{info: format!("Failed to write stdin: {}", e)})?;
+        println!("3");
         stdin.flush().await?;
         drop(stdin);
         // Read response from stdout
         let mut stdout_reader = self.stdout_reader.lock().await;
         let mut response_line = String::new();
+        println!("4");
         stdout_reader.read_line(&mut response_line).await?;
         drop(stdout_reader);
         // Check for JSON-RPC errors
+        println!("5");
         let response_body: Value = serde_json::from_str(response_line.trim()).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         if let Some(error) = response_body.get("error") {
             return Err(MyError::McpError{info: format!("stdio MCP server error: {}", error)});
