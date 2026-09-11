@@ -327,10 +327,11 @@ impl MyMcp for StdIoServers {
     /// select tools by uuid first part, return uuid vector
     fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String> {
         let mut selected_tools: Vec<String> = Vec::new();
-        for tool in self.tools.iter() {
-            for id in ids {
-                if tool.id == *id {
+        for id in ids {
+            for tool in self.tools.iter() {
+                if tool.name_id == *id {
                     selected_tools.push(id.clone());
+                    break
                 }
             }
         }

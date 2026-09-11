@@ -94,6 +94,7 @@ use built_in_tools::{
 use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
+#[derive(Debug)]
 pub enum SelectedTools {
     All,                   // all tools
     AllBuiltIn,            // all built-in tools
@@ -352,6 +353,17 @@ pub async fn run_tools(
     let mut tool_schema = PARAS.tools.get_desc_and_schema(&selected_tools)?;
     // get mcp tools schema
     let mcp_schema = PARAS.mcp_servers.get_desc_and_schema(&selected_tools).await?;
+    // 如果是自定义选择的多个工具，打印每隔工具名
+    if let Some(SelectedTools::Multiple(_)) = selected_tools {
+        let mut names = Vec::new();
+        for t in &tool_schema {
+            names.push(t.function.name.as_str());
+        }
+        for t in &mcp_schema {
+            names.push(t.function.name.as_str());
+        }
+        event!(Level::INFO, "{} selected multiple tools: {}", uuid, names.join(", "));
+    }
     // 如果指定了skills，则加入一个激活指定skill的tool
     if selected_skills.is_some() {
         tool_schema.push(
