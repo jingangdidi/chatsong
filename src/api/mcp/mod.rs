@@ -105,6 +105,9 @@ pub trait MyMcp {
     /// select all tools, return name__id vector
     fn select_all_tools(&self) -> Vec<String>;
 
+    /// select tools by uuid first part, return uuid vector
+    fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String>;
+
     /// select tools by server id, return selected name__id vector
     fn select_tools_by_server_id(&self, id: &str) -> Vec<String>;
 
@@ -135,24 +138,24 @@ impl McpServers {
             let mut server_name = &stdio.tools[0].server_name;
             options.push(format!("                    <option disabled>--{}--</option>", server_name));
             if english {
-                options.push(format!("                    <option value='mcp_server_{}'>🟡 select all {}</option>", &stdio.tools[0].id, server_name));
+                options.push(format!("                    <option value='mcp_server_{}' data-tool-group='{}' data-tool-group-option='true'>🟡 select all {}</option>", &stdio.tools[0].id, server_name, server_name));
             } else {
-                options.push(format!("                    <option value='mcp_server_{}'>🟡 选择所有{}</option>", &stdio.tools[0].id, server_name));
+                options.push(format!("                    <option value='mcp_server_{}' data-tool-group='{}' data-tool-group-option='true'>🟡 选择所有{}</option>", &stdio.tools[0].id, server_name, server_name));
             }
             for tool in &stdio.tools {
                 if server_name != &tool.server_name {
                     server_name = &tool.server_name;
                     options.push(format!("                    <option disabled>--{}--</option>", server_name));
                     if english {
-                        options.push(format!("                    <option value='mcp_server_{}'>🟡 select all {}</option>", tool.id, server_name));
+                        options.push(format!("                    <option value='mcp_server_{}' data-tool-group='{}' data-tool-group-option='true'>🟡 select all {}</option>", tool.id, server_name, server_name));
                     } else {
-                        options.push(format!("                    <option value='mcp_server_{}'>🟡 选择所有{}</option>", tool.id, server_name));
+                        options.push(format!("                    <option value='mcp_server_{}' data-tool-group='{}' data-tool-group-option='true'>🟡 选择所有{}</option>", tool.id, server_name, server_name));
                     }
                 }
                 if let Some(desc) = &tool.description {
-                    options.push(format!("                    <option value='{}' title=\"{}\">{}</option>", tool.name_id, desc.replace("\"", "&quot;"), tool.name));
+                    options.push(format!("                    <option value='{}' data-tool-group='{}' title=\"{}\">{}</option>", tool.name_id, server_name, desc.replace("\"", "&quot;"), tool.name));
                 } else {
-                    options.push(format!("                    <option value='{}'>{}</option>", tool.name_id, tool.name));
+                    options.push(format!("                    <option value='{}' data-tool-group='{}'>{}</option>", tool.name_id, server_name, tool.name));
                 }
             }
             options.push("                </optgroup>".to_string());
@@ -185,6 +188,7 @@ impl McpServers {
                 SelectedTools::Group(_) => Vec::new(), // built-in group, select all tools of one group
                 SelectedTools::Single(_) => Vec::new(), // single built-in or external tool id
                 SelectedTools::McpServer(server_id) => self.stdio.select_tools_by_server_id(server_id), // single mcp server id, start with `mcp_server_`, select all tools of one server
+                SelectedTools::Multiple(multiple) => self.stdio.select_multiple_tools(&multiple),
                 SelectedTools::McpTool(name_id) => self.stdio.select_tool_by_name_and_id(name_id), // single mcp tool `name__id`, select by tool name and server id
             },
             None => Vec::new(), // not select any tool

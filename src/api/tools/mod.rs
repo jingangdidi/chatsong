@@ -95,14 +95,15 @@ use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
 pub enum SelectedTools {
-    All,               // all tools
-    AllBuiltIn,        // all built-in tools
-    AllExternal,       // all external tools
-    Group(String),     // built-in group, start with `built_in_group_`, select all tools of one group
-    Single(String),    // single built-in or external tool id
-    AllMcp,            // all mcp tools
-    McpServer(String), // single mcp server id, start with `mcp_server_`, select all tools of one server
-    McpTool(String),   // single mcp tool `name__id`, select by tool name and server id
+    All,                   // all tools
+    AllBuiltIn,            // all built-in tools
+    AllExternal,           // all external tools
+    Group(String),         // built-in group, start with `built_in_group_`, select all tools of one group
+    Single(String),        // single built-in or external tool id
+    AllMcp,                // all mcp tools
+    Multiple(Vec<String>), // multiple tools
+    McpServer(String),     // single mcp server id, start with `mcp_server_`, select all tools of one server
+    McpTool(String),       // single mcp tool `name__id`, select by tool name and server id
 }
 
 /// trait for built-in tools & external tools
@@ -115,6 +116,9 @@ pub trait MyTools {
 
     /// select all tools, return uuid vector
     fn select_all_tools(&self) -> Vec<String>;
+
+    /// select tools by uuid first part, return uuid vector
+    fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String>;
 
     /// get approval message
     fn get_approval(&self, id: &str, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError>;
@@ -136,11 +140,13 @@ impl Tools {
         let mut groups: Vec<(Group, String)> = built_in.groups.iter().map(|g| (g.clone(), g.to_string())).collect();
         groups.sort_by(|a, b| a.1.cmp(&b.1)); // sort by group name
         if english {
+            options.push("<option value='select_multiple'>⚪ multiple tools</option>".to_string());
             options.push("<option value='not_select_any_tools' selected>⚪ not using any tools</option>".to_string());
             options.push("                <option value='select_all_tools'>🔴 select all tools</option>".to_string());
             options.push("                <optgroup label='built-in tools'>".to_string());
             options.push("                    <option value='select_all_built_in'>🟢 select all built-in tools</option>".to_string());
         } else {
+            options.push("<option value='select_multiple'>⚪ 在输入框中选择</option>".to_string());
             options.push("<option value='not_select_any_tools' selected>⚪ 不使用任何工具</option>".to_string());
             options.push("                <option value='select_all_tools'>🔴 选择所有工具</option>".to_string());
             options.push("                <optgroup label='内置工具'>".to_string());
@@ -155,12 +161,12 @@ impl Tools {
             tools.sort_by(|a, b| a.1.cmp(&b.1)); // sort by tool name
             options.push(format!("                    <option disabled>--{}--</option>", g.1));
             if english {
-                options.push(format!("                    <option value='built_in_group_{}'>🟢 select all {}</option>", g.1, g.1));
+                options.push(format!("                    <option value='built_in_group_{}' data-tool-group='{}' data-tool-group-option='true'>🟢 select all {}</option>", g.1, g.1, g.1));
             } else {
-                options.push(format!("                    <option value='built_in_group_{}'>🟢 选择所有{}</option>", g.1, g.1));
+                options.push(format!("                    <option value='built_in_group_{}' data-tool-group='{}' data-tool-group-option='true'>🟢 选择所有{}</option>", g.1, g.1, g.1));
             }
             for t in tools {
-                options.push(format!("                    <option value='{}' title=\"{}\">{}</option>", t.0, t.2.replace("\"", "&quot;"), t.1));
+                options.push(format!("                    <option value='{}' data-tool-group='{}' title=\"{}\">{}</option>", t.0, g.1, t.2.replace("\"", "&quot;"), t.1));
             }
         }
         options.push("                </optgroup>".to_string());
@@ -213,6 +219,7 @@ impl Tools {
                     }
                 },
                 SelectedTools::AllMcp => (Vec::new(), Vec::new()), // all mcp tools
+                SelectedTools::Multiple(multiple) => (self.built_in.select_multiple_tools(&multiple), self.external.select_multiple_tools(&multiple)),
                 SelectedTools::McpServer(_) => (Vec::new(), Vec::new()), // single mcp server id, start with `mcp_server_`, select all tools of one server
                 SelectedTools::McpTool(_) => (Vec::new(), Vec::new()), // single mcp tool `name__id`, select by tool name and server id
             },

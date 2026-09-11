@@ -1234,6 +1234,8 @@ impl ClientPara {
                 Some(SelectedTools::Group(group.to_string()))
             } else if let Some(server_id) = t.strip_prefix("mcp_server_") {
                 Some(SelectedTools::McpServer(server_id.to_string()))
+            } else if t.contains(",") { // 输入框内通过`@`选择的多个工具
+                Some(SelectedTools::Multiple(t.split(",").map(|s| s.to_string()).collect()))
             } else if t.contains("__") { // single mcp tool `name__id`, select by tool name and server id
                 Some(SelectedTools::McpTool(t.to_string()))
             } else { // select single built-in or external tool

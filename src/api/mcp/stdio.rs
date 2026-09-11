@@ -57,7 +57,8 @@ impl StdIoTransport {
         cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            //.stderr(Stdio::piped()); // 后面没有读取，有报错时可能导致 stderr 缓冲区塞满
+            .stderr(Stdio::inherit()); // 直接把错误打印出来
 
         let mut child = cmd.spawn().map_err(|e| MyError::McpError{info: format!("Failed to spawn {}: {}", command, e)})?;
         // stdin
@@ -101,7 +102,17 @@ impl StdIoTransport {
         let request_line = serde_json::to_string(&request_body).map_err(|e| MyError::JsonToStringError{error: e.into()})? + "\n";
         let mut stdin = self.stdin.lock().await;
         println!("2: {}", request_line);
-        stdin.write_all(request_line.as_bytes()).await.map_err(|e| MyError::McpError{info: format!("Failed to write stdin: {}", e)})?;
+        //stdin.write_all(request_line.as_bytes()).await.map_err(|e| MyError::McpError{info: format!("Failed to write stdin: {}", e)})?;
+        if let Err(e) = stdin.write_all(request_line.as_bytes()).await {
+            let status = self.child.lock().await.try_wait();
+            return Err(MyError::McpError {info: format!(
+                "write failed: kind={:?}, raw_os_error={:?}, error={}; child_status={:?}",
+                e.kind(),
+                e.raw_os_error(),
+                e,
+                status,
+            )})
+        }
         println!("3");
         stdin.flush().await?;
         drop(stdin);
@@ -309,6 +320,19 @@ impl MyMcp for StdIoServers {
         let mut selected_tools: Vec<String> = Vec::new();
         for tool in self.tools.iter() {
             selected_tools.push(tool.name_id.clone());
+        }
+        selected_tools
+    }
+
+    /// select tools by uuid first part, return uuid vector
+    fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String> {
+        let mut selected_tools: Vec<String> = Vec::new();
+        for tool in self.tools.iter() {
+            for id in ids {
+                if tool.id == *id {
+                    selected_tools.push(id.clone());
+                }
+            }
         }
         selected_tools
     }

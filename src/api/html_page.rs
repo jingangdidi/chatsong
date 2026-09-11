@@ -1096,7 +1096,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                     <input id='upload-file' type='file' name='file' multiple>
                     <img id='upload-file-icon' src='{}' />
                 </label>
-                <textarea autofocus name='Input your query' id='input_query' placeholder='{}'></textarea>
+                <div class='query-wrapper'>
+                    <textarea autofocus name='Input your query' id='input_query' placeholder='{}'></textarea>
+                    <div id='tool-suggestions' class='tool-suggestions'></div>
+                </div>
                 <span id='submit_span' class='for_focus_button'>
                     <img src='{}' class='search_btn' aria-hidden='true' />", page_data.upload, ICON_UPLOAD, page_data.textarea, ICON_SEND);
     result += r###"
@@ -1263,6 +1266,736 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         document.getElementById('show-in-token').value = '{}';
         document.getElementById('show-out-token').value = '{}';
 ", prompt_name, uuid, token[0], token[1]);
+    // 在输入框通过`@`多选工具
+    result += r###"
+    (() => {
+        'use strict';
+
+        const input = document.getElementById('input_query');
+        const select = document.getElementById('select-tool');
+        const suggestions = document.getElementById('tool-suggestions');
+
+        if (!input || !select || !suggestions) {
+            console.error(
+                '缺少必要元素：input_query、select-tool 或 tool-suggestions'
+            );
+            return;
+        }
+
+        /*
+         * categories:
+         *
+         * [
+         *   {
+         *     name: '内置工具',
+         *     groups: [...],
+         *     directTools: [...]
+         *   }
+         * ]
+         *
+         * allTools:
+         *
+         * [
+         *   {
+         *     name: 'read_file',
+         *     value: '19dd5445',
+         *     category: '内置工具',
+         *     group: 'file system'
+         *   }
+         * ]
+         */
+
+        const categories = [];
+        const allTools = [];
+
+        let mentionStart = -1;
+        let cursorPosition = -1;
+
+        buildToolTree();
+
+        /*
+         * 从原来的 select 构建工具树。
+         *
+         * 绝不根据 option 的显示文本判断分组。
+         * 分组只使用：
+         *
+         * option.dataset.toolGroup
+         * option.dataset.toolGroupOption
+         */
+        function buildToolTree() {
+            Array.from(select.children).forEach(optgroup => {
+                if (optgroup.tagName !== 'OPTGROUP') {
+                    return;
+                }
+
+                const category = {
+                    type: 'category',
+                    name: optgroup.label.trim(),
+                    groups: [],
+                    directTools: []
+                };
+
+                const groupMap = new Map();
+                const options = Array.from(optgroup.children).filter(option => {
+                    return (
+                        option.tagName === 'OPTION' &&
+                        !option.disabled
+                    );
+                });
+
+                /*
+                 * 第一阶段：创建所有二级组。
+                 *
+                 * 不论二级 option 在具体工具之前还是之后，
+                 * 都能先完成分组定义。
+                 */
+                options.forEach(option => {
+                    const isGroupOption =
+                        option.dataset.toolGroupOption === 'true';
+
+                    if (!isGroupOption) {
+                        return;
+                    }
+
+                    const groupName = (
+                        option.dataset.toolGroup || ''
+                    ).trim();
+
+                    if (!groupName) {
+                        console.warn(
+                            '二级分组选项缺少 data-tool-group：',
+                            option
+                        );
+                        return;
+                    }
+
+                    /*
+                     * 同一个一级分类内，data-tool-group 应当唯一。
+                     */
+                    if (groupMap.has(groupName)) {
+                        console.warn(
+                            '发现重复的二级工具组：',
+                            category.name,
+                            groupName
+                        );
+                        return;
+                    }
+
+                    const group = {
+                        type: 'group',
+                        name: groupName,
+
+                        /*
+                         * displayName 仅用于界面显示，可以是中文或英文。
+                         */
+                        displayName: option.textContent.trim(),
+
+                        value: option.value.trim(),
+                        category: category.name,
+                        tools: []
+                    };
+
+                    category.groups.push(group);
+                    groupMap.set(groupName, group);
+                });
+
+                /*
+                 * 第二阶段：添加所有具体工具。
+                 */
+                options.forEach(option => {
+                    const isGroupOption =
+                        option.dataset.toolGroupOption === 'true';
+
+                    /*
+                     * 二级分组选项不是真实工具。
+                     */
+                    if (isGroupOption) {
+                        return;
+                    }
+
+                    const name = option.textContent.trim();
+                    const value = option.value.trim();
+
+                    if (!name || !value) {
+                        return;
+                    }
+
+                    /*
+                     * 跳过 select 顶层逻辑选项。
+                     *
+                     * optgroup 内如果还有其他控制项，
+                     * 推荐给它增加：
+                     *
+                     * data-tool-control="true"
+                     */
+                    if (
+                        option.dataset.toolControl === 'true' ||
+                        value === 'not_select_any_tools' ||
+                        value === 'select_all_tools' ||
+                        value.startsWith('select_all_')
+                    ) {
+                        return;
+                    }
+
+                    const groupName = (
+                        option.dataset.toolGroup || ''
+                    ).trim();
+
+                    const tool = {
+                        type: 'tool',
+                        name: name,
+                        value: value,
+                        category: category.name,
+                        group: groupName || null
+                    };
+
+                    allTools.push(tool);
+
+                    /*
+                     * 没有 data-tool-group：
+                     * 说明工具直接属于一级分类。
+                     */
+                    if (!groupName) {
+                        category.directTools.push(tool);
+                        return;
+                    }
+
+                    /*
+                     * 有 data-tool-group：
+                     * 必须加入对应二级组。
+                     */
+                    const group = groupMap.get(groupName);
+
+                    if (!group) {
+                        console.warn(
+                            '具体工具引用了不存在的二级分组：',
+                            {
+                                category: category.name,
+                                group: groupName,
+                                tool: name
+                            }
+                        );
+
+                        /*
+                         * 配置错误时将它当作一级分类的直接工具，
+                         * 避免工具彻底消失。
+                         */
+                        tool.group = null;
+                        category.directTools.push(tool);
+                        return;
+                    }
+
+                    group.tools.push(tool);
+                });
+
+                categories.push(category);
+            });
+        }
+
+        /*
+         * 获取一级分类下的所有具体工具。
+         */
+        function getCategoryTools(category) {
+            const result = [];
+            const used = new Set();
+
+            category.directTools.forEach(tool => {
+                if (!used.has(tool.value)) {
+                    used.add(tool.value);
+                    result.push(tool);
+                }
+            });
+
+            category.groups.forEach(group => {
+                group.tools.forEach(tool => {
+                    if (!used.has(tool.value)) {
+                        used.add(tool.value);
+                        result.push(tool);
+                    }
+                });
+            });
+
+            return result;
+        }
+
+        /*
+         * 监听输入。
+         */
+        input.addEventListener('input', updateSuggestions);
+        input.addEventListener('click', updateSuggestions);
+        input.addEventListener('keyup', event => {
+            if (
+                event.key !== 'ArrowUp' &&
+                event.key !== 'ArrowDown' &&
+                event.key !== 'Enter' &&
+                event.key !== 'Escape'
+            ) {
+                updateSuggestions();
+            }
+        });
+
+        /*
+         * 显示候选菜单。
+         *
+         * 重点：
+         *
+         * /@([^\n@]*)$/
+         *
+         * 只获取最后一个 @ 后面的内容，
+         * 所以输入多个 @ 时不会互相干扰。
+         */
+        function updateSuggestions() {
+            const position = input.selectionStart;
+            const beforeCursor = input.value.slice(0, position);
+
+            /*
+             * 只匹配光标前正在输入的 @关键字。
+             *
+             * 支持：
+             * @
+             * @r
+             * @read
+             *
+             * 不匹配：
+             * @read_file 请读取文件
+             *
+             * 因为 @ 后出现空格时，工具搜索已经结束。
+             */
+            const match = beforeCursor.match(/@([^\s@]*)$/);
+
+            if (!match) {
+                hideSuggestions();
+                return;
+            }
+
+            /*
+             * 防止普通邮箱地址触发，例如：
+             * user@example.com
+             *
+             * 要求 @ 位于文本开头，或者 @ 前面是空白字符。
+             */
+            const atPosition = position - match[0].length;
+
+            if (
+                atPosition > 0 &&
+                !/\s/.test(beforeCursor.charAt(atPosition - 1))
+            ) {
+                hideSuggestions();
+                return;
+            }
+
+            mentionStart = atPosition;
+            cursorPosition = position;
+
+            const keyword = match[1].toLowerCase();
+
+            renderSuggestions(keyword);
+        }
+
+        /*
+         * 前缀匹配：
+         *
+         * @       -> 显示全部
+         * @r      -> read_file、run_command、resolve-library-id
+         * @file   -> file system 分组及其相关工具
+         *
+         * 不使用 includes，而使用 startsWith。
+         */
+        function startsWithKeyword(value, keyword) {
+            return (
+                keyword === '' ||
+                value.toLowerCase().startsWith(keyword)
+            );
+        }
+
+        /*
+         * 渲染三级候选菜单。
+         */
+        function renderSuggestions(keyword) {
+            suggestions.innerHTML = '';
+
+            let hasResult = false;
+
+            categories.forEach(category => {
+                const allCategoryTools = getCategoryTools(category);
+
+                /*
+                 * 一级分类是否匹配。
+                 *
+                 * 例如：
+                 * @内置
+                 *
+                 * 如果一级分类匹配，则显示该分类内的全部组和工具。
+                 */
+                const categoryMatched =
+                    startsWithKeyword(category.name, keyword);
+
+                /*
+                 * 判断一级分类下是否存在匹配的二级组或具体工具。
+                 */
+                const categoryHasChildMatch =
+                    category.groups.some(group => {
+                        const groupMatched =
+                            startsWithKeyword(group.name, keyword);
+
+                        const groupHasMatchedTool =
+                            group.tools.some(tool =>
+                                startsWithKeyword(tool.name, keyword)
+                            );
+
+                        return groupMatched || groupHasMatchedTool;
+                    }) ||
+                    category.directTools.some(tool =>
+                        startsWithKeyword(tool.name, keyword)
+                    );
+
+                /*
+                 * 当前分类及其子项均不匹配，不显示。
+                 */
+                if (!categoryMatched && !categoryHasChildMatch) {
+                    return;
+                }
+
+                hasResult = true;
+
+                /*
+                 * 第一级分类。
+                 *
+                 * 点击后插入该一级分类下的全部具体工具，
+                 * 不插入一级分类名称。
+                 */
+                const categoryItem = document.createElement('div');
+
+                categoryItem.className =
+                    'tool-suggestion-item tool-suggestion-category';
+
+                categoryItem.textContent =
+                    '📦 ' +
+                    category.name +
+                    ' (' +
+                    allCategoryTools.length +
+                    ')';
+
+                categoryItem.title =
+                    '选择“' +
+                    category.name +
+                    '”分类下的全部工具';
+
+                categoryItem.addEventListener('mousedown', event => {
+                    event.preventDefault();
+                    insertTools(allCategoryTools);
+                });
+
+                suggestions.appendChild(categoryItem);
+
+                /*
+                 * 按照以下顺序渲染：
+                 *
+                 * 二级组 A
+                 *     组 A 的工具
+                 * 二级组 B
+                 *     组 B 的工具
+                 *
+                 * 而不是：
+                 *
+                 * 二级组 A
+                 * 二级组 B
+                 * 所有具体工具
+                 */
+                category.groups.forEach(group => {
+                    const groupMatched =
+                        categoryMatched ||
+                        startsWithKeyword(group.name, keyword);
+
+                    const matchedGroupTools = group.tools.filter(tool => {
+                        return (
+                            categoryMatched ||
+                            /*
+                             * 搜索词匹配组名时，显示该组内所有工具。
+                             */
+                            startsWithKeyword(group.name, keyword) ||
+                            /*
+                             * 搜索词匹配具体工具名时，只显示匹配工具。
+                             */
+                            startsWithKeyword(tool.name, keyword)
+                        );
+                    });
+
+                    /*
+                     * 组名和组内工具均不匹配时，不显示该组。
+                     */
+                    if (!groupMatched && matchedGroupTools.length === 0) {
+                        return;
+                    }
+
+                    /*
+                     * 先显示二级组。
+                     */
+                    const groupItem = document.createElement('div');
+
+                    groupItem.className =
+                        'tool-suggestion-item tool-suggestion-group';
+
+                    groupItem.textContent =
+                        group.displayName +
+                        ' (' +
+                        group.tools.length +
+                        ')';
+
+                    groupItem.title =
+                        '选择“' +
+                        group.name +
+                        '”组内的全部工具';
+
+                    groupItem.addEventListener('mousedown', event => {
+                        event.preventDefault();
+                        insertTools(group.tools);
+                    });
+
+                    suggestions.appendChild(groupItem);
+
+                    /*
+                     * 紧接着显示该二级组内的工具。
+                     */
+                    matchedGroupTools.forEach(tool => {
+                        appendToolSuggestion(tool);
+                    });
+                });
+
+                /*
+                 * 没有二级组、直接属于一级分类的工具。
+                 *
+                 * 例如：
+                 *
+                 * 外部工具
+                 *     crawl4ai
+                 *
+                 * crawl4ai 不需要 data-tool-group。
+                 */
+                category.directTools
+                    .filter(tool => {
+                        return (
+                            categoryMatched ||
+                            startsWithKeyword(tool.name, keyword)
+                        );
+                    })
+                    .forEach(tool => {
+                        appendToolSuggestion(tool);
+                    });
+            });
+
+            if (!hasResult) {
+                const emptyItem = document.createElement('div');
+
+                emptyItem.className = 'tool-suggestion-empty';
+                emptyItem.textContent = '没有匹配的工具或工具组';
+
+                suggestions.appendChild(emptyItem);
+            }
+
+            suggestions.style.display = 'block';
+        }
+
+        function appendToolSuggestion(tool) {
+            const toolItem = document.createElement('div');
+
+            toolItem.className =
+                'tool-suggestion-item tool-suggestion-tool';
+
+            toolItem.textContent = tool.name;
+
+            toolItem.title =
+                tool.category +
+                (tool.group ? ' / ' + tool.group : '') +
+                ' / ' +
+                tool.name;
+
+            toolItem.addEventListener('mousedown', event => {
+                event.preventDefault();
+                insertTools([tool]);
+            });
+
+            suggestions.appendChild(toolItem);
+        }
+
+        /*
+         * 插入具体工具名称。
+         *
+         * 一级或二级选择时：
+         *
+         * @tool_a @tool_b @tool_c
+         *
+         * 不插入：
+         *
+         * @内置工具
+         * @file system
+         */
+        function insertTools(tools) {
+            if (!tools || tools.length === 0) {
+                hideSuggestions();
+                return;
+            }
+
+            const uniqueTools = [];
+            const used = new Set();
+
+            tools.forEach(tool => {
+                if (!used.has(tool.value)) {
+                    used.add(tool.value);
+                    uniqueTools.push(tool);
+                }
+            });
+
+            const insertText =
+                uniqueTools
+                    .map(tool => '@' + tool.name)
+                    .join(' ') + ' ';
+
+            const currentText = input.value;
+
+            input.value =
+                currentText.slice(0, mentionStart) +
+                insertText +
+                currentText.slice(cursorPosition);
+
+            const newPosition =
+                mentionStart + insertText.length;
+
+            input.focus();
+            input.setSelectionRange(newPosition, newPosition);
+
+            hideSuggestions();
+        }
+
+        /*
+         * 从工具名称获取工具。
+         */
+        function getToolByName(name) {
+            const normalizedName = name.toLowerCase();
+
+            return allTools.find(tool => {
+                return tool.name.toLowerCase() === normalizedName;
+            });
+        }
+
+        /*
+         * 提交时从最终输入框内容解析工具。
+         *
+         * 输入：
+         *
+         * @read_file @write_file 请读取配置
+         *
+         * 返回：
+         *
+         * {
+         *   question: '请读取配置',
+         *   tools: ['19dd5445', 'e552638d']
+         * }
+         */
+        function extractToolsAndQuestion(rawText) {
+            const toolValues = [];
+            const usedValues = new Set();
+
+            if (!rawText || !rawText.trim()) {
+                return {
+                    question: '',
+                    tools: []
+                };
+            }
+
+            /*
+             * 工具名不含空格，因此使用工具名称生成匹配正则。
+             *
+             * 名称较长的工具优先匹配。
+             */
+            const toolNames = allTools
+                .map(tool => tool.name)
+                .sort((a, b) => b.length - a.length);
+
+            if (toolNames.length === 0) {
+                return {
+                    question: rawText.trim(),
+                    tools: []
+                };
+            }
+
+            const toolNamePattern = toolNames
+                .map(escapeRegExp)
+                .join('|');
+
+            const mentionRegex = new RegExp(
+                '@(' + toolNamePattern + ')(?=\\s|$)',
+                'gi'
+            );
+
+            const question = rawText
+                .replace(
+                    mentionRegex,
+                    (fullMatch, matchedName) => {
+                        const tool = getToolByName(matchedName);
+
+                        if (!tool) {
+                            return fullMatch;
+                        }
+
+                        if (!usedValues.has(tool.value)) {
+                            usedValues.add(tool.value);
+                            toolValues.push(tool.value);
+                        }
+
+                        /*
+                         * 从发送给后端的问题中删除 @工具名。
+                         */
+                        return '';
+                    }
+                )
+                .replace(/[ \t]+/g, ' ')
+                .replace(/\n[ \t]+/g, '\n')
+                .trim();
+
+            return {
+                question,
+                tools: toolValues
+            };
+        }
+
+        function escapeRegExp(value) {
+            return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function hideSuggestions() {
+            suggestions.style.display = 'none';
+            suggestions.innerHTML = '';
+
+            mentionStart = -1;
+            cursorPosition = -1;
+        }
+
+        /*
+         * 点击外部关闭候选框。
+         */
+        document.addEventListener('mousedown', event => {
+            if (
+                !input.contains(event.target) &&
+                !suggestions.contains(event.target)
+            ) {
+                hideSuggestions();
+            }
+        });
+
+        /*
+         * 给你的提交逻辑调用。
+         */
+        window.extractToolsAndQuestion = extractToolsAndQuestion;
+
+        /*
+         * 可选：获取当前所有工具定义。
+         */
+        window.getAllTools = function () {
+            return allTools.slice();
+        };
+    })();
+"###;
     result += &format!("        {}
     </script>
 </body>
@@ -1284,6 +2017,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     var goal_mode = false;
     var speaker_mode = false;
     var tool_result = ''; // 调用工具的result部分
+    var multiple_tools = '';
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
         select.addEventListener('change', function() {
@@ -2184,7 +2918,12 @@ print(b)
     }
     // 获取用户发起提问时提交的信息
     function get_url(start_microphone) {
-        var req = document.getElementById("input_query").value;
+        const inputQuery = document.getElementById('input_query');
+        const result = window.extractToolsAndQuestion(inputQuery.value); // 拆分 tool 和问题
+
+        //var req = document.getElementById("input_query").value;
+        var req = result.question;
+
         if (req !== '') { // 输入不为空才不在界面显示输入内容
             emptyInput = false;
             // 插入用户输入内容
@@ -2199,7 +2938,19 @@ print(b)
         // 获取选择的模型
         var para_model = document.getElementById("select-model").value;
         // get selected tools
-        var para_tool = document.getElementById("select-tool").value;
+        let para_tool = document.getElementById("select-tool").value;
+        if ((para_tool === 'not_select_any_tools' || para_tool === 'select_multiple') && Array.isArray(result.tools) && result.tools.length > 0) { // 下拉优先级高于输入框内通过`@`选择
+            document.getElementById("select-tool").value = 'select_multiple';
+            multiple_tools = result.tools.join(',');
+            para_tool = multiple_tools;
+        } else if (para_tool === 'select_multiple') {
+            if (multiple_tools == '') {
+                document.getElementById("select-tool").value = 'not_select_any_tools';
+                para_tool = 'not_select_any_tools';
+            } else {
+                para_tool = multiple_tools;
+            }
+        }
         // plan mode
         var para_plan = document.getElementById("select-plan").checked;
         // get selected skill

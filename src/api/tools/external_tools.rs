@@ -162,6 +162,17 @@ impl MyTools for ExternalTools {
         selected_tools
     }
 
+    /// select tools by uuid first part, return uuid vector
+    fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String> {
+        let mut selected_tools: Vec<String> = Vec::new();
+        for id in ids {
+            if self.id_map.contains_key(id) {
+                selected_tools.push(id.clone());
+            }
+        }
+        selected_tools
+    }
+
     /// get approval message
     fn get_approval(&self, id: &str, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
         match self.id_map.get(id) {
