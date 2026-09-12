@@ -23,7 +23,7 @@ use tracing_subscriber::{
 */
 
 use chatsong::{
-    parse_paras::PARAS,
+    parse_paras::{parse_para, PARAS},
     api::{
         configure,
         tools::built_in_tools::schedule::start_scheduler,
@@ -44,6 +44,18 @@ use chatsong::asr::auto_speech_rec;
 
 #[tokio::main]
 async fn main() {
+    let parsed = match parse_para().await {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            println!("{}", e);
+            exit(1);
+        }
+    };
+    if PARAS.set(parsed).is_err() {
+        println!("PARAS initialized more than once");
+        exit(1);
+    }
+
     // 监听`ctrl-c`，在停止程序之前保存图结构和各uuid的chat记录
     tokio::spawn(async {
         wait_for_signal().await;

@@ -2,12 +2,11 @@ use std::collections::HashMap;
 use std::env::{current_dir, current_exe};
 use std::fs::{write, read_to_string, create_dir_all, remove_dir_all}; // remove_dir只删除空文件夹
 use std::path::{Path, PathBuf};
-use std::process::exit;
-use std::thread;
+use std::ops::Deref;
 
 use argh::FromArgs;
 use chrono::NaiveDateTime;
-use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
 use ron::de::from_str;
 use serde::Deserialize;
 use time::Duration;
@@ -40,16 +39,30 @@ use crate::{
     channel::Channel,
 };
 
-/// 全局变量，可以修改，存储解析的命令行参数，在解析命令行参数时初始化
-pub static PARAS: Lazy<ParsedParas> = Lazy::new(|| {
-    match parse_para() {
-        Ok(p) => p,
-        Err(e) => {
-            println!("{}", e); // 这里不要用`{:?}`，会打印结构体而不是打印指定的错误信息
-            exit(1);
-        },
+pub struct GlobalParas(OnceCell<ParsedParas>);
+
+impl GlobalParas {
+    pub const fn new() -> Self {
+        Self(OnceCell::new())
     }
-});
+
+    pub fn set(&self, value: ParsedParas) -> Result<(), ParsedParas> {
+        self.0.set(value)
+    }
+}
+
+impl Deref for GlobalParas {
+    type Target = ParsedParas;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+            .get()
+            .expect("PARAS has not been initialized")
+    }
+}
+
+/// 全局变量，可以修改，存储解析的命令行参数，在解析命令行参数时初始化
+pub static PARAS: GlobalParas = GlobalParas::new();
 
 #[derive(FromArgs)]
 #[argh(help_triggers("-h", "--help"))] // https://github.com/google/argh/pull/106
@@ -195,9 +208,9 @@ pub struct ParsedParas {
 }
 
 /// 解析参数
-pub fn parse_para() -> Result<ParsedParas, MyError> {
+pub async fn parse_para() -> Result<ParsedParas, MyError> {
     let para: Paras = argh::from_env();
-    let (api, other_para) = Api::new(para.config)?;
+    let (api, other_para) = Api::new(para.config).await?;
     let english = if para.english { // 是否展示英文界面，不指定则展示中文界面
         true
     } else {
@@ -706,7 +719,7 @@ pub struct Api {
 /// 实现Api的方法
 impl Api {
     /// 初始化模型参数
-    fn new(config_file: Option<String>) -> Result<(Self, OptherPara), MyError> {
+    async fn new(config_file: Option<String>) -> Result<(Self, OptherPara), MyError> {
         // 获取参数文件，先在当前路径下检查是否有config.txt，如果没有，再去程序所在路径下检查是否有config.txt，还没有则在当前路径下生成一个模板config.txt，供用户修改
         let config_file = match config_file {
             Some(c) => PathBuf::from(c),
@@ -798,6 +811,7 @@ impl Api {
         let pulldown_prompt = all_para.prompts.iter().enumerate().fold("".to_string(), |acc, (i, p)| format!("{}                <option value='{}'>{}</option>\n", acc, i+1, p.name));
         let prompt: HashMap<usize, [String; 2]> = all_para.prompts.into_iter().enumerate().map(|(i, p)| (i+1, [p.name, p.content])).collect();
         // get mcp servers
+        /*
         let mcp_servers = {
             let handle = thread::spawn(|| {
                 let rt = tokio::runtime::Runtime::new().unwrap();
@@ -807,6 +821,8 @@ impl Api {
             });
             handle.join().unwrap()
         }?;
+        */
+        let mcp_servers = StdIoServers::new(all_para.mcp_servers).await?;
         Ok(
             (
                 Api {
