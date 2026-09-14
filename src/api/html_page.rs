@@ -50,6 +50,8 @@ const ICON_GOAL1: &str = include_str!("../../assets/image/target-svgrepo-com-1-1
 const ICON_MEMORY: &str = include_str!("../../assets/image/brain-svgrepo-com.txt");
 const ICON_SPEAKER0: &str = include_str!("../../assets/image/speaker-xmark-svgrepo-com.txt"); // 关闭
 const ICON_SPEAKER1: &str = include_str!("../../assets/image/speaker-wave-2-svgrepo-com.txt"); // 开启
+const ICON_SAFE0: &str = include_str!("../../assets/image/helmet-svgrepo-com.txt"); // 调用工具需用户允许
+const ICON_SAFE1: &str = include_str!("../../assets/image/skull-outline-of-halloween-svgrepo-com.txt"); // 不询问直接调用任何工具
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -416,6 +418,7 @@ struct PageInfo {
     button:       [String; 8], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆当前结果、开启朗读模式这8个按钮的title
     incognito:    [String; 3], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
     microphone:   [String; 3], // 左下角语音按钮开启和关闭2个状态的title，以及开启的前2个字符
+    safe:         [String; 3], // 左下角调用工具的权限开关，默认头盔，调用关键工具需要用户允许，切换为骷髅表示调用任何工具不需要询问
     wait:         [String; 3], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
 }
 
@@ -579,6 +582,7 @@ impl PageInfo {
                 button:     ["switch parameter bar settings".to_string(), "save current chat log".to_string(), "usage".to_string(), "Summarize and compress message records within the specified range of context messages for the current conversation".to_string(), "Insert new instruction during tool calling".to_string(), "Goal mode".to_string(), "Add the current conversation or the unsent content in the input box to memory".to_string(), "Play response text".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆当前结果、开启朗读模式这8个按钮的title
                 incognito:  ["Activate incognito mode, where the current conversation will not be locally preserved upon program termination and shall be irrevocably discarded, refreshing or reopening the current page will also erase the conversation history".to_string(), "Disable the incognito mode, and your current conversation will be preserved locally upon exiting the application, allowing you to resume seamlessly during your next session".to_string(), "Ac".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
+                safe:       ["The key tool for calling requires user approval".to_string(), "No approval is required for calling all tools".to_string(), "The".to_string()],
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
         } else {
@@ -739,6 +743,7 @@ impl PageInfo {
                 button:     ["切换参数栏设置".to_string(), "保存当前对话html页面".to_string(), "查看使用说明".to_string(), "对当前对话指定&quot;上下文消息数&quot;范围内的消息记录进行总结压缩".to_string(), "在调用工具期间插入新指令".to_string(), "开启/关闭 Goal 模式".to_string(), "将当前对话或输入框内未发送的内容添加到记忆".to_string(), "播放响应文本".to_string()], // 左下角设置、下载、使用说明、压缩总结、插入新指令、开启goal模式、记忆、开启朗读模式这8个按钮的title
                 incognito:  ["开启无痕模式，关闭程序时，当前对话不会被保存在本地，直接舍弃，刷新或重新打开当前页面也将丢弃对话记录".to_string(), "关闭无痕模式，关闭程序时，当前对话会被保存在本地，下次可以接着提问".to_string(), "开启".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
+                safe:       ["调用关键工具需要用户批准".to_string(), "开放权限，调用所有工具都不需要用户批准".to_string(), "调用".to_string()],
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
         }
@@ -1168,7 +1173,10 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         </div>
         <div id='left-speaker' class='left-bottom' title='{}'>
             <img src='{}' id='speaker' aria-hidden='true' />
-        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY, page_data.button[7], ICON_SPEAKER0);
+        </div>
+        <div id='left-safe' class='left-bottom' title='{}'>
+            <img src='{}' id='safe' aria-hidden='true' />
+        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY, page_data.button[7], ICON_SPEAKER0, page_data.safe[0], ICON_SAFE0);
     result += r###"
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
@@ -2139,6 +2147,30 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     document.getElementById('left-microphone').addEventListener('click', function(event) {
         close_microphone_toggle();
     })
+"###;
+    result += &format!("
+    // 切换调用工具的权限
+    function safe_toggle() {{
+        const safeDiv = document.getElementById('left-safe');
+        const safeImg = document.getElementById('safe');
+        const current_safe = safeDiv.title.substring(0, 2) === '{}';
+        if (current_safe) {{ // 转为骷髅
+            safeImg.src = '{}';
+            safeDiv.title = '{}';
+        }} else {{ // 转为头盔
+            safeImg.src = '{}';
+            safeDiv.title = '{}';
+        }}
+        fetch('http://{}:{}{}/safe?safe='+!current_safe).catch(error => {{ // 切换安全模式
+            console.error('Failed toggle permission:', error);
+        }});
+    }}
+    // 监听点击切换安全模式按钮
+    document.getElementById('left-safe').addEventListener('click', function(event) {{
+        safe_toggle();
+    }})
+    ", page_data.safe[2], ICON_SAFE1, page_data.safe[1], ICON_SAFE0, page_data.safe[0], PARAS.addr_str, PARAS.port, v);
+    result += r###"
     // 监听点击停止对话按钮
     document.getElementById('submit_span').addEventListener('click', function(event) {
         const microphoneDiv = document.getElementById('left-microphone');

@@ -62,6 +62,7 @@ use crate::{
         },
         goal::reset_goal,
         memory::get_embedding,
+        safe::is_safe,
     },
     skills::SelectedSkills,
     memory::{
@@ -1128,146 +1129,128 @@ async fn try_call_tool(
     } else if name_id.len() < 2 {
         return Ok(Err(MyError::ToolNotExistError{id: name_id[0].to_string(), info: "run_tools".to_string()}))
     } else if PARAS.tools.contain_tool_id(name_id[1]) {
-        if PARAS.approval_all {
-            Ok(PARAS.tools.run(name_id[1], paras))
-        } else {
-            match PARAS.tools.get_approval(name_id[1], paras, info, PARAS.english)? {
-                Some(approval_msg) => {
-                    let approval_msg = if name_id[0] == "edit_file" {
-                        /*
-                        let mut params: Params = match serde_json::from_str(paras) {
-                            Ok(p) => p,
-                            Err(e) => return Ok(Err(MyError::SerdeJsonFromStrError{error: e})),
-                        };
-                        */
-                        let mut params: Params = match parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["edits".to_string()]), object_fields: None }) {
-                            Ok(p) => p,
-                            Err(e) => return Ok(Err(e)),
-                        };
-
-                        params.dry_run = Some(true);
-                        let dry_run_para = match serde_json::to_string(&params) {
-                            Ok(d) => d,
-                            Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
-                        };
-                        match PARAS.tools.run(name_id[1], &dry_run_para) {
-                            Ok(r) => r.0,
-                            Err(e) => return Ok(Err(e)),
-                        }
-                    } else if name_id[0] == "write_file" {
-                        approval_msg.chars().take(100).collect() // 截取显示100个字符，否则弹窗很高，无法点击同意或拒绝
-                    } else {
-                        approval_msg
+        if !PARAS.approval_all && is_safe(uuid) {
+            if let Some(approval_msg) = PARAS.tools.get_approval(name_id[1], paras, info.clone(), PARAS.english)? {
+                let approval_msg = if name_id[0] == "edit_file" {
+                    /*
+                    let mut params: Params = match serde_json::from_str(paras) {
+                        Ok(p) => p,
+                        Err(e) => return Ok(Err(MyError::SerdeJsonFromStrError{error: e})),
                     };
-                    match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
-                        "true" => { // 允许
-                            if name_id[0] == "image_generation" {
-                                match PARAS.tools.run(name_id[1], paras) {
-                                    Ok((image_prompt, _)) => {
-                                        match image_generation(uuid, image_prompt, "gpt-image-2").await {
-                                            Ok(image_path) => Ok(Ok((image_path, None))),
-                                            Err(e) => Ok(Err(e)),
-                                        }
-                                    },
-                                    Err(e) => Ok(Err(e)),
-                                }
-                            } else if name_id[0] == "edit_image" {
-                                match PARAS.tools.run(name_id[1], paras) {
-                                    Ok((facial_prompt_image, _)) => {
-                                        let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
-                                        match edit_image(uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
-                                            Ok(image_path) => Ok(Ok((image_path, None))),
-                                            Err(e) => Ok(Err(e)),
-                                        }
-                                    },
-                                    Err(e) => Ok(Err(e)),
-                                }
-                            } else if name_id[0] == "schedule_task" {
-                                match PARAS.tools.run(name_id[1], paras) {
-                                    Ok(_) => Ok(run_schedule_task(paras).await),
-                                    Err(e) => Ok(Err(e)),
-                                }
-                            } else if name_id[0] == "sub_agent" {
-                                run_sub_agent(
-                                    uuid,
-                                    name_id,
-                                    paras,
-                                    model,
-                                    tool_schema,
-                                    para_builder,
-                                    client,
-                                    sender,
-                                    false,
-                                    is_local,
-                                ).await
-                            } else if name_id[0] == "screen_capture" {
-                                let params: ScreenCaptureParams = match parse_tool_args::<ScreenCaptureParams>(paras, ArgFixSpec{ array_fields: None, object_fields: None }) {
-                                    Ok(mut p) => {
-                                        p.path = format!("{}/{}/screen_capture.png", PARAS.outpath, uuid); // 将输出路径固定到当前uuid输出路径
-                                        p
-                                    },
-                                    Err(e) => return Ok(Err(e)),
-                                };
-                                let new_run_para = match serde_json::to_string(&params) {
-                                    Ok(n) => n,
-                                    Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
-                                };
-                                Ok(PARAS.tools.run(name_id[1], &new_run_para))
-                            } else {
-                                Ok(PARAS.tools.run(name_id[1], paras))
-                            }
-                        },
-                        "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
-                        "skip" => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
-                        new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
+                    */
+                    let mut params: Params = match parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["edits".to_string()]), object_fields: None }) {
+                        Ok(p) => p,
+                        Err(e) => return Ok(Err(e)),
+                    };
+
+                    params.dry_run = Some(true);
+                    let dry_run_para = match serde_json::to_string(&params) {
+                        Ok(d) => d,
+                        Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
+                    };
+                    match PARAS.tools.run(name_id[1], &dry_run_para) {
+                        Ok(r) => r.0,
+                        Err(e) => return Ok(Err(e)),
                     }
-                },
-                None => if name_id[0] == "hacker_news" {
-                    match PARAS.tools.run(name_id[1], paras) {
-                        Ok((save_html, _)) => {
-                            match hacker_news_summaries(&uuid, save_html == "true", model).await {
-                                Ok(hn_summaries) => Ok(Ok((hn_summaries, None))),
-                                Err(e) => Ok(Err(e)),
-                            }
-                        },
+                } else if name_id[0] == "write_file" {
+                    approval_msg.chars().take(100).collect() // 截取显示100个字符，否则弹窗很高，无法点击同意或拒绝
+                } else {
+                    approval_msg
+                };
+                match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
+                    "true" => (), // 允许
+                    "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
+                    "skip" => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}", name_id[0])}), // 跳过
+                    new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
+                }
+            } else if let Some(approval_msg) = PARAS.mcp_servers.get_approval(name_id, paras, info, PARAS.english)? { // 所有 MCP 工具都需要允许
+                match ask_approval(uuid, approval_msg, false, sender.clone()).await?.as_ref() {
+                    "true" => (), // 允许
+                    "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this mcp tool: {}", name_id[0])}), // 不允许
+                    "skip" => return Err(MyError::PlanModeError{info: format!("skip, this mcp tool has not been executed: {}", name_id[0])}), // 跳过
+                    new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this mcp tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
+                }
+            }
+        }
+        // 调用工具
+        match name_id[0] {
+            "image_generation" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((image_prompt, _)) => {
+                    match image_generation(uuid, image_prompt, "gpt-image-2").await {
+                        Ok(image_path) => Ok(Ok((image_path, None))),
                         Err(e) => Ok(Err(e)),
                     }
-                } else if is_main_agent && name_id[0] == "read_file" { // 读取大文件时转为调用 sub-agent
-                    let read_file_para: ReadFileParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
-                    // 小文件（<500k）和 md 文件可以直接读取，大文件则通过 sub_agent 读取
-                    let file_path = Path::new(&read_file_para.file_path);
-                    let ext = if let Some(ext) = file_path.extension() {
-                        Some(ext.to_ascii_lowercase().to_str().unwrap().to_string())
-                    } else {
-                        None
-                    };
-                    let metadata = file_path.metadata()?;
-                    if metadata.len() < 500000 || if let Some(e) = ext { e == "md" } else { false } { // 直接读取
-                        Ok(PARAS.tools.run(name_id[1], paras))
-                    } else { // 通过 sub_agent 读取
-                        event!(Level::INFO, "{} main agent read_file by sub-agent", uuid);
-                        let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
-                        run_sub_agent(
-                            uuid,
-                            &["sub_agent", &sub_agent_id],
-                            &format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.replace("\\", "\\\\"), name_id[0]), // 这里自己构建 json 字符串，换行符、双引号、文件路径的`\`都需要转义
-                            model,
-                            tool_schema,
-                            para_builder,
-                            client,
-                            sender,
-                            true,
-                            is_local,
-                        ).await
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "edit_image" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((facial_prompt_image, _)) => {
+                    let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
+                    match edit_image(uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
+                        Ok(image_path) => Ok(Ok((image_path, None))),
+                        Err(e) => Ok(Err(e)),
                     }
-                } else if is_main_agent && name_id[0] == "read_multiple_files" { // 读取多个文件时转为调用 sub-agent
-                    let read_multiple_files_para: ReadMultipleFilesParams = parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["paths".to_string()]), object_fields: None })?;
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "schedule_task" => match PARAS.tools.run(name_id[1], paras) {
+                Ok(_) => Ok(run_schedule_task(paras).await),
+                Err(e) => Ok(Err(e)),
+            },
+            "sub_agent" => run_sub_agent(
+                uuid,
+                name_id,
+                paras,
+                model,
+                tool_schema,
+                para_builder,
+                client,
+                sender,
+                false,
+                is_local,
+            ).await,
+            "screen_capture" => {
+                let params: ScreenCaptureParams = match parse_tool_args::<ScreenCaptureParams>(paras, ArgFixSpec{ array_fields: None, object_fields: None }) {
+                    Ok(mut p) => {
+                        p.path = format!("{}/{}/screen_capture.png", PARAS.outpath, uuid); // 将输出路径固定到当前uuid输出路径
+                        p
+                    },
+                    Err(e) => return Ok(Err(e)),
+                };
+                let new_run_para = match serde_json::to_string(&params) {
+                    Ok(n) => n,
+                    Err(e) => return Ok(Err(MyError::JsonToStringError{error: e.into()})),
+                };
+                Ok(PARAS.tools.run(name_id[1], &new_run_para))
+            },
+            "hacker_news" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((save_html, _)) => {
+                    match hacker_news_summaries(&uuid, save_html == "true", model).await {
+                        Ok(hn_summaries) => Ok(Ok((hn_summaries, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "read_file" if is_main_agent => { // 读取大文件时转为调用 sub-agent
+                let read_file_para: ReadFileParams = parse_tool_args(paras, ArgFixSpec{ array_fields: None, object_fields: None })?;
+                // 小文件（<500k）和 md 文件可以直接读取，大文件则通过 sub_agent 读取
+                let file_path = Path::new(&read_file_para.file_path);
+                let ext = if let Some(ext) = file_path.extension() {
+                    Some(ext.to_ascii_lowercase().to_str().unwrap().to_string())
+                } else {
+                    None
+                };
+                let metadata = file_path.metadata()?;
+                if metadata.len() < 500000 || if let Some(e) = ext { e == "md" } else { false } { // 直接读取
+                    Ok(PARAS.tools.run(name_id[1], paras))
+                } else { // 通过 sub_agent 读取
+                    event!(Level::INFO, "{} main agent read_file by sub-agent", uuid);
                     let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
-                    event!(Level::INFO, "{} main agent read_multiple_files by sub-agent", uuid);
                     run_sub_agent(
                         uuid,
                         &["sub_agent", &sub_agent_id],
-                        &format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").replace("\\", "\\\\"), name_id[0]), // 这里自己构建 json 字符串，换行符、双引号、文件路径的`\`都需要转义
+                        &format!("{{\"prompt\": \"{}read file: {}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_file_para.file_path.replace("\\", "\\\\"), name_id[0]), // 这里自己构建 json 字符串，换行符、双引号、文件路径的`\`都需要转义
                         model,
                         tool_schema,
                         para_builder,
@@ -1276,15 +1259,30 @@ async fn try_call_tool(
                         true,
                         is_local,
                     ).await
-                } else if name_id[0] == "get_all_memory" { // 获取所有记忆
-                    match PARAS.tools.run(name_id[1], paras) {
-                        Ok(_) => Ok(Ok((get_all_memory(if is_local { "local" } else { uuid }), None))),
-                        Err(e) => Ok(Err(e)),
-                    }
-                } else {
-                    Ok(PARAS.tools.run(name_id[1], paras))
                 }
-            }
+            },
+            "read_multiple_files" if is_main_agent => { // 读取多个文件时转为调用 sub-agent
+                let read_multiple_files_para: ReadMultipleFilesParams = parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["paths".to_string()]), object_fields: None })?;
+                let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
+                event!(Level::INFO, "{} main agent read_multiple_files by sub-agent", uuid);
+                run_sub_agent(
+                    uuid,
+                    &["sub_agent", &sub_agent_id],
+                    &format!("{{\"prompt\": \"{}read files:\\n{}\", \"tools\": [\"{}\"]}}", LARGE_FILE_PROMPT.replace("\n", "\\n"), read_multiple_files_para.paths.join("\\n").replace("\\", "\\\\"), name_id[0]), // 这里自己构建 json 字符串，换行符、双引号、文件路径的`\`都需要转义
+                    model,
+                    tool_schema,
+                    para_builder,
+                    client,
+                    sender,
+                    true,
+                    is_local,
+                ).await
+            },
+            "get_all_memory" => match PARAS.tools.run(name_id[1], paras) { // 获取所有记忆
+                Ok(_) => Ok(Ok((get_all_memory(if is_local { "local" } else { uuid }), None))),
+                Err(e) => Ok(Err(e)),
+            },
+            _ => Ok(PARAS.tools.run(name_id[1], paras)),
         }
     } else if PARAS.mcp_servers.contain_server_id(name_id[1]) {
         Ok(PARAS.mcp_servers.run(&name_id, paras).await)

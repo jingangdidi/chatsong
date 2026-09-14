@@ -24,6 +24,7 @@ use crate::api::handlers::{
     index::index,
     chat::chat,
     save::{save_log, save_speech, save},
+    safe::safe,
     upload::upload,
     usage::usage,
     fallback::fallback,
@@ -59,6 +60,7 @@ pub fn configure() -> Router {
         .route("/save-log", get(save_log)) // GET /v1/save-log，下载问答记录
         .route("/save-speech", get(save_speech)) // GET /v1/save-speech，下载生成的音频文件
         .route("/save/:id", get(save)) // GET /v1/save/:id，下载生成图片或音频文件
+        .route("/safe", get(safe)) // GET /v1/safe，切换安全模式，安全: 调用关键工具需要用户同一，不安全: 调用工具不需要询问
         .route("/delmsg/:id", get(del_msg)) // GET /v1/delmsg/:id，url指定要删除的信息id，从服务端删除
         .route("/microphone", get(microphone)) // GET /v1/microphone，关闭语音模式
         .route("/incognito", get(incognito)) // GET /v1/incognito，更新is_incognito

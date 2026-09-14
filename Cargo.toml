@@ -63,12 +63,6 @@ tree-sitter-java = { version = "0.23", optional = true }
 # search
 regex = { version = "1" }
 
-# discord bot
-#serenity = { version = "0.12.5", default-features = false, features = ["client", "model", "collector"] }
-#serenity = { version = "0.12.5", features = ["client", "model", "collector"] }
-#serenity = { version = "0.12.5", default-features = false, features = ["utils", "cache", "gateway", "framework", "standard_framework", "rustls_backend"] }
-serenity = { version = "0.12.5", default-features = false, features = ["cache", "collector", "gateway", "framework", "standard_framework", "rustls_backend"] }
-
 # skills
 serde_yaml = { version = "0.9.34" }
 
@@ -98,6 +92,12 @@ safetensors = { version = "0.4.1", optional = true }
 #symphonia = { version = "0.5.4", features = ["all-codecs", "all-formats"], optional = true }
 symphonia = { version = "0.5.4", features = ["isomp4", "mp3", "aac"], optional = true } # https://docs.rs/symphonia/latest/src/symphonia/lib.rs.html#165
 
+# discord bot
+#serenity = { version = "0.12.5", default-features = false, features = ["client", "model", "collector"] }
+#serenity = { version = "0.12.5", features = ["client", "model", "collector"] }
+#serenity = { version = "0.12.5", default-features = false, features = ["utils", "cache", "gateway", "framework", "standard_framework", "rustls_backend"] }
+serenity = { version = "0.12.5", default-features = false, features = ["cache", "collector", "gateway", "framework", "standard_framework", "rustls_backend"], optional = true }
+
 # screen capture
 xcap = { version = "0.9.8", optional = true }
 
@@ -115,5 +115,7 @@ asr-metal = ["qwen3-asr/metal", "tokenizers", "rodio", "cpal", "hound", "rubato"
 tts = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
 tts-cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
 tts-metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
+
+bot = ["serenity"]
 
 screen-capture = ["xcap"]

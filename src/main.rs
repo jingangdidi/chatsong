@@ -75,8 +75,10 @@ async fn main() {
         .with_target(false)
         .init();
 
-    // start channel bot
     let mut handles = vec![];
+
+    // start channel bot
+    #[cfg(feature = "bot")]
     if !PARAS.channels.is_empty() {
         for channel in &PARAS.channels {
             let handle = task::spawn(async move {

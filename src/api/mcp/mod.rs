@@ -212,6 +212,19 @@ impl McpServers {
         Ok(tools)
     }
 
+    /// get approval message
+    pub fn get_approval(&self, name_id: &[&str], args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+        if self.stdio.id_map.contains_key(name_id[1]) {
+            if is_en {
+                Ok(Some(format!("Do you allow calling the MCP {} ({}) tool?{}", name_id[0], args, info.unwrap_or_default())))
+            } else {
+                Ok(Some(format!("是否允许调用 MCP {} ({}) 工具？{}", name_id[0], args, info.unwrap_or_default())))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     /// check contain server id
     pub fn contain_server_id(&self, id: &str) -> bool {
         if self.stdio.id_map.contains_key(id) {

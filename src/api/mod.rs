@@ -13,6 +13,7 @@ pub mod graph;
 pub mod ctrlc;
 pub mod tools;
 pub mod mcp;
+#[cfg(feature = "bot")]
 pub mod channel;
 pub mod skills;
 pub mod memory;

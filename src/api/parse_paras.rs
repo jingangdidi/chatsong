@@ -36,8 +36,10 @@ use crate::{
         },
     },
     skills::{Skills, SkillManager},
-    channel::Channel,
 };
+
+#[cfg(feature = "bot")]
+use crate::channel::Channel;
 
 pub struct GlobalParas(OnceCell<ParsedParas>);
 
@@ -89,6 +91,7 @@ struct Paras {
     search_key: Option<String>,
 
     /// channel, multiple channels separated by `::`, currently only supports discord: `-C discord:token:guild_id`
+    #[cfg(feature = "bot")]
     #[argh(option, short = 'C')]
     channels: Option<String>,
 
@@ -177,6 +180,7 @@ pub struct ParsedParas {
     pub port:         u16,                         // 要监听的端口，默认8080
     pub engine_key:   String,                      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     pub search_key:   String,                      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
+    #[cfg(feature = "bot")]
     pub channels:     Vec<Channel>,                // 要连接的机器人，当前只支持discord，需要bot的token和guild-id，多个channel`::`间隔，示例：`-C discord:token:guild_id`
     pub allowed_path: Vec<(PathBuf, PathBuf)>,     // allowed path (absolute path (may be not exist), normalized path) for tools, multiple paths separated by commas, default: ./
     pub prompt:       HashMap<usize, [String; 2]>, // 存储prompt
@@ -270,6 +274,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
             Some(s) => s,
             None => other_para.google_search_key,
         },
+        #[cfg(feature = "bot")]
         channels: match para.channels { // 要连接的机器人，当前只支持discord，需要bot的token和guild-id，多个channel`::`间隔，示例：`-C discord:bot-token:guild-id`
             Some(c) => {
                 let mut channels: Vec<Channel> = Vec::new();

@@ -41,9 +41,16 @@ pub enum DataType {
     Hide((usize, Option<String>)), // 隐藏该信息，(隐藏前DataType的索引, 隐藏前存储的字符串)，该信息被用户删除了，显示chat记录、获取上下文时忽略该信息
 }
 
+// 实现 Default trait，指定默认值为 Normal
+impl Default for DataType {
+    fn default() -> Self {
+        DataType::Normal
+    }
+}
+
 impl DataType {
     // 该数据类型是否是Hide
-    fn is_hide(&self) -> bool {
+    pub fn is_hide(&self) -> bool {
         if let DataType::Hide(_) = self {
             true
         } else {
@@ -105,12 +112,17 @@ impl DataType {
 pub struct ChatData {
     id:         usize,       // 该信息的id，这个id是包含隐藏信息的序号，为了避免遍历获取到的不含隐藏信息的多个信息时，直接使用索引序号出现id不对应问题
     message:    ChatMessage, // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
-    time:       String,      // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
-    data:       DataType,    // 该问答记录的数据类型，比如网络搜索的内容、zip压缩包提取的代码、图片base64
+    #[serde(default)]
+    time:       String,      // 问答记录的时间，记录messages中每条信息的时间，如果是回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
+    #[serde(default)]
+    pub data:   DataType,    // 该问答记录的数据类型，比如网络搜索的内容、zip压缩包提取的代码、图片base64
+    #[serde(default)]
     is_web:     bool,        // 是否网络搜索
     idx_qa:     usize,       // 该message属于第几个Q&A对
     idx_m:      usize,       // 该message属于第几条信息
+    #[serde(default)]
     token:      u32,         // 该message的token数
+    #[serde(default)]
     remembered: bool,        // 是否已提取过记忆
 }
 
@@ -174,23 +186,37 @@ impl ChatData {
 /// 记录用户信息
 #[derive(Serialize, Deserialize)]
 pub struct Info {
+    #[serde(default)]
     pub uuid:          String,               // 每个用户一个uuid，如果指定了之前的uuid，则不重新生成，实现对话隔离，https://github.com/uuid-rs/uuid
+    #[serde(default)]
     pub chat_name:     String,               // 创建对话时，可以输入该对话的名称，方便在相关uuid下拉选项中选择，并作为保存的chat记录文件名
     pub messages:      Vec<ChatData>,        // 问答记录
+    #[serde(default)]
     pub msg_len:       usize,                // 当前messages的总数，排除了DataType是Hide的message，因此不要使用`messages.len()`获取总信息数
     //pub messages:      Vec<ChatMessage>,     // 问答记录，如果舍弃之前记录，则初始化时不读取之前的记录，否则先读取之前的记录
     //pub time:          Vec<String>,          // 问答记录的时间，记录messages中每条信息的时间，如果时回答则在时间后面加上当前调用的模型名称，这样在同一对话中调用不同模型可以区分开
     //pub query:         Vec<String>,          // 问答记录的原始问题，使用`web `进行网络搜索或解析url、html，或zip压缩包代码时，记录原始输入的内容，而不是最终解析的内容，不使用`web `或`code `则为空字符串，这样在页面加载之前chat记录时，只显示用户提问的内容，不显示中间搜索解析的内容
+    #[serde(default)]
     pub file:          String,               // 存储chat记录的文件，格式：`uuid/时间戳.log`，这里的时间戳是本次访问的时间
+    #[serde(default)]
     pub token:         [u32;2],              // 提问和答案的token数，注意提问的token数不是计算messages中每个提问的token数，因为提问时可能会带上之前的message，因此要比messages中所有提问的token数多
+    #[serde(default)]
     pub context_token: u32,                  // context token
+    #[serde(default)]
     pub prompt:        Option<ChatMessage>,  // 该uuid所用的prompt
+    #[serde(default)]
     pub prompt_str:    Option<[String; 2]>,  // 该uuid所用的prompt的名称(用于显示在页面左侧)和内容(用于显示在页面右侧)
+    #[serde(default)]
     pub num_q:         (usize, usize),       // 记录当前uuid用户发送的是第几个message（不是总消息数）以及属于第几对Q&A
+    #[serde(default)]
     pub qa_msg_p:      (usize, usize, bool), // 第1项表示限制问答对的数量，第2项表示限制消息的数量，第3项表示每次提问是否包含prompt。注意前2项只有一个生效，0表示不使用
+    #[serde(default)]
     pub save:          bool,                 // 是否需要保存该uuid的chat记录，如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才设为true
+    #[serde(default)]
     pub pop:           usize,                // 如果只是提问而没有实际调用OpenAI api获取答案，则舍弃最后的连续的提问，这里记录要从messages最后移除的message数量，最后是答案则该值重置为0，否则累加连续的问题数
+    #[serde(default)]
     pub is_incognito:  bool,                 // 是否无痕模式，true则关闭服务时不保存该对话，直接舍弃，如果是基于之前保存的对话继续提问，则本次新的问答不会保存；false则像常规对话那样，关闭服务时保存至本地
+    #[serde(default)]
     pub approved:      Option<String>,       // call tool approval
 }
 
@@ -503,7 +529,7 @@ impl Info {
 
     /// 计算指定索引位置信息是第几对Q&A，以及最后一条非隐藏的信息是否是问题
     /// 这种方法是从头统计一遍，因为可能信息被Hide了
-    fn get_qa_num_by_idx(&self, idx: usize) -> (usize, bool) {
+    pub fn get_qa_num_by_idx(&self, idx: usize) -> (usize, bool) {
         if self.messages.len() == 0 || self.messages.iter().all(|m| m.data.is_hide()) {
             (0, false)
         } else {
@@ -609,7 +635,7 @@ impl Info {
     }
 
     /// 更新每个message的idx_qa（该message属于第几个Q&A对）和idx_m（该message属于第几条信息）
-    fn update_qa_msg_idx(&mut self) {
+    pub fn update_qa_msg_idx(&mut self) {
         let mut idx_m = 0;
         for i in 0..self.messages.len() {
             // 更新idx_m（该message属于第几条信息）
