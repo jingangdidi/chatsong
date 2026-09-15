@@ -1454,7 +1454,8 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
                         name: name,
                         value: value,
                         category: category.name,
-                        group: groupName || null
+                        group: groupName || null,
+                        description: option.title || ''
                     };
 
                     allTools.push(tool);
@@ -1807,16 +1808,11 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
         function appendToolSuggestion(tool) {
             const toolItem = document.createElement('div');
 
-            toolItem.className =
-                'tool-suggestion-item tool-suggestion-tool';
+            toolItem.className = 'tool-suggestion-item tool-suggestion-tool';
 
             toolItem.textContent = tool.name;
 
-            toolItem.title =
-                tool.category +
-                (tool.group ? ' / ' + tool.group : '') +
-                ' / ' +
-                tool.name;
+            toolItem.title = tool.description || tool.name;
 
             toolItem.addEventListener('mousedown', event => {
                 event.preventDefault();
