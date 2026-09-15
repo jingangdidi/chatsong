@@ -653,7 +653,7 @@ impl Info {
 pub static DATA: Lazy<Mutex<HashMap<String, Info>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// 向DATA中指定uuid中插入新ChatMessage，uuid不存在则创建
-pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, u32, u32)>, time: String, is_web: bool, query: DataType, qa_msg_p: Option<(usize, usize, bool)>, model: &str, chat_name: Option<String>) {
+pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, u32, u32)>, time: String, is_web: bool, query: DataType, qa_msg_p: Option<(usize, usize, bool)>, model: &str, chat_name: Option<String>, load_uuid: bool) {
     let mut data = DATA.lock().unwrap();
     // 如果指定uuid不在服务端，则从本地log文件加载或创建新Info对象
     match data.get_mut(uuid) {
@@ -663,7 +663,7 @@ pub fn insert_message(uuid: &str, message: ChatMessage, msg_token: Option<(u32, 
                     if let Some(name) = get_chat_name_from_user_msg(&message) {
                         info.chat_name = name;
                     }
-                } else if info.chat_name != n && !n.is_empty() {
+                } else if info.chat_name != n && !n.is_empty() && !load_uuid {
                     info.chat_name = n;
                 }
             },

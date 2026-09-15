@@ -238,7 +238,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     content: ChatMessageContent::Text(COMPRESSION_PROMPT.to_string()),
                     name: None,
                 };
-                insert_message(&client_para.uuid, compression_prompt, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name.clone());
+                insert_message(&client_para.uuid, compression_prompt, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name.clone(), false);
             }
             let num_q = get_query_num(&client_para.uuid);
             event!(Level::INFO, "{} POST {}, query {}, Q&A pair {}, waiting for anwser ...", client_para.uuid, uri.path(), num_q.0, num_q.1);
@@ -435,7 +435,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     audio: None,
                     tool_calls: None,
                 };
-                insert_message(&client_para.uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, data_type, None, &client_para.model, None);
+                insert_message(&client_para.uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, data_type, None, &client_para.model, None, false);
                 // 创建stream对象，接收管道传递的数据
                 let tmp_uuid = client_para.uuid.clone();
                 let tmp_stream = async_stream::stream! {
@@ -548,7 +548,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                     content: ChatMessageContent::Text(render_init_goal_prompt(&g)),
                                     name: None,
                                 };
-                                insert_message(&tmp_uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                                insert_message(&tmp_uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name, false);
                                 Some(g)
                             } else {
                                 None
@@ -574,7 +574,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                     tool_calls: None,
                                 };
                                 let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                                insert_message(&tmp_uuid, message, None, tmp_time, false, DataType::Normal, None, &client_para.model, None);
+                                insert_message(&tmp_uuid, message, None, tmp_time, false, DataType::Normal, None, &client_para.model, None, false);
                             }
                         }
                     });
@@ -797,9 +797,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 if append_goal(&client_para.uuid, &body) {
                     // 当前问题插入到messages中
                     if client_para.web_search { // 使用网络搜索，需记录原始问题
-                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name, client_para.load_uuid);
                     } else {
-                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name, client_para.load_uuid);
                     }
                 }
             } else {
@@ -810,9 +810,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         name: None,
                     };
                     if client_para.web_search { // 使用网络搜索，需记录原始问题
-                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name, client_para.load_uuid);
                     } else {
-                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name);
+                        insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, client_para.chat_name, client_para.load_uuid);
                     }
                 }
                 // 插入错误提示
@@ -826,7 +826,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         audio: None,
                         tool_calls: None,
                     };
-                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, None);
+                    insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, client_para.qa_msg_p, &client_para.model, None, false);
                 }
             }
             let num_q = get_query_num(&client_para.uuid);
@@ -1042,7 +1042,7 @@ impl ClientPara {
                         content: ChatMessageContent::Text(prompt_name_str[1].clone()),
                         name: None,
                     };
-                    insert_message(&tmp_uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, chat_name.clone());
+                    insert_message(&tmp_uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p, &model, chat_name.clone(), false);
                 }
                 // 如果设置了无痕，则把当前uuid的问答信息都清空，返回true
                 if !check_incognito(&cookie_uuid) {

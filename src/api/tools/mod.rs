@@ -751,7 +751,7 @@ pub async fn run_tools(
                     }
                     call_tool_vec.push(ChatMessage::Tool{content: ChatMessageContent::Text(result.clone()), tool_call_id: j.2.clone()});
                     let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                    insert_message(&uuid, message, None, tmp_time, false, DataType::CallTool(call_tool_vec), None, model, None);
+                    insert_message(&uuid, message, None, tmp_time, false, DataType::CallTool(call_tool_vec), None, model, None, false);
 
                     // 如果是绘图，则把图片显示在页面
                     if name_id[0] == "image_generation" || name_id[0] == "edit_image" {
@@ -772,7 +772,7 @@ pub async fn run_tools(
                             tool_calls: None,
                         };
                         let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                        insert_message(&uuid, message, None, tmp_time, false, DataType::Image(image_b64), None, model, None);
+                        insert_message(&uuid, message, None, tmp_time, false, DataType::Image(image_b64), None, model, None, false);
 
                         result = if name_id[0] == "image_generation" {
                             format!("create image successfull: {}", result)
@@ -831,7 +831,7 @@ pub async fn run_tools(
                     tool_calls: None,
                 };
                 let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-                insert_message(&uuid, message, None, tmp_time.clone(), false, DataType::Normal, None, model, None);
+                insert_message(&uuid, message, None, tmp_time.clone(), false, DataType::Normal, None, model, None, false);
 
                 if let Some(ref mut goal) = my_goal {
                     if goal.is_active() { // 没有完成 goal，继续
@@ -840,7 +840,7 @@ pub async fn run_tools(
                             content: ChatMessageContent::Text(goal.take_continuation_prompt()),
                             name: None,
                         };
-                        insert_message(&uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
+                        insert_message(&uuid, message, None, tmp_time, false, DataType::Normal, None, model, None, false);
                     } else {
                         reset_goal(&uuid); // 客户端开启的指定 uuid 的 goal 设为 None
                         break
@@ -2075,7 +2075,7 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
         tool_calls: None,
     };
     let tmp_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string(); // 回答的当前时间，例如：2024-10-21 16:35:47
-    insert_message(uuid, message, None, tmp_time, false, DataType::Normal, None, model, None);
+    insert_message(uuid, message, None, tmp_time, false, DataType::Normal, None, model, None, false);
 
     // 3. page left info
     let meta_data = MetaData::new(uuid.to_string(), None, false);

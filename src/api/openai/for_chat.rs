@@ -116,7 +116,7 @@ pub async fn use_stream(
                             content: ChatMessageContent::Text(msg),
                             name: None,
                         };
-                        insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p.clone(), model, None);
+                        insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Normal, qa_msg_p.clone(), model, None, false);
                     } else {
                         break
                     }
@@ -440,7 +440,7 @@ pub async fn use_stream(
             },
         };
         // 将回答加到问答记录中
-        insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
+        insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None, false);
         // 未开启语音模式，或关闭了语音模式，则跳出循环，结束对话
         if rx_audio.is_none() || !start_microphone {
             break
@@ -604,7 +604,7 @@ pub async fn not_use_stream(
     };
     // 将回答加到问答记录中
     if insert_this_message {
-        insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None);
+        insert_message(&uuid, message, msg_token, tmp_time, false, DataType::Normal, None, model, None, false);
     } else if let Some(tokens) = msg_token {
         update_token(&uuid, tokens);
     }

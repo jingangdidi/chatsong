@@ -84,7 +84,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(name.clone()),
                 name: None,
             };
-            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None); // 以图片名称作为用户提问内容，并记录图片的base64字符串
+            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Image(image_to_base64(&uuid, &name)?), None, "", None, false); // 以图片名称作为用户提问内容，并记录图片的base64字符串
             file_token.insert(name, get_msg_token(&uuid, -1)); // pos>=0表示索引位置，pos<0表示倒数第几个，比如0表示第1个，1表示第2个，-1表示最后一个，-2表示倒数第个
         } else if [".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"].iter().any(|x| lowercase_name.ends_with(x)) {
             file_token.insert(name.clone(), 0);
@@ -92,7 +92,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(name),
                 name: None,
             };
-            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Voice, None, "", None); // 以音频文件名称作为用户提问内容
+            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Voice, None, "", None, false); // 以音频文件名称作为用户提问内容
         } else {
             let content = if lowercase_name.ends_with(".pdf") {
                 match extract_pdf_content(&uuid, &PARAS.outpath, &name) {
@@ -134,7 +134,7 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                 content: ChatMessageContent::Text(content),
                 name: None,
             };
-            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Raw(name), None, "", None); // 以文件名称作为用户提问内容，并记录提取的内容字符串
+            insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Raw(name), None, "", None, false); // 以文件名称作为用户提问内容，并记录提取的内容字符串
         }
     }
     let response = serde_json::to_string(&file_token).map_err(|e| MyError::ToJsonStirngError{uuid: uuid, error: e})?;
