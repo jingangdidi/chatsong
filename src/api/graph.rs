@@ -50,18 +50,18 @@ pub fn add_edge(uuid1: &str, uuid2: &str, is_direct: bool) {
 }
 
 /// 获取与指定uuid相关的所有uuid，返回Vec<(相关的uuid, uuid对应的prompt和对话名称)>
-pub fn get_all_related_uuid(uuid: &str) -> Vec<(String, String)> {
+pub fn get_all_related_uuid(uuid: &str, is_local: bool) -> Vec<(String, String)> {
     //let data = GRAPH.lock().unwrap(); // 使用Mutex，写与读均上锁
-    let data = GRAPH.read().unwrap(); // 使用RwLock，保证一写多读，只要不在写，就可以同时多个读取
-    data.get_all_related_uuid(uuid)
+    let mut data = GRAPH.write().unwrap(); // 使用RwLock，保证一写多读，只要不在写，就可以同时多个读取
+    data.get_all_related_uuid(uuid, is_local)
 }
 
 /// 如果指定文件不在指定uuid的路径下，则去该uuid所有相关uuid路径下寻找，复制到指定uuid路径下
-pub fn copy_file_from_related_uuid(uuid: &str, name: &str) {
+pub fn copy_file_from_related_uuid(uuid: &str, name: &str, is_local: bool) {
     let tmp_target_file = format!("{}/{}/{}", PARAS.outpath, uuid, name);
     let tmp_path = Path::new(&tmp_target_file);
     if !(tmp_path.exists() && tmp_path.is_file()) { // 先判断指定的文件是否在指定的uuid路径下，若不在，则从相关的其他uuid路径下寻找
-        for (u, _) in get_all_related_uuid(uuid) {
+        for (u, _) in get_all_related_uuid(uuid, is_local) {
             if u != uuid {
                 let tmp_file = format!("{}/{}/", PARAS.outpath, u);
                 let tmp_path = Path::new(&tmp_file);
@@ -106,12 +106,17 @@ struct RelatedNodes {
 #[derive(Serialize, Deserialize)]
 struct Graph {
     related: HashMap<String, (RelatedNodes, i64)>, // 每个uuid直接或间接相关的uuid，key: uuid，value: (与key的uuid直接或间接相关的uuid, 每个uuid用于排序的时间戳)
+    #[serde(default)]
+    local:   HashMap<String, (i64, String)>,       // 开启程序的电脑的所有对话，key: uuid, value: (用于排序的时间戳, prompt名称)
 }
 
 impl Graph {
     /// 初始化uuid图结构
     fn new() -> Self {
-        Graph {related: HashMap::new()}
+        Graph {
+            related: HashMap::new(),
+            local:   HashMap::new(),
+        }
     }
 
     /// 添加新的连接关系，单向的
@@ -179,19 +184,29 @@ impl Graph {
     }
 
     /// 获取与指定uuid相关的所有uuid，返回Vec<(相关的uuid, uuid对应的prompt和对话名称)>
-    fn get_all_related_uuid(&self, start_node: &str) -> Vec<(String, String)> {
+    fn get_all_related_uuid(&mut self, start_node: &str, is_local: bool) -> Vec<(String, String)> {
         let mut related = Vec::new(); // (uuid, 时间, prompt)
-        // 如果图中含有该node且该node与其他node有关联，则获取关联的node
-        if self.related.contains_key(start_node) && self.related.get(start_node).unwrap().0.direct.len() + self.related.get(start_node).unwrap().0.indirect.len() > 0 {
-            let mut visited = HashSet::new();
-            // 先递归获取所有直接相关的uuid
-            let prompt = get_prompt_name(start_node);
-            self.dfs(start_node, &prompt, &mut visited, &mut related);
-            // 再把该uuid间接相关的uuid加上
-            if let Some(neighbors) = self.related.get(start_node) {
-                for (neighbor, (time, prt)) in &neighbors.0.indirect { // 这里遍历间接相关的node，添加到输出向量中
-                    if !visited.contains(neighbor) {
-                        related.push((neighbor.to_string(), *time, prt.to_string()))
+        if is_local {
+            if !self.local.contains_key(start_node) {
+                let t = Local::now().timestamp();
+                self.local.insert(start_node.to_string(), (t, get_prompt_name(start_node)));
+            }
+            for (k, v) in &self.local {
+                related.push((k.clone(), v.0, v.1.clone()));
+            }
+        } else {
+            // 如果图中含有该node且该node与其他node有关联，则获取关联的node
+            if self.related.contains_key(start_node) && self.related.get(start_node).unwrap().0.direct.len() + self.related.get(start_node).unwrap().0.indirect.len() > 0 {
+                let mut visited = HashSet::new();
+                // 先递归获取所有直接相关的uuid
+                let prompt = get_prompt_name(start_node);
+                self.dfs(start_node, &prompt, &mut visited, &mut related);
+                // 再把该uuid间接相关的uuid加上
+                if let Some(neighbors) = self.related.get(start_node) {
+                    for (neighbor, (time, prt)) in &neighbors.0.indirect { // 这里遍历间接相关的node，添加到输出向量中
+                        if !visited.contains(neighbor) {
+                            related.push((neighbor.to_string(), *time, prt.to_string()))
+                        }
                     }
                 }
             }

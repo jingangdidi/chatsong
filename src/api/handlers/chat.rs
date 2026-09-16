@@ -139,9 +139,9 @@ pub struct MetaData {
 
 impl MetaData {
     /// new method
-    pub fn new(uuid: String, current_token: Option<u32>, is_q: bool) -> Self {
+    pub fn new(uuid: String, current_token: Option<u32>, is_q: bool, is_local: bool) -> Self {
         // 获取与当前uuid相关的所有uuid
-        let related_uuid_prompt = get_all_related_uuid(&uuid); // Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
+        let related_uuid_prompt = get_all_related_uuid(&uuid, is_local); // Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
         // 获取当前uuid的prompt名称
         let prompt_name = get_prompt_name(&uuid);
         // 获取当前uuid的问题和答案的总token数
@@ -230,6 +230,9 @@ fn format_sse_message<T: Serialize>(uuid: &str, event_name: &str, data: &T) -> R
 /// stream格式：https://www.ruanyifeng.com/blog/2017/05/server-sent_events.html
 pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUri, ConnectInfo(addr): ConnectInfo<SocketAddr>, jar: CookieJar, body: String) -> Result<(CookieJar, impl IntoResponse), MyError> {
     let client_para = ClientPara::new(&params, jar)?;
+    // 检查是否服务端所在电脑发起的请求
+    let ip = addr.ip();
+    let is_local = is_local_request(&ip);
     // 记录提问内容或提交请求
     if let Some(q) = params.get("q") {
         if q == "0" { // 0表示body是空，1表示body是问题，空内容时发送提问，参考：openai-client-0.6.4/examples/chat/create_chat_completion_stream
@@ -266,9 +269,6 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 if client_para.stream {
                     let tmp_uuid = client_para.uuid.clone();
                     let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
-                    // 检查是否服务端所在电脑发起的请求
-                    let ip = addr.ip();
-                    let is_local = is_local_request(&ip);
                     // 从openai接收stream答案，并返回完整答案字符串
                     tokio::spawn(async move {
                         if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p, is_local, client_para.microphone).await {
@@ -288,7 +288,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         }
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let meta_data = MetaData::new(tmp_uuid.clone(), None, false);
+                        let meta_data = MetaData::new(tmp_uuid.clone(), None, false, is_local);
                         let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                         yield tmp;
                         // 结束stream
@@ -324,7 +324,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         yield tmp;
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                        let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
+                        let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false, is_local);
                         let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                         yield tmp;
                         // 结束stream
@@ -444,7 +444,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     yield tmp;
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false, is_local);
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                     let tmp: Result<Vec<u8>, MyError> = Ok(b"event: close\ndata: {\"key\": \"close\"}\n\n".to_vec()); // 最后以`event: close\ndata: {"key": "close"}\n\n`结束stream，data需要是json格式，否则js的`JSON.parse`解析时报错
@@ -535,13 +535,10 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 if client_para.selected_tools.is_some() || client_para.selected_skills.is_some() {
                     let tmp_uuid = client_para.uuid.clone();
                     let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
-                    // 检查是否服务端所在电脑发起的请求
-                    let ip = addr.ip();
-                    let is_local = is_local_request(&ip);
                     // 从openai接收stream答案，并返回完整答案字符串
                     tokio::spawn(async move {
                         let tool_error = if client_para.plan_mode && client_para.selected_skills.is_none() { // 目前计划模式不支持skills
-                            run_tools_with_plan(client_para.selected_tools, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model).await
+                            run_tools_with_plan(client_para.selected_tools, tmp_uuid.clone(), sender.clone(), client, para_builder.clone(), &client_para.model, is_local).await
                         } else {
                             let raw_goal = if let Some(g) = get_goal(&tmp_uuid) {
                                 let m = ChatMessage::User{
@@ -628,9 +625,6 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     if client_para.stream {
                         let tmp_uuid = client_para.uuid.clone();
                         let (sender, mut receiver) = channel(100); // 设置管道缓存大小，管道中缓存满了，则send将会阻塞
-                        // 检查是否服务端所在电脑发起的请求
-                        let ip = addr.ip();
-                        let is_local = is_local_request(&ip);
                         // 从openai接收stream答案，并返回完整答案字符串
                         tokio::spawn(async move {
                             if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p, is_local, client_para.microphone).await {
@@ -664,7 +658,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             }
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                            let meta_data = MetaData::new(tmp_uuid.clone(), None, false);
+                            let meta_data = MetaData::new(tmp_uuid.clone(), None, false, is_local);
                             let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                             yield tmp;
                             // 结束stream
@@ -721,7 +715,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             yield tmp;
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                            let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
+                            let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false, is_local);
                             let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                             yield tmp;
                             // 结束stream
@@ -849,7 +843,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             yield tmp;
                         }
                     }
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false);
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), false, is_local);
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                 /*} else if clear_page { // 清空页面之前的chat记录，显示当前问题
@@ -874,7 +868,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     }
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                     //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
-                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), true);
+                    let meta_data = MetaData::new(tmp_uuid.clone(), Some(0), true, is_local);
                     let tmp: Result<Vec<u8>, MyError> = Ok(meta_data.prepare_sse(&tmp_uuid)?);
                     yield tmp;
                 }

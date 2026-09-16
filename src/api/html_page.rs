@@ -752,7 +752,7 @@ impl PageInfo {
 
 /// 生成主页html字符串，css和js都写在html中
 /// v: api版本，例如：`/v1`
-pub fn create_main_page(uuid: &str, v: String) -> String {
+pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
     // 获取当前对话名称
     let chat_name = get_chat_name(uuid);
     // 获取当前uuid的问题和答案的总token数
@@ -760,7 +760,7 @@ pub fn create_main_page(uuid: &str, v: String) -> String {
     // 获取当前uuid的prompt名称
     let prompt_name = get_prompt_name(uuid);
     // 获取与当前uuid相关的所有uuid
-    let related_uuid_prompt = get_all_related_uuid(uuid);
+    let related_uuid_prompt = get_all_related_uuid(uuid, is_local);
     // 是否无痕模型
     let is_incognito = is_incognito(uuid);
     // 页面信息

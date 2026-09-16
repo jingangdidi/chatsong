@@ -784,7 +784,7 @@ pub async fn run_tools(
                     }
 
                     // 3. 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
-                    let meta_data = MetaData::new(uuid.clone(), None, false);
+                    let meta_data = MetaData::new(uuid.clone(), None, false, is_local);
                     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break
@@ -856,7 +856,7 @@ pub async fn run_tools(
         }
     }
     // page left info
-    let meta_data = MetaData::new(uuid.clone(), None, false);
+    let meta_data = MetaData::new(uuid.clone(), None, false, is_local);
     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "channel send error: {:?}", e);
     }
@@ -984,7 +984,7 @@ pub async fn sub_agent(
                     }
 
                     // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
-                    let meta_data = MetaData::new(uuid.clone(), None, false);
+                    let meta_data = MetaData::new(uuid.clone(), None, false, is_local);
                     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
                         event!(Level::WARN, "channel send error: {:?}", e);
                         break
@@ -1024,7 +1024,7 @@ pub async fn sub_agent(
         }
     }
     // page left info
-    let meta_data = MetaData::new(uuid.clone(), None, false);
+    let meta_data = MetaData::new(uuid.clone(), None, false, is_local);
     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "sub-agent channel send error: {:?}", e);
     }
@@ -1749,7 +1749,7 @@ impl Plan {
 /// https://api-docs.deepseek.com/zh-cn/guides/function_calling
 /// https://docs.bigmodel.cn/cn/guide/capabilities/function-calling
 /// https://platform.moonshot.cn/docs/api/tool-use
-pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: String, sender: Sender<Vec<u8>>, client: Client, para_builder: ChatCompletionParametersBuilder, model: &str) -> Result<(), MyError> {
+pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: String, sender: Sender<Vec<u8>>, client: Client, para_builder: ChatCompletionParametersBuilder, model: &str, is_local: bool) -> Result<(), MyError> {
     // get built-in and external tools schame
     let mut tool_schema = PARAS.tools.get_desc_and_schema(&selected_tools)?;
     // get mcp tools schema
@@ -1772,7 +1772,7 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
         plan_struct = Plan::from_str(&plan_string)?;
         if first_step {
             let msg = format!("## 🚩 make plan\n\n---\n\n{}", plan_struct.format_plan(true));
-            send_and_record_message(&uuid, msg, 0, model, sender.clone(), false).await?;
+            send_and_record_message(&uuid, msg, 0, model, sender.clone(), false, is_local).await?;
             first_step = false;
         }
         if plan_struct.all_steps_completed && plan_struct.steps.iter().any(|s| s.status == Status::Pending) {
@@ -1780,11 +1780,11 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
         }
         if !plan_struct.error_msg.is_empty() {
             let msg = format!("## 🤔 error\n\n---\n\n{}", plan_struct.error_msg);
-            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone(), false).await?;
+            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone(), false, is_local).await?;
             break
         } else if plan_struct.all_steps_completed || plan_struct.steps.iter().all(|s| s.status == Status::Completed) {
             let msg = format!("## 📌 final result\n\n---\n\n{}", plan_struct.final_result);
-            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone(), false).await?;
+            send_and_record_message(&uuid, msg, plan_struct.steps.len()+1, model, sender.clone(), false, is_local).await?;
             break
         } else {
             if !plan_struct.steps.iter().any(|s| s.status == Status::InProgress || s.status == Status::UpdatePlan) {
@@ -1873,7 +1873,7 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
                                 format!("```\n{}\n```", if edit_file_result.is_empty() { &plan_struct_new.steps[i].result } else { &edit_file_result })
                             };
                             let msg = format!("## 📌 step {}\n\n---\n\n### 📝 description\n{}\n\n### ✨ result\n{}", i+1, plan_struct_new.steps[i].description, msg);
-                            send_and_record_message(&uuid, msg, i+1, model, sender.clone(), tool_name == "edit_file" || tool_name.starts_with("edit_file__")).await?;
+                            send_and_record_message(&uuid, msg, i+1, model, sender.clone(), tool_name == "edit_file" || tool_name.starts_with("edit_file__"), is_local).await?;
                         }
                     },
                     Status::UpdatePlan => {
@@ -1885,7 +1885,7 @@ pub async fn run_tools_with_plan(selected_tools: Option<SelectedTools>, uuid: St
                             plan_string = make_update_plan(uuid.clone(), client.clone(), para_builder.clone(), model, history_messages.clone(), &plan_prompt, None).await?;
                             let plan_struct_new = Plan::from_str(&plan_string)?;
                             let msg = format!("## 📌 step {} update plan\n\n---\n\n{}", i+1, plan_struct_new.format_plan(false));
-                            send_and_record_message(&uuid, msg, i+1, model, sender.clone(), false).await?;
+                            send_and_record_message(&uuid, msg, i+1, model, sender.clone(), false, is_local).await?;
                             max_update_plan += 1;
                         }
                         break
@@ -2056,7 +2056,7 @@ async fn function_calling(
 }
 
 /// send message to page, insert to main message history
-async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model: &str, sender: Sender<Vec<u8>>, is_diff: bool) -> Result<(), MyError> {
+async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model: &str, sender: Sender<Vec<u8>>, is_diff: bool, is_local: bool) -> Result<(), MyError> {
     // 1. send to user page
     let messages_num = get_messages_num(uuid); // 流式输出传输答案时，答案还未插入到服务端记录中，因此这里获取总消息数不需要减1
     // uuid, id, content, is_left, is_img, is_voice, is_history, is_web, time_model, current_token
@@ -2078,7 +2078,7 @@ async fn send_and_record_message(uuid: &str, msg: String, step_num: usize, model
     insert_message(uuid, message, None, tmp_time, false, DataType::Normal, None, model, None, false);
 
     // 3. page left info
-    let meta_data = MetaData::new(uuid.to_string(), None, false);
+    let meta_data = MetaData::new(uuid.to_string(), None, false, is_local);
     if let Err(e) = sender.send(meta_data.prepare_sse(&uuid)?).await { // 传递数据以`data: `起始，以`\n\n`终止
         event!(Level::WARN, "step {} channel send error: {:?}", step_num, e);
         return Err(MyError::PlanModeError{info: format!("step {} channel send error: {:?}", step_num, e)})

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::fs::read;
+use std::net::SocketAddr;
 
-use axum::extract::{Multipart, OriginalUri};
+use axum::extract::{Multipart, OriginalUri, ConnectInfo};
 use axum_extra::extract::cookie::CookieJar;
 use tokio::{
     fs::File,
@@ -34,11 +35,12 @@ use crate::{
     parse_paras::PARAS,
     pdf::extract_pdf_content, // 读取pdf文件，提取文本内容
     web::parse_html::parse_single_html_str, // 从html文件提取内容
+    api::handlers::chat::is_local_request,
 };
 
 /// Handler for `/嵌套的前缀/upload` POST
 /// 将客户的上传的文件保存至服务端指定路径的uuid文件夹中
-pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) -> Result<(CookieJar, String), MyError> {
+pub async fn upload(uri: OriginalUri, ConnectInfo(addr): ConnectInfo<SocketAddr>, jar: CookieJar, mut multipart: Multipart) -> Result<(CookieJar, String), MyError> {
     event!(Level::INFO, "POST {}", uri.path()); // 注意：`axum::http::Uri`只能捕获到`/hello`，不包含嵌套的`/嵌套的前缀`前缀，使用`OriginalUri`可以
     // 先判断是否有cookie，cookie值作为服务端uuid文件夹，不存在则生成uuid作为cookie
     let (uuid, cookie_jar) = match jar.get("srx-tzn") {
@@ -103,8 +105,11 @@ pub async fn upload(uri: OriginalUri, jar: CookieJar, mut multipart: Multipart) 
                     },
                 }
             } else if lowercase_name.ends_with(".zip") {
+                // 检查是否服务端所在电脑发起的请求
+                let ip = addr.ip();
+                let is_local = is_local_request(&ip);
                 let command = format!("code {name}");
-                match merge_code(&uuid, &command, &PARAS.outpath) {
+                match merge_code(&uuid, &command, &PARAS.outpath, is_local) {
                     Ok(res) => res,
                     Err(e) => {
                         event!(Level::ERROR, "{} code error: {}", uuid, e);

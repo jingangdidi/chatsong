@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// 从上传的代码压缩包中获取所有脚本的代码，合并到一起，作为提问的问题
-pub fn merge_code(uuid: &str, query: &str, outpath: &str) -> Result<String, MyError> {
+pub fn merge_code(uuid: &str, query: &str, outpath: &str, is_local: bool) -> Result<String, MyError> {
     // 解析参数，以`code `起始，中间可选的是参数，最后是压缩文件名，全部用空格间隔
     // 格式：`code [include:xxx] [exclude:xxx] [check_bytes:xxx] [max_size:xxx] [to_json:xxx] [hierarchical:xxx] [contain_tree:xxx] xxx.zip`
     // include: 指定的匹配模式，用于获取要包含的文件
@@ -33,7 +33,7 @@ pub fn merge_code(uuid: &str, query: &str, outpath: &str) -> Result<String, MyEr
     let mut tmp_para: Vec<&str> = query.split(" ").collect();
     // 最后一项作为zip文件
     let zip_file = tmp_para.pop().unwrap(); // 肯定不是空向量，因此这里直接unwrap
-    copy_file_from_related_uuid(uuid, zip_file);
+    copy_file_from_related_uuid(uuid, zip_file, is_local);
     let code_zip: String = format!("{}/{}/{}", outpath, uuid, zip_file); // 肯定不是空向量，因此这里直接unwrap
     if !code_zip.ends_with(".zip") {
         return Err(MyError::ParaError{para: format!("The last parameter is not a compressed file: {}", code_zip)})

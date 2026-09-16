@@ -1,5 +1,10 @@
+use std::net::SocketAddr;
+
 use axum::{
-    extract::OriginalUri,
+    extract::{
+        OriginalUri,
+        ConnectInfo,
+    },
     response::Html,
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -18,11 +23,12 @@ use crate::{
     },
     //html_page::{create_main_page_ch, create_main_page_en},
     html_page::create_main_page,
+    api::handlers::chat::is_local_request,
 };
 
 /// Handler for `/嵌套的前缀` GET
 /// 访问chat界面
-pub async fn index(uri: OriginalUri, jar: CookieJar) -> (CookieJar, Html<String>) {
+pub async fn index(uri: OriginalUri, ConnectInfo(addr): ConnectInfo<SocketAddr>, jar: CookieJar) -> (CookieJar, Html<String>) {
     event!(Level::INFO, "GET {}", uri.path()); // 注意：`axum::http::Uri`只能捕获到`/hello`，不包含嵌套的`/嵌套的前缀`前缀，使用`OriginalUri`可以
     // 获取cookie，即uuid
     let uuid = match jar.get("srx-tzn") { // 获取cookie
@@ -41,7 +47,10 @@ pub async fn index(uri: OriginalUri, jar: CookieJar) -> (CookieJar, Html<String>
             update_cookie_max_age(jar) // 仅修改内部cookie的max-age
         }
     };
+    // 检查是否服务端所在电脑发起的请求
+    let ip = addr.ip();
+    let is_local = is_local_request(&ip);
     // 创建返回的模板
-    let tmp_tpl = create_main_page(&uuid, uri.path().to_string());
+    let tmp_tpl = create_main_page(&uuid, uri.path().to_string(), is_local);
     (cookie_jar, tmp_tpl.into())
 }
