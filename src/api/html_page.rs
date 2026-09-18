@@ -841,12 +841,6 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             </select>
         </div>
 
-        <div class='top_add_space switch-toggle' title='{}'>
-            <label>{}</label>
-            <input id='select-plan' class='left_para for_focus' type='checkbox' name='plan'>
-            <label for='select-plan'></label>
-        </div>
-
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <select id='select-skill' class='left_para for_focus' name='skill'>
@@ -857,7 +851,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         <!-- select model -->
         <div class='top_add_space' title='{}'>
             <label>{}</label>
-            <select id='select-model' class='left_para for_focus' name='model'>\n", page_data.name.title, page_data.name.label, page_data.name.placeholder.as_ref().unwrap(), page_data.tool.title, page_data.tool.label, PARAS.tools.html, PARAS.mcp_servers.html, page_data.plan_mode.title, page_data.plan_mode.label, page_data.skills.title, page_data.skills.label, PARAS.skills.html, page_data.model.title, page_data.model.label);
+            <select id='select-model' class='left_para for_focus' name='model'>\n", page_data.name.title, page_data.name.label, page_data.name.placeholder.as_ref().unwrap(), page_data.tool.title, page_data.tool.label, PARAS.tools.html, PARAS.mcp_servers.html, page_data.skills.title, page_data.skills.label, PARAS.skills.html, page_data.model.title, page_data.model.label);
     result += &PARAS.api.pulldown_model;
     result += r###"            </select>
         </div>
@@ -895,13 +889,20 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                 <option value='p5'>{}</option>
             </select>
         </div>
-
-        <div class='top_add_space switch-toggle' title='{}'>
+        <!-- select related uuid -->
+        <div class='top_add_space' title='{}'>
             <label>{}</label>
-            <input id='select-web' class='left_para for_focus' type='checkbox' name='web'>
-            <label for='select-web'></label>
+            <select id='select-related-uuid' class='left_para for_focus' name='related-uuid'>
+                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, tmp_option[21].0, page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
+    for i in related_uuid_prompt {
+        let first_part = match i.0.split_once('-') {
+            Some((first, _)) => first.to_string(), // 只显示 uuid 的第一部分
+            None => i.0.clone(),
+        };
+        result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, first_part, i.1);
+    }
+    result += &format!("            </select>
         </div>
-
         <!-- show prompt -->
         <div class='top_add_space' title='{}'>
             <label>{}</label>
@@ -963,19 +964,19 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             <input id='input-uuid' class='left_para' type='text' name='uuid' placeholder='{}'>
         </div>
 
-        <!-- select related uuid -->
-        <div class='top_add_space' title='{}'>
+        <div class='top_add_space switch-toggle' title='{}'>
             <label>{}</label>
-            <select id='select-related-uuid' class='left_para for_focus' name='related-uuid'>
-                <option value='-1' disabled selected>--{}--</option>\n", page_data.message.title, page_data.message.label, page_data.message.disabled.as_ref().unwrap(), tmp_option[0].0, tmp_option[1].0, tmp_option[2].0, tmp_option[3].0, tmp_option[4].0, tmp_option[5].0, tmp_option[6].0, tmp_option[7].0, tmp_option[8].0, tmp_option[9].0, tmp_option[10].0, tmp_option[11].0, tmp_option[12].0, tmp_option[13].0, tmp_option[14].0, tmp_option[15].0, tmp_option[16].0, tmp_option[17].0, tmp_option[18].0, tmp_option[19].0, tmp_option[20].0, tmp_option[21].0, page_data.web.title, page_data.web.label, page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.uuid_drop.title, page_data.uuid_drop.label, page_data.uuid_drop.disabled.as_ref().unwrap());
-    for i in related_uuid_prompt {
-        result += &format!("                <option value='{}'>{} ({})</option>\n", i.0, i.0, i.1);
-    }
-    let tmp_option = page_data.voice.option.as_ref().unwrap();
-    result += &format!("            </select>
+            <input id='select-plan' class='left_para for_focus' type='checkbox' name='plan'>
+            <label for='select-plan'></label>
         </div>
 
-        <!-- temperature -->
+        <div class='top_add_space switch-toggle' title='{}'>
+            <label>{}</label>
+            <input id='select-web' class='left_para for_focus' type='checkbox' name='web'>
+            <label for='select-web'></label>
+        </div>\n", page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.plan_mode.title, page_data.plan_mode.label, page_data.web.title, page_data.web.label);
+    let tmp_option = page_data.voice.option.as_ref().unwrap();
+    result += &format!("<!-- temperature -->
         <div class='top_add_space' title='{}'>
             <label>{}</label>
             <input id='input-temperature' class='left_para' type='number' min='0' max='2' name='temperature' placeholder='{}'>
@@ -2022,6 +2023,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
     var speaker_mode = false;
     var tool_result = ''; // 调用工具的result部分
     var multiple_tools = '';
+    var not_select_uuid = true;
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
         select.addEventListener('change', function() {
@@ -2505,7 +2507,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         for (let i of uuids) {
             let uuid_option = document.createElement("option");
             uuid_option.setAttribute("value", i[0]);
-            uuid_option.text = i[0]+' ('+i[1]+')';
+            uuid_option.text = i[0].split('-')[0]+' ('+i[1]+')';
             options.appendChild(uuid_option);
         }
     }
@@ -2989,10 +2991,13 @@ print(b)
         var para_chat_name = document.getElementById("input-chat-name").value;
         // 获取输入的uuid
         var para_uuid = document.getElementById("input-uuid").value;
+        not_select_uuid = true;
         if (para_uuid === '') { // 输入的uuid优先级要高于下拉选择的uuid
             para_uuid = document.getElementById("select-related-uuid").value;
             if (para_uuid === '-1') {
                 para_uuid = '';
+            } else {
+                not_select_uuid = false;
             }
         }
         // 获取输入的temperature
@@ -3014,13 +3019,13 @@ print(b)
         var para_voice = document.getElementById("select-voice").value;
         // 输入框无效，并显示信息
 "###;
-    result += &format!("        if (emptyInput) {{ // 输入为空表示提问
+    result += &format!("        if (emptyInput && not_select_uuid) {{ // 输入为空表示提问，且没有下拉选择相关uuid
             var q = 0;
             document.getElementsByName('Input your query')[0].placeholder = '{} ...';
         }} else if (para_web) {{ // 使用网络搜索需要等待搜索结束
             var q = 1;
             document.getElementsByName('Input your query')[0].placeholder = '{} ...';
-        }} else {{ // 输入不为空表示用户继续提问
+        }} else {{ // 输入不为空表示用户继续提问，或者输入为空，但是下拉选择了相关uuid
             var q = 1;
             document.getElementsByName('Input your query')[0].placeholder = '{} ...';
         }}", page_data.wait[0], page_data.wait[1], page_data.wait[2]);
@@ -3126,13 +3131,17 @@ print(b)
                 switch (currentEvent) {
                     case 'metadata':
                         incognito_toggle(jsonData.is_incognito);
-                        let answer_id = 'm'+(current_id - 1); // 当前回答的id
-                        let msg_lr = document.getElementById(answer_id);
-                        const currentTitle = msg_lr.getAttribute("title");
-                        if (jsonData.current_token > 0) { // 回答结束，更新token数
+                        if (not_select_uuid) {
+                            let answer_id = 'm'+(current_id - 1); // 当前回答的id
+                            let msg_lr = document.getElementById(answer_id);
+                            const currentTitle = msg_lr.getAttribute("title");
+                            if (jsonData.current_token > 0) { // 回答结束，更新token数
 "###;
-    result += &format!("                            msg_lr.setAttribute('title', currentTitle+jsonData.current_token+'{}');", page_data.m_qa_token[3]);
+    result += &format!("                                msg_lr.setAttribute('title', currentTitle+jsonData.current_token+'{}');", page_data.m_qa_token[3]);
     result += r###"
+                            }
+                        //} else { // 这里也更新下 current_id
+                        //    current_id = jsonData.id;
                         }
                         //console.log('Received metadata:', jsonData);
                         // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
@@ -3204,7 +3213,7 @@ print(b)
                             no_message = false;
                             // 如果是之前的记录，则用传递的id更新当前id，因为传递的id可能不连续（有部分被用户点击删除）
                             if (jsonData.is_history && jsonData.id !== current_id && jsonData.id !== current_id - 1) {
-                                current_id = jsonData.id
+                                current_id = jsonData.id;
                             }
                             // 插入信息
                             if (jsonData.time_model) {
@@ -3302,6 +3311,13 @@ print(b)
             restore_input();
             isStopped = true;
             controller = null;
+        }
+    });
+    // 鼠标选择相关uuid下拉选项
+    document.getElementById("select-related-uuid").addEventListener("change", async(e) => {
+        if (isStopped) { // 回答结束才跳转
+            del_id = '';
+            await send_query_receive_answer(false);
         }
     });
 </script>

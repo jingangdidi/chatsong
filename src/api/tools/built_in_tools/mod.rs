@@ -179,6 +179,7 @@ impl BuiltInTools {
             (Arc::new(MoveFile::new()), Group::FileSystem),
             (Arc::new(ReadFile::new()), Group::FileSystem),
             (Arc::new(ReadMultipleFiles::new()), Group::FileSystem),
+            #[cfg(feature = "screen-capture")]
             (Arc::new(ScreenCapture::new()), Group::FileSystem),
             (Arc::new(SearchFiles::new()), Group::FileSystem),
             (Arc::new(SearchFilesContent::new()), Group::FileSystem),

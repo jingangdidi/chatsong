@@ -39,6 +39,7 @@ use openai_dive::v1::{
     },
     error::APIError,
 };
+#[cfg(feature = "pdf")]
 use pdf_extract::OutputError;
 use reqwest::Error as reqwest_error;
 use regex::Error as regex_error;
@@ -198,6 +199,7 @@ pub enum MyError {
     CreatePatternError{pattern: String, error: PatternError},
 
     // 从pdf文件提取内容错误
+    #[cfg(feature = "pdf")]
     #[error("Error - extract content from {file}: {error}")]
     ExtractPdfError{file: String, error: OutputError},
 

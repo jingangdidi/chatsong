@@ -14,6 +14,7 @@ use crate::{
         get_chat_name,   // 获取指定uuid对话的名称
         get_prompt_name, // 获取当前uuid的prompt名称
         get_latest_file, // 获取指定输出路径下最近的指定格式后缀的文件路径，文件名为时间戳
+        get_files_after,
     },
     parse_paras::PARAS,
     error::MyError,
@@ -33,7 +34,7 @@ static GRAPH: Lazy<RwLock<Graph>> = Lazy::new(|| RwLock::new(Graph::load_graph(&
 /// 保存当前图结构
 pub fn save_graph() {
     //let data = GRAPH.lock().unwrap(); // 使用Mutex，写与读均上锁
-    let data = GRAPH.read().unwrap(); // 使用RwLock，保证一写多读，只要不在写，就可以同时多个读取
+    let mut data = GRAPH.write().unwrap(); // 使用RwLock，保证一写多读，只要不在写，就可以同时多个读取
     if let Err(e) = data.save_graph(&PARAS.outpath) {
         event!(Level::ERROR, "{}", e);
     }
@@ -212,7 +213,7 @@ impl Graph {
             }
         }
         // 根据时间戳进行排序
-        related.sort_by(|a, b| a.2.cmp(&b.2)); // 根据节点的时间戳由小到大排序
+        related.sort_by(|a, b| b.1.cmp(&a.1)); // 根据节点的时间戳由新到旧排序
         related.into_iter().map(|u| {
             let tmp_chat_name = get_chat_name(&u.0);
             if tmp_chat_name.is_empty() {
@@ -224,11 +225,24 @@ impl Graph {
     }
 
     /// 保存当前图结构
-    fn save_graph(&self, outpath: &str) -> Result<(), MyError> {
+    fn save_graph(&mut self, outpath: &str) -> Result<(), MyError> {
+        let graph_file = format!("{}/{}.graph", outpath, Local::now().format("%Y-%m-%d_%H-%M-%S").to_string());
+        // 多个电脑同时开启服务，最后保存 graph 时会丢失其他电脑问答的节点，所以每次关闭服务保存 graph 文件时
+        // 还要检查下是否有比开启服务时的时间戳晚的 graph 文件，有则需要读取这些 graph 文件，将其中的 local 的 uuid 合并到当前 graph 再保存
+        if let Ok(files) = get_files_after(&PARAS.outpath, ".graph", PARAS.time) {
+            for file in files {
+                let tmp_graph = load_graph_file(&file);
+                for (k, v) in tmp_graph.local {
+                    if !self.local.contains_key(&k) {
+                        event!(Level::INFO, "merge {} to {}", k, graph_file);
+                        self.local.insert(k, v);
+                    }
+                }
+            }
+        }
         // 图结构转json字符串
         let graph_json_str = serde_json::to_string_pretty(&self).map_err(|e| MyError::ToJsonStirngError{uuid: "save graph".to_string(), error: e})?;
         // 保存图结构的json字符串
-        let graph_file = format!("{}/{}.graph", outpath, Local::now().format("%Y-%m-%d_%H-%M-%S").to_string());
         write(&graph_file, graph_json_str).map_err(|e| MyError::WriteFileError{file: graph_file, error: e})?;
         keep_latest_gragh(5)
     }

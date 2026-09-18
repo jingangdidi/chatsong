@@ -123,6 +123,7 @@ Output only the summary of the current state of the conversation and nothing els
 /// 页面左侧显示的信息
 #[derive(Serialize)]
 pub struct MetaData {
+    //id:            usize,                 // 该消息在当前对话中的索引，第1条消息是0
     chat_name:     String,                // chat name
     current_uuid:  String,                // 当前uuid
     related_uuid:  Vec<(String, String)>, // 相关uuid，Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
@@ -152,6 +153,7 @@ impl MetaData {
         let close_goal = !running_goal(&uuid);
         // MetaData
         Self {
+            //id:            get_messages_num(&uuid),  // 该消息在当前对话中的索引，第1条消息是0
             chat_name:     get_chat_name(&uuid),     // chat name
             current_uuid:  uuid.clone(),             // 当前uuid
             related_uuid:  related_uuid_prompt,      // 相关uuid
@@ -163,10 +165,10 @@ impl MetaData {
                 Some(t) => t, // 指定了token
                 None => get_msg_token(&uuid, -1), // 未指定则获取最后一个message的token数，调用该方法前，当前message已经插入，因此获取最后一个message的token就是当前插入message的token
             },
-            is_incognito:  is_incognito(&uuid),      // 是否无痕模型
-            context_start,                           // 上下文起始
-            context_end,                             // 上下文终止
-            close_goal,                              // 关闭 goal 模式，前端页面 goal 图标切换为关闭
+            is_incognito:  is_incognito(&uuid), // 是否无痕模型
+            context_start,                      // 上下文起始
+            context_end,                        // 上下文终止
+            close_goal,                         // 关闭 goal 模式，前端页面 goal 图标切换为关闭
         }
     }
 
@@ -320,7 +322,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         yield tmp;
                         // 传输答案。非流式输出传输答案时，答案已经插入到服务端记录中，因此这里获取总消息数还需要减1
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", whole_answer.replace("\n", "<br>")).into_bytes()); // 这里要声明类型，否则报错，传递数据以`data: `起始，以`\n\n`终止
-                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
+                        let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, get_messages_num(&tmp_uuid) - 1, whole_answer.replace("\n", "srxtzn"), true, false, false, false, false, None, None, None, false)?);
                         yield tmp;
                         // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                         //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
@@ -706,12 +708,12 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             let current_msg_num = get_messages_num(&tmp_uuid);
                             // 传输思考部分
                             if let (true, Some(c)) = (client_para.show_thought, thinking_content) {
-                                let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, current_msg_num - 1, c.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
+                                let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, current_msg_num - 1, c.replace("\n", "srxtzn"), true, false, false, false, false, None, None, None, false)?);
                                 yield tmp;
                             }
                             // 传输答案。非流式输出传输答案时，答案已经插入到服务端记录中，因此这里获取总消息数还需要减1
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: {}\n\n", whole_answer.replace("\n", "<br>")).into_bytes()); // 这里要声明类型，否则报错，传递数据以`data: `起始，以`\n\n`终止
-                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, current_msg_num - 1, whole_answer.replace("\n", "<br>"), true, false, false, false, false, None, None, None, false)?);
+                            let tmp: Result<Vec<u8>, MyError> = Ok(MainData::prepare_sse(&tmp_uuid, current_msg_num - 1, whole_answer.replace("\n", "srxtzn"), true, false, false, false, false, None, None, None, false)?);
                             yield tmp;
                             // 显示在页面的信息，包括：当前uuid、当前uuid的问题和答案的总token数、当前uuid的prompt名称、与当前uuid相关的所有uuid
                             //let tmp: Result<Vec<u8>, Error> = Ok(format!("data: showinfo{}srx{}srx{}srx{}srx{}\n\n", tmp_uuid, token[0], token[1], prompt_name, related_uuid_prompt.into_iter().map(|up| up.0+"*"+&up.1).collect::<Vec<_>>().join("#")).as_bytes().to_vec()); // 传递数据以`data: `起始，以`\n\n`终止
@@ -788,7 +790,7 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                 )
             };
             if let Some(m) = message {
-                if append_goal(&client_para.uuid, &body) {
+                if !body.is_empty() && append_goal(&client_para.uuid, &body) {
                     // 当前问题插入到messages中
                     if client_para.web_search { // 使用网络搜索，需记录原始问题
                         insert_message(&client_para.uuid, m, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), true, DataType::Raw(body.clone()), client_para.qa_msg_p, &client_para.model, client_para.chat_name, client_para.load_uuid);

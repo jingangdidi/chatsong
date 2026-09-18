@@ -7,6 +7,7 @@ pub mod prompt;
 pub mod web;
 pub mod openai;
 pub mod code;
+#[cfg(feature = "pdf")]
 pub mod pdf;
 pub mod html_page;
 pub mod graph;

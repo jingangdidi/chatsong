@@ -33,10 +33,12 @@ use crate::{
     },
     openai::for_image::image_to_base64, // 图片转base64，返回base64编码的字符串
     parse_paras::PARAS,
-    pdf::extract_pdf_content, // 读取pdf文件，提取文本内容
     web::parse_html::parse_single_html_str, // 从html文件提取内容
     api::handlers::chat::is_local_request,
 };
+
+#[cfg(feature = "pdf")]
+use crate::pdf::extract_pdf_content; // 读取pdf文件，提取文本内容
 
 /// Handler for `/嵌套的前缀/upload` POST
 /// 将客户的上传的文件保存至服务端指定路径的uuid文件夹中
@@ -97,6 +99,7 @@ pub async fn upload(uri: OriginalUri, ConnectInfo(addr): ConnectInfo<SocketAddr>
             insert_message(&uuid, message, None, Local::now().format("%Y-%m-%d %H:%M:%S").to_string(), false, DataType::Voice, None, "", None, false); // 以音频文件名称作为用户提问内容
         } else {
             let content = if lowercase_name.ends_with(".pdf") {
+                #[cfg(feature = "pdf")]
                 match extract_pdf_content(&uuid, &PARAS.outpath, &name) {
                     Ok(res) => res,
                     Err(e) => {
@@ -104,6 +107,8 @@ pub async fn upload(uri: OriginalUri, ConnectInfo(addr): ConnectInfo<SocketAddr>
                         format!("extract content from {} error: {}", name, e)
                     },
                 }
+                #[cfg(not(feature = "pdf"))]
+                format!("Warning: PDF ({}) content extraction is unavailable because the binary was built without the `pdf` feature. Recompile with `--features pdf`.", name)
             } else if lowercase_name.ends_with(".zip") {
                 // 检查是否服务端所在电脑发起的请求
                 let ip = addr.ip();

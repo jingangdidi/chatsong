@@ -81,7 +81,6 @@ use built_in_tools::{
         edit_file::Params,
         read_file::Params as ReadFileParams,
         read_multiple_files::Params as ReadMultipleFilesParams,
-        screen_capture::Params as ScreenCaptureParams,
         image_generation::image_generation,
         edit_image::edit_image,
     },
@@ -92,6 +91,10 @@ use built_in_tools::{
         GoalStatus,
     },
 };
+
+#[cfg(feature = "screen-capture")]
+use built_in_tools::filesystem::screen_capture::Params as ScreenCaptureParams;
+
 use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
@@ -1209,6 +1212,7 @@ async fn try_call_tool(
                 false,
                 is_local,
             ).await,
+            #[cfg(feature = "screen-capture")]
             "screen_capture" => {
                 let params: ScreenCaptureParams = match parse_tool_args::<ScreenCaptureParams>(paras, ArgFixSpec{ array_fields: None, object_fields: None }) {
                     Ok(mut p) => {

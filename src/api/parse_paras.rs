@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::ops::Deref;
 
 use argh::FromArgs;
-use chrono::NaiveDateTime;
+use chrono::{Local, NaiveDateTime};
 use once_cell::sync::OnceCell;
 use ron::de::from_str;
 use serde::Deserialize;
@@ -209,6 +209,7 @@ pub struct ParsedParas {
     pub bgc:          String,                      // 页面背景色
     pub skills:       Skills,                      // skills
     pub memory_dir:   String,                      // memory.json 存储路径，默认存储在-o指定的输出路径下
+    pub time:         NaiveDateTime,               // 开启服务时的时间戳，多个电脑同时开启服务，最后保存 graph 时会丢失其他电脑问答的节点，所以每次关闭服务保存 graph 文件时，还要检查下是否有比这个时间戳晚的 graph 文件，有则需要读取这些 graph 文件，将其中的 local 的 uuid 合并到当前 graph 再保存
 }
 
 /// 解析参数
@@ -418,6 +419,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
                 outpath
             },
         },
+        time: Local::now().naive_local(),
     };
     // 输出路径不存在则创建，已存在则删除其中的空uuid文件夹
     let tmp_outpath = Path::new(&out.outpath);

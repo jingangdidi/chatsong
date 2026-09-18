@@ -39,7 +39,6 @@ ignore = { version = "0.4.22" }
 termtree = { version = "0.4" }
 glob = { version = "0.3.1" }
 zip = { version = "2.2" }
-pdf-extract = { version = "0.7.9" }
 ron = { version = "0.10.1" }
 base64 = { version = "0.22" }
 image = { version = "0.25.8" }
@@ -98,6 +97,8 @@ symphonia = { version = "0.5.4", features = ["isomp4", "mp3", "aac"], optional =
 #serenity = { version = "0.12.5", default-features = false, features = ["utils", "cache", "gateway", "framework", "standard_framework", "rustls_backend"] }
 serenity = { version = "0.12.5", default-features = false, features = ["cache", "collector", "gateway", "framework", "standard_framework", "rustls_backend"], optional = true }
 
+pdf-extract = { version = "0.7.9", optional = true }
+
 # screen capture
 xcap = { version = "0.9.8", optional = true }
 
@@ -117,5 +118,7 @@ tts-cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda", "t
 tts-metal = ["candle-core/metal", "candle-nn/metal", "candle-transformers/metal", "tokenizers", "rand", "isolang", "tempfile", "hound", "rubato", "memmap2", "safetensors", "symphonia"]
 
 bot = ["serenity"]
+
+pdf = ["pdf-extract"]
 
 screen-capture = ["xcap"]

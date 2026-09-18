@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::{read, write, create_dir_all, read_to_string};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use axum_extra::extract::cookie::{Cookie, SameSite, CookieJar};
@@ -1204,40 +1204,79 @@ fn get_image_name(message: &ChatMessage) -> Option<String> {
     }
 }
 
-/// 获取指定输出路径下最近的指定格式后缀的文件路径，文件名为时间戳，例如：`2024-04-04_12-49-50.指定格式后缀`
-pub fn get_latest_file(p: String, suffix: &str) -> String {
-    let tmp_outpath = Path::new(&p);
-    if tmp_outpath.exists() && tmp_outpath.is_dir() {
-        match tmp_outpath.read_dir() {
-            Ok(entrys) => {
-                let mut tmp_file = "".to_string(); // 获取时间戳最新的文件
-                for entry in entrys {
-                    if let Ok(file) = entry {
-                        if file.path().is_file() {
-                            if let Some(f) = file.path().file_name() {
-                                if let Some(s) = f.to_str() {
-                                    if s.ends_with(suffix) {
-                                        // 检查字符串是否是时间戳，时间戳格式为`2024-04-04_12-49-50.指定格式后缀`
-                                        // 这里使用`use chrono::NaiveDateTime;`的`parse_from_str`直接从字符串中解析时间，如果失败则表示不含有日期
-                                        if let Ok(_) = NaiveDateTime::parse_from_str(s.strip_suffix(suffix).unwrap(), "%Y-%m-%d_%H-%M-%S") {
-                                            tmp_file = format!("{}/{}", p, s);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                tmp_file
-            },
-            Err(e) => {
-                event!(Level::INFO, "warning: read_dir {} error: {:?}", p, e);
-                "".to_string()
-            },
-        }
+/// 从文件路径中解析文件名里的时间戳
+/// 例如：`2024-04-04_12-49-50.log` -> `2024-04-04 12:49:50`
+fn parse_file_timestamp(path: &Path, suffix: &str) -> Option<NaiveDateTime> {
+    let file_name = path.file_name()?.to_str()?;
+
+    // suffix 可以传入 ".log"，也可以传入 "log"
+    let normalized_suffix = if suffix.starts_with('.') {
+        suffix.to_string()
     } else {
-        "".to_string()
+        format!(".{suffix}")
+    };
+
+    let timestamp_str = file_name.strip_suffix(&normalized_suffix)?;
+    NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%d_%H-%M-%S").ok()
+}
+
+/// 获取目录下所有符合 `时间戳.指定后缀` 格式的文件
+/// 返回结果按照时间戳从早到晚排序
+/// 例如：
+/// - `2024-04-04_12-49-50.log`
+/// - `2024-04-05_10-20-30.log`
+fn get_timestamp_files(dir: &str, suffix: &str) -> Result<Vec<PathBuf>, MyError> {
+    let dir = Path::new(dir);
+
+    if !dir.is_dir() {
+        return Ok(Vec::new());
     }
+
+    // 同时保存时间戳和路径，避免排序时重复解析
+    let mut files: Vec<(NaiveDateTime, PathBuf)> = Vec::new();
+
+    for entry in dir.read_dir()? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if !path.is_file() {
+            continue;
+        }
+
+        if let Some(timestamp) = parse_file_timestamp(&path, suffix) {
+            files.push((timestamp, path));
+        }
+    }
+
+    // 按时间戳排序，相同时间戳时按路径排序，保证结果稳定
+    files.sort_by(|(time_a, path_a), (time_b, path_b)| time_a.cmp(time_b).then_with(|| path_a.cmp(path_b)));
+
+    Ok(files.into_iter().map(|(_, path)| path).collect())
+}
+
+/// 获取目录下最新的指定后缀文件，没有符合条件的文件时返回空字符串
+pub fn get_latest_file(dir: String, suffix: &str) -> String {
+    match get_timestamp_files(&dir, suffix) {
+        Ok(files) => files
+            .last()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        Err(e) => {
+            // 也可以替换成你原来的 event! 日志。
+            event!(Level::INFO, "warning: read_dir {} error: {:?}", dir, e);
+            String::new()
+        }
+    }
+}
+
+/// 获取目录下所有晚于指定时间戳的文件，返回结果按照时间戳从早到晚排序
+pub fn get_files_after(dir: &str, suffix: &str, after: NaiveDateTime) -> Result<Vec<String>, MyError> {
+    let files = get_timestamp_files(dir, suffix)?;
+    Ok(files
+        .into_iter()
+        .filter(|path| parse_file_timestamp(path, suffix).map(|timestamp| timestamp > after).unwrap_or(false))
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect())
 }
 
 /// 获取指定输出路径下最近的chat记录文件路径，例如：`2024-04-04_12-49-50.log`
