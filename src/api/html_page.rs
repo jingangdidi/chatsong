@@ -3140,8 +3140,8 @@ print(b)
     result += &format!("                                msg_lr.setAttribute('title', currentTitle+jsonData.current_token+'{}');", page_data.m_qa_token[3]);
     result += r###"
                             }
-                        //} else { // 这里也更新下 current_id
-                        //    current_id = jsonData.id;
+                        } else { // 这里也更新下 current_id
+                            current_id = jsonData.id;
                         }
                         //console.log('Received metadata:', jsonData);
                         // 更新页面左测当前uuid、问题token、答案token、prompt名称、相关uuid
