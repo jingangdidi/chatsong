@@ -123,7 +123,7 @@ Output only the summary of the current state of the conversation and nothing els
 /// 页面左侧显示的信息
 #[derive(Serialize)]
 pub struct MetaData {
-    //id:            usize,                 // 该消息在当前对话中的索引，第1条消息是0
+    id:            usize,                 // 该消息在当前对话中的索引，第1条消息是0
     chat_name:     String,                // chat name
     current_uuid:  String,                // 当前uuid
     related_uuid:  Vec<(String, String)>, // 相关uuid，Vec<(相关的uuid, uuid对应的prompt---对话名称)>，如果创建该对话时没有指定对话名称，则第2项仅为uuid对应的prompt
@@ -153,7 +153,7 @@ impl MetaData {
         let close_goal = !running_goal(&uuid);
         // MetaData
         Self {
-            //id:            get_messages_num(&uuid),  // 该消息在当前对话中的索引，第1条消息是0
+            id:            get_messages_num(&uuid),  // 该消息在当前对话中的索引，第1条消息是0
             chat_name:     get_chat_name(&uuid),     // chat name
             current_uuid:  uuid.clone(),             // 当前uuid
             related_uuid:  related_uuid_prompt,      // 相关uuid
