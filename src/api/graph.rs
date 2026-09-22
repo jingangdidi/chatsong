@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::{write, read_to_string, copy, remove_file};
+use std::fs::{read_dir, write, read_to_string, copy, remove_file};
 use std::path::Path;
 //use std::sync::Mutex;
 use std::sync::RwLock;
@@ -249,7 +249,7 @@ impl Graph {
 
     /// 导入图结构
     fn load_graph(graph_file: &str, outpath: &str) -> Graph {
-        if graph_file.is_empty() { // 没有指定uuid的graph图文件则在指定输出路径下搜索最新的图文件（“时间戳.graph”），没有搜索到则初始化空的图结构
+        let mut graph = if graph_file.is_empty() { // 没有指定uuid的graph图文件则在指定输出路径下搜索最新的图文件（“时间戳.graph”），没有搜索到则初始化空的图结构
             let latest_file = get_latest_file(outpath.to_string(), ".graph");
             if latest_file.is_empty() { // 没有搜索到则初始化空的图结构
                 Graph::new()
@@ -258,7 +258,18 @@ impl Graph {
             }
         } else { // 指定了uuid的graph图文件，则导入该文件
             load_graph_file(graph_file)
+        };
+        // 删除无效 local uuid
+        let mut del = Vec::new();
+        for (k, _) in &graph.local {
+            if have_html_log(&k) {
+                del.push(k.clone());
+            }
         }
+        for i in del {
+            graph.local.remove(&i);
+        }
+        graph
     }
 
     /// 遍历当前图结构中每个uuid，如果对应文件夹不存在（每次启动服务会删除指定输出路径下不含有chat记录的uuid文件夹），则将该uuid从图中删除（包括直接和间接关系中的节点）
@@ -382,4 +393,47 @@ fn keep_latest_gragh(num: usize) -> Result<(), MyError> {
         }
     }
     Ok(())
+}
+
+/// 指定 uuid 路径下是否有 html 和 log 文件
+fn have_html_log(uuid: &str) -> bool {
+    let tmp_path = format!("{}/{}", PARAS.outpath, uuid);
+    let dir = Path::new(&tmp_path);
+
+    let entries = match read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return false,
+    };
+
+    let mut has_html = false;
+    let mut has_log = false;
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => return false,
+        };
+
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => return false,
+        };
+
+        // 只检查当前目录下的普通文件，不递归子目录
+        if !file_type.is_file() {
+            continue;
+        }
+
+        match entry.path().extension().and_then(|ext| ext.to_str()) {
+            Some("html") => has_html = true,
+            Some("log") => has_log = true,
+            _ => {}
+        }
+
+        if has_html && has_log {
+            return true;
+        }
+    }
+
+    false
 }
