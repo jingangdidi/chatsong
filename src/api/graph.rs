@@ -262,7 +262,7 @@ impl Graph {
         // 删除无效 local uuid
         let mut del = Vec::new();
         for (k, _) in &graph.local {
-            if have_html_log(&k) {
+            if !have_html_log(&k) {
                 del.push(k.clone());
             }
         }
