@@ -524,8 +524,14 @@ impl PageInfo {
                     option:      Some(vec![
                         ("Display the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())),
                         ("Hide the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())),
+                        ("Display the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())),
+                        ("Hide the reasoning process".to_string(), Some("favors speed and economical token usage".to_string())),
                         ("Display the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())),
                         ("Hide the reasoning process".to_string(), Some("a balance between speed and reasoning accuracy".to_string())),
+                        ("Display the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
+                        ("Hide the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
+                        ("Display the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
+                        ("Hide the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
                         ("Display the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
                         ("Hide the reasoning process".to_string(), Some("favors more complete reasoning".to_string())),
                         ("Disable thinking".to_string(), Some("Some models do not support disabling thinking".to_string())),
@@ -685,8 +691,14 @@ impl PageInfo {
                     option:      Some(vec![
                         ("显示思考过程".to_string(), Some("简单问答，显示思考过程".to_string())),
                         ("不显示思考过程".to_string(), Some("简单问答，不显示思考过程".to_string())),
+                        ("显示思考过程".to_string(), Some("简单问答，显示思考过程".to_string())),
+                        ("不显示思考过程".to_string(), Some("简单问答，不显示思考过程".to_string())),
                         ("显示思考过程".to_string(), Some("多步骤推理，显示思考过程".to_string())),
                         ("不显示思考过程".to_string(), Some("多步骤推理，不显示思考过程".to_string())),
+                        ("显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())),
+                        ("不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string())),
+                        ("显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())),
+                        ("不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string())),
                         ("显示思考过程".to_string(), Some("复杂逻辑推导，显示思考过程".to_string())),
                         ("不显示思考过程".to_string(), Some("复杂逻辑推导，不显示思考过程".to_string())),
                         ("关闭思考".to_string(), Some("部分模型不支持关闭思考".to_string())),
@@ -941,19 +953,31 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             <select id='select-effort' class='left_para for_focus' name='effort'>
                 <option disabled>--{}--</option>
                 <optgroup label='Low'>
-                    <option value='1' selected title='{}'>{}</option>
-                    <option value='2' title='{}'>{}</option>
+                    <option value='1' selected title='{}'>Low-{}</option>
+                    <option value='2' title='{}'>Low-{}</option>
+                </optgroup>
+                <optgroup label='Minimal'>
+                    <option value='3' title='{}'>Minimal-{}</option>
+                    <option value='4' title='{}'>Minimal-{}</option>
                 </optgroup>
                 <optgroup label='Medium'>
-                    <option value='3' title='{}'>{}</option>
-                    <option value='4' title='{}'>{}</option>
+                    <option value='5' title='{}'>Medium-{}</option>
+                    <option value='6' title='{}'>Medium-{}</option>
                 </optgroup>
                 <optgroup label='High'>
-                    <option value='5' title='{}'>{}</option>
-                    <option value='6' title='{}'>{}</option>
+                    <option value='7' title='{}'>High-{}</option>
+                    <option value='8' title='{}'>High-{}</option>
+                </optgroup>
+                <optgroup label='Max'>
+                    <option value='9' title='{}'>Max-{}</option>
+                    <option value='10' title='{}'>Max-{}</option>
+                </optgroup>
+                <optgroup label='XHigh'>
+                    <option value='11' title='{}'>XHigh-{}</option>
+                    <option value='12' title='{}'>XHigh-{}</option>
                 </optgroup>
                 <optgroup label='Disable'>
-                    <option value='7' title='{}'>{}</option>
+                    <option value='13' title='{}'>{}</option>
                 </optgroup>
             </select>
         </div>
@@ -974,7 +998,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             <label>{}</label>
             <input id='select-web' class='left_para for_focus' type='checkbox' name='web'>
             <label for='select-web'></label>
-        </div>\n", page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.plan_mode.title, page_data.plan_mode.label, page_data.web.title, page_data.web.label);
+        </div>\n", page_data.prompt_name.title, page_data.prompt_name.label, page_data.uuid_current.title, page_data.uuid_current.label, page_data.input.title, page_data.input.label, page_data.output.title, page_data.output.label, page_data.context_len.title, page_data.context_len.label, page_data.cot.title, page_data.cot.label, page_data.cot.disabled.as_ref().unwrap(), tmp_option_cot[0].1.as_ref().unwrap(), tmp_option_cot[0].0, tmp_option_cot[1].1.as_ref().unwrap(), tmp_option_cot[1].0, tmp_option_cot[2].1.as_ref().unwrap(), tmp_option_cot[2].0, tmp_option_cot[3].1.as_ref().unwrap(), tmp_option_cot[3].0, tmp_option_cot[4].1.as_ref().unwrap(), tmp_option_cot[4].0, tmp_option_cot[5].1.as_ref().unwrap(), tmp_option_cot[5].0, tmp_option_cot[6].1.as_ref().unwrap(), tmp_option_cot[6].0, tmp_option_cot[7].1.as_ref().unwrap(), tmp_option_cot[7].0, tmp_option_cot[8].1.as_ref().unwrap(), tmp_option_cot[8].0, tmp_option_cot[9].1.as_ref().unwrap(), tmp_option_cot[9].0, tmp_option_cot[10].1.as_ref().unwrap(), tmp_option_cot[10].0, tmp_option_cot[11].1.as_ref().unwrap(), tmp_option_cot[11].0, tmp_option_cot[12].1.as_ref().unwrap(), tmp_option_cot[12].0, page_data.uuid_input.title, page_data.uuid_input.label, page_data.uuid_input.placeholder.as_ref().unwrap(), page_data.plan_mode.title, page_data.plan_mode.label, page_data.web.title, page_data.web.label);
     let tmp_option = page_data.voice.option.as_ref().unwrap();
     result += &format!("<!-- temperature -->
         <div class='top_add_space' title='{}'>

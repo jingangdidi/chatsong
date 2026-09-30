@@ -1201,11 +1201,17 @@ impl ClientPara {
                 match e.as_str() {
                     "1" => (ReasoningEffort::Low, true), // 思考的少
                     "2" => (ReasoningEffort::Low, false), // 思考的少
-                    "3" => (ReasoningEffort::Medium, true), // 思考适中
-                    "4" => (ReasoningEffort::Medium, false), // 思考适中
-                    "5" => (ReasoningEffort::High, true), // 思考更多
-                    "6" => (ReasoningEffort::High, false), // 思考更多
-                    "7" => { // 关闭思考，部分模型不支持关闭思考
+                    "3" => (ReasoningEffort::Minimal, true),
+                    "4" => (ReasoningEffort::Minimal, false),
+                    "5" => (ReasoningEffort::Medium, true), // 思考适中
+                    "6" => (ReasoningEffort::Medium, false), // 思考适中
+                    "7" => (ReasoningEffort::High, true), // 思考更多
+                    "8" => (ReasoningEffort::High, false), // 思考更多
+                    "9" => (ReasoningEffort::Max, true),
+                    "10" => (ReasoningEffort::Max, false),
+                    "11" => (ReasoningEffort::XHigh, true),
+                    "12" => (ReasoningEffort::XHigh, false),
+                    "13" => { // 关闭思考，部分模型不支持关闭思考
                         reasoning = false;
                         (ReasoningEffort::Low, false)
                     },
