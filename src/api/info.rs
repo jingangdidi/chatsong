@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fs::{read, write, create_dir_all, read_to_string};
+use std::fs::{read, write, create_dir_all, read_to_string, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -1092,14 +1092,21 @@ pub fn save_all_chat() {
     // 保存log文件
     let mut data = DATA.lock().unwrap();
     for (k, v) in data.iter_mut() {
-        if v.save && !v.is_incognito { // 如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才是true
-            if let Err(e) = create_uuid_dir(k) {
-                event!(Level::ERROR, "{}", e);
+        if v.save { // 如果只是提问，没有实际调用OpenAI的api进行回答，则最后退出程序时不需要保存该uuid的chat记录，只有本次开启服务后该uuid实际调用OpenAI的api得到回答这里才是true
+            if v.is_incognito { // 无痕模式不仅不保存聊天记录，还要把 uuid 文件夹整个删掉，避免上传的文件还在 uuid 文件夹中
+                let tmp_uuid_dir = format!("{}/{}", PARAS.outpath, k);
+                if let Err(e) = remove_dir_all(&tmp_uuid_dir) {
+                    event!(Level::ERROR, "Remove {} error: {}", tmp_uuid_dir, e);
+                }
+            } else {
+                if let Err(e) = create_uuid_dir(k) {
+                    event!(Level::ERROR, "{}", e);
+                }
+                if let Err(e) = v.save() {
+                    event!(Level::ERROR, "{} save chat log error: {}", k, e);
+                }
+                uuid_vec.push((k.to_string(), v.file.clone()));
             }
-            if let Err(e) = v.save() {
-                event!(Level::ERROR, "{} save chat log error: {}", k, e);
-            }
-            uuid_vec.push((k.to_string(), v.file.clone()));
         }
     }
     drop(data); // 下面获取html字符串的`create_download_page`函数内部需要进行lock，这里需要手动释放之前的lock
