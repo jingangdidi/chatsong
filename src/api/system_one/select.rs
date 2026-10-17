@@ -10,6 +10,49 @@ use crate::{
     error::MyError,
 };
 
+/*
+提问json:
+{
+    "state": {
+        "question": "解析下这个readme.md文件",
+        "description": "Calculates the MD5 hash of one or more files. Returns the MD5 value for each file in the format 'MD5  filename'"
+    },
+    "questions": [
+        {
+            "id": "relevance",
+            "type": "choice",
+            "instructions": "description描述的工具功能，是否与question相关？",
+            "criteria": {
+                "relevant": "description描述的工具功能，与question相关，需要调用该工具",
+                "possibly_relevant": "description描述的工具功能，可能会被用到",
+                "not_relevant": "description描述的工具功能，与question无关，不会被用到"
+            }
+        }
+    ]
+}
+
+回答 json:
+{
+    "model":"StartLux-Decision-0.8B",
+    "answers":{
+        "relevance":{
+            "type":"choice",
+            "choice":"relevant",
+            "confidence":0.4834200158227987,
+            "probabilities":{
+                "relevant":0.4834200158227987,
+                "possibly_relevant":0.23309645576782664,
+                "not_relevant":0.28348352840937474
+            }
+        }
+    },
+    "usage":{
+        "input_tokens":180,
+        "output_tokens":0
+    }
+}
+*/
+
 /// 一个候选（工具 / 提示词 / skill）
 #[derive(Debug, Clone)]
 pub struct Item {
