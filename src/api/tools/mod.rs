@@ -91,6 +91,10 @@ use built_in_tools::{
         Goal,
         GoalStatus,
     },
+    deepseek_search::{
+        search::deepseek_search,
+        fetch::deepseek_fetch,
+    },
 };
 
 #[cfg(feature = "screen-capture")]
@@ -1308,6 +1312,29 @@ async fn try_call_tool(
             },
             "get_all_memory" => match PARAS.tools.run(name_id[1], paras) { // 获取所有记忆
                 Ok(_) => Ok(Ok((get_all_memory(if is_local { "local" } else { uuid }), None))),
+                Err(e) => Ok(Err(e)),
+            },
+            "web_search" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((query_count, _)) => {
+                    let parts: Vec<&str> = query_count.splitn(2, "---srx---").collect(); // [搜索问题, 返回数量]
+                    let count = match parts[1].parse::<u8>() {
+                        Ok(c) => c,
+                        Err(_) => 10,
+                    };
+                    match deepseek_search(parts[0], count).await {
+                        Ok(search_result) => Ok(Ok((search_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "fetch_url" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((url, _)) => {
+                    match deepseek_fetch(&url).await {
+                        Ok(fetch_result) => Ok(Ok((fetch_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
                 Err(e) => Ok(Err(e)),
             },
             _ => Ok(PARAS.tools.run(name_id[1], paras)),

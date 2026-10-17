@@ -215,6 +215,7 @@ pub struct ParsedParas {
     pub memory_dir:   String,                      // memory.json 存储路径，默认存储在-o指定的输出路径下
     pub systemone:    Option<String>,              // system one 决策模型的 url
     pub time:         NaiveDateTime,               // 开启服务时的时间戳，多个电脑同时开启服务，最后保存 graph 时会丢失其他电脑问答的节点，所以每次关闭服务保存 graph 文件时，还要检查下是否有比这个时间戳晚的 graph 文件，有则需要读取这些 graph 文件，将其中的 local 的 uuid 合并到当前 graph 再保存
+    pub deepseek_search_api_key: String,           // 用于 search 和 fetch
 }
 
 /// 解析参数
@@ -240,6 +241,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
             }
         },
     };
+    let deepseek_search_api_key = api.get_deepseek_api_key();
     let out: ParsedParas = ParsedParas{
         api: api,
         addr: match &para.addr { // 要监听的地址，默认127.0.0.1，解析为[127, 0, 0, 1]
@@ -430,6 +432,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
             para.systemone
         },
         time: Local::now().naive_local(),
+        deepseek_search_api_key,
     };
     // 输出路径不存在则创建，已存在则删除其中的空uuid文件夹
     let tmp_outpath = Path::new(&out.outpath);
@@ -916,5 +919,17 @@ impl Api {
         } else {
             None
         }
+    }
+
+    /// 获取 deepseek 的 api key
+    fn get_deepseek_api_key(&self) -> String {
+        let mut api_key = String::new();
+        for i in ["深度求索", "deepseek", "DeepSeek"] {
+            if let Some(c) = &self.config.get(i) {
+                api_key = c.api_key.clone();
+                break
+            }
+        }
+        api_key
     }
 }

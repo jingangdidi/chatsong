@@ -21,6 +21,7 @@ pub mod sub_agent;
 pub mod goal;
 pub mod memory;
 pub mod chat_log;
+pub mod deepseek_search;
 
 //use sum::Sum;
 use filesystem::{
@@ -73,6 +74,10 @@ use sub_agent::SubAgent;
 use goal::UpdateGoalStatus;
 use memory::GetAllMemory;
 use chat_log::LoadChatLog;
+use deepseek_search::{
+    DeepseekSearch,
+    DeepseekFetch,
+};
 
 /// trait for built-in tools
 pub trait BuiltIn: Send + Sync {
@@ -106,6 +111,7 @@ pub enum Group {
     UpdateGoalStatus,
     Memory,
     ChatLog,
+    DeepseekSearch,
 }
 
 impl Group {
@@ -122,6 +128,7 @@ impl Group {
             Group::UpdateGoalStatus => "Update Goal Status".to_string(),
             Group::Memory => "memory".to_string(),
             Group::ChatLog => "chat log".to_string(),
+            Group::DeepseekSearch => "DeepSeek search".to_string(),
         }
     }
 
@@ -138,6 +145,7 @@ impl Group {
             "Update Goal Status" => Ok(Group::UpdateGoalStatus),
             "memory" => Ok(Group::Memory),
             "chat log" => Ok(Group::ChatLog),
+            "DeepSeek search" => Ok(Group::DeepseekSearch),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
         }
     }
@@ -218,6 +226,9 @@ impl BuiltInTools {
             (Arc::new(GetAllMemory::new()), Group::Memory),
             // chat log
             (Arc::new(LoadChatLog::new()), Group::ChatLog),
+            // DeepSeek search
+            (Arc::new(DeepseekSearch::new()), Group::DeepseekSearch),
+            (Arc::new(DeepseekFetch::new()), Group::DeepseekSearch),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool
         let mut groups: HashSet<Group> = HashSet::new(); // tool groups
