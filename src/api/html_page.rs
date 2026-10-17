@@ -52,6 +52,8 @@ const ICON_SPEAKER0: &str = include_str!("../../assets/image/speaker-xmark-svgre
 const ICON_SPEAKER1: &str = include_str!("../../assets/image/speaker-wave-2-svgrepo-com.txt"); // 开启
 const ICON_SAFE0: &str = include_str!("../../assets/image/helmet-svgrepo-com.txt"); // 调用工具需用户允许
 const ICON_SAFE1: &str = include_str!("../../assets/image/skull-outline-of-halloween-svgrepo-com.txt"); // 不询问直接调用任何工具
+const ICON_SYSTEMONE0: &str = include_str!("../../assets/image/decide-svgrepo-off.txt"); // 使用 system one 自动选择工具
+const ICON_SYSTEMONE1: &str = include_str!("../../assets/image/decide-svgrepo-on.txt");
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -419,6 +421,7 @@ struct PageInfo {
     incognito:    [String; 3], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
     microphone:   [String; 3], // 左下角语音按钮开启和关闭2个状态的title，以及开启的前2个字符
     safe:         [String; 3], // 左下角调用工具的权限开关，默认头盔，调用关键工具需要用户允许，切换为骷髅表示调用任何工具不需要询问
+    systemone:    [String; 3], // 左下角通过 system one 自动选择工具的开关
     wait:         [String; 3], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
 }
 
@@ -589,6 +592,7 @@ impl PageInfo {
                 incognito:  ["Activate incognito mode, where the current conversation will not be locally preserved upon program termination and shall be irrevocably discarded, refreshing or reopening the current page will also erase the conversation history".to_string(), "Disable the incognito mode, and your current conversation will be preserved locally upon exiting the application, allowing you to resume seamlessly during your next session".to_string(), "Ac".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 safe:       ["The key tool for calling requires user approval".to_string(), "No approval is required for calling all tools".to_string(), "The".to_string()],
+                systemone:  ["Disable automatic selection of related tools".to_string(), "Enable automatic selection of relevant tools".to_string(), "Disable".to_string()],
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
         } else {
@@ -756,6 +760,7 @@ impl PageInfo {
                 incognito:  ["开启无痕模式，关闭程序时，当前对话不会被保存在本地，直接舍弃，刷新或重新打开当前页面也将丢弃对话记录".to_string(), "关闭无痕模式，关闭程序时，当前对话会被保存在本地，下次可以接着提问".to_string(), "开启".to_string()], // 左下角无痕模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 safe:       ["调用关键工具需要用户批准".to_string(), "开放权限，调用所有工具都不需要用户批准".to_string(), "调用".to_string()],
+                systemone:  ["关闭自动选择工具".to_string(), "开启自动选择工具".to_string(), "关闭".to_string()],
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
             }
         }
@@ -1201,7 +1206,10 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         </div>
         <div id='left-safe' class='left-bottom' title='{}'>
             <img src='{}' id='safe' aria-hidden='true' />
-        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY, page_data.button[7], ICON_SPEAKER0, page_data.safe[0], ICON_SAFE0);
+        </div>
+        <div id='left-systemone' class='left-bottom' title='{}'>
+            <img src='{}' id='systemone' aria-hidden='true' />
+        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY, page_data.button[7], ICON_SPEAKER0, page_data.safe[0], ICON_SAFE0, page_data.systemone[1], ICON_SYSTEMONE0);
     result += r###"
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
@@ -2048,6 +2056,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
     var tool_result = ''; // 调用工具的result部分
     var multiple_tools = '';
     var not_select_uuid = true;
+    var current_systemone = true;
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
         select.addEventListener('change', function() {
@@ -2192,6 +2201,28 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         safe_toggle();
     }})
     ", page_data.safe[2], ICON_SAFE1, page_data.safe[1], ICON_SAFE0, page_data.safe[0], PARAS.addr_str, PARAS.port, v);
+    result += &format!("
+    // 切换自动选择工具
+    function systemone_toggle() {{
+        const systemoneDiv = document.getElementById('left-systemone');
+        const systemoneImg = document.getElementById('systemone');
+        current_systemone = systemoneDiv.title.substring(0, 2) === '{}';
+        if (current_systemone) {{
+            systemoneImg.src = '{}';
+            systemoneDiv.title = '{}';
+        }} else {{
+            systemoneImg.src = '{}';
+            systemoneDiv.title = '{}';
+        }}
+        fetch('http://{}:{}{}/systemone-toggle?systemone='+!current_systemone).catch(error => {{ // 切换安全模
+            console.error('Failed toggle systemone:', error);
+        }});
+    }}
+    // 监听点击切自动选择工具按钮
+    document.getElementById('left-systemone').addEventListener('click', function(event) {{
+        systemone_toggle();
+    }})
+    ", page_data.systemone[2], ICON_SYSTEMONE0, page_data.systemone[1], ICON_SYSTEMONE1, page_data.systemone[0], PARAS.addr_str, PARAS.port, v);
     result += r###"
     // 监听点击停止对话按钮
     document.getElementById('submit_span').addEventListener('click', function(event) {
@@ -3005,6 +3036,25 @@ print(b)
                 para_tool = multiple_tools;
             }
         }
+        // 如果没有选择任何工具，使用 system one 自动选择
+"###;
+    result += &format!("        if (!current_systemone && req !== '' && para_tool === 'not_select_any_tools') {{
+            fetch('http://{}:{}{}/systemone', {{
+                method: 'POST',
+                headers: {{
+                    'Content-Type': 'text/plain;charset=UTF-8',
+                }},
+                body: req,
+            }})
+            .then(res => res.text())
+            .then(text => {{
+                if (text !== '') {{
+                    para_tool = text;
+                }}
+                console.log('tools: '+text);
+            }});
+        }}", PARAS.addr_str, PARAS.port, v);
+    result += r###"
         // plan mode
         var para_plan = document.getElementById("select-plan").checked;
         // get selected skill

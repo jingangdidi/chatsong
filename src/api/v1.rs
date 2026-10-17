@@ -34,6 +34,8 @@ use crate::api::handlers::{
     approval::approval,
     new_instruction::instruction,
     memory::memory,
+    systemone::systemone,
+    systemone_toggle::systemone_toggle,
 };
 
 /// 创建version1的路由
@@ -67,6 +69,8 @@ pub fn configure() -> Router {
         .route("/approval", get(approval)) // GET /v1/approval，更新approval
         .route("/instruction", get(instruction)) // GET /v1/instruction，插入新指令
         .route("/memory", get(memory)) // GET /v1/memory，记忆
+        .route("/systemone", post(systemone)) // POST /v1/systemone，system one 决策自动选工具
+        .route("/systemone-toggle", get(systemone_toggle)) // GET /v1/systemone-toggle，切换 system one 决策自动选工具
         .route("/goal", get(goal)) // GET /v1/goal，goal模式
         .route("/speaker", get(speaker)) // GET /v1/speaker，speaker模式
         .route("/upload", post(upload)) // POST /v1/upload，上传文件

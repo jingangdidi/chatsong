@@ -69,6 +69,7 @@ use crate::{
         get_relevant_memory,
         get_all_memory,
     },
+    system_one::select_memory::get_relevant_memory as get_relevant_memory_systemone,
 };
 
 pub mod built_in_tools;
@@ -121,6 +122,9 @@ pub trait MyTools {
 
     /// select all tools, return uuid vector
     fn select_all_tools(&self) -> Vec<String>;
+
+    /// get all tools info, return vector of (uuid, name, description)
+    fn get_all_tools_info(&self) -> Vec<(String, String, String)>;
 
     /// select tools by uuid first part, return uuid vector
     fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String>;
@@ -247,6 +251,14 @@ impl Tools {
             );
         }
         Ok(tools)
+    }
+
+    /// get all tools info, return vector of (uuid, name, description)
+    pub fn get_all_tools_info(&self) -> Vec<(String, String, String)> {
+        let mut tools = PARAS.tools.built_in.get_all_tools_info();
+        let mut external_tools = PARAS.tools.external.get_all_tools_info();
+        tools.append(&mut external_tools);
+        tools
     }
 
     /// check contain tool id
@@ -502,23 +514,35 @@ pub async fn run_tools(
         }
         if !user_msg.is_empty() {
             let query = user_msg.join("\n");
-            // 计算 embedding
-            let embedding = if let Ok(embedding) = get_embedding(&uuid, query.clone()).await {
-                embedding
+            // 先尝试通过 system one 获取相关记忆
+            // 第一次会失败，因为记忆还没有从本地文件加载到内存，通过 embedding 获取后就加载好了，第二次就可以通过 system one 获取了
+            let mut memory = if let Some(url) = PARAS.systemone.as_ref() {
+                match get_relevant_memory_systemone(url, &query).await {
+                    Ok(m) => m,
+                    Err(e) => {
+                        event!(Level::ERROR, "{} get relevant memory by system one error: {}", uuid, e);
+                        None
+                    },
+                }
             } else {
                 None
             };
-            let memory = {
+            // 再尝试通过 embedding 模型获取相关记忆
+            if memory.is_none() {
+                // 计算 embedding
+                let embedding = if let Ok(embedding) = get_embedding(&uuid, query.clone()).await {
+                    embedding
+                } else {
+                    None
+                };
                 match get_relevant_memory(&uuid, &query, embedding.clone(), 10, is_local) {
-                    Some(memory) => Some(memory),
+                    Some(m) => memory = Some(m),
                     None => if is_local {
                         // 再尝试从 memory_old.json 中获取
-                        get_relevant_memory("local", &query, embedding, 10, false)
-                    } else {
-                        None
-                    }
+                        memory = get_relevant_memory("local", &query, embedding, 10, false);
+                    },
                 }
-            };
+            }
             if let Some(m) = memory {
                 //event!(Level::INFO, "{} insert memory prompt: {}\n", uuid, m);
                 history_messages.push(

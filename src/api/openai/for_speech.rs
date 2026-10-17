@@ -47,7 +47,7 @@ pub async fn create_speech(uuid: &str, q: String, voice: usize, outpath: &str, e
         .input(&q) // 文本内容，最长4096个字符，例如：The quick brown fox jumped over the lazy dog.
         .voice(tmp_voice) // 声音，支持：Alloy, Echo, Fable, Onyx, Nova, Shimmer
         .response_format(AudioSpeechResponseFormat::Mp3) // 格式，支持：Mp3, Opus, Aac, Flac, Wav, Pcm
-        .speed(1.0) // 速度，支持：0.25-4.0，默认1.0
+        .speed(1.0_f32) // 速度，支持：0.25-4.0，默认1.0
         .build().map_err(|e| MyError::AudioSpeechError{error: e})?;
     // 创建声音文件
     let uuid_path = format!("{}/{}", outpath, uuid);

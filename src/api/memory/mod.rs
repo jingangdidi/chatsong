@@ -216,6 +216,11 @@ impl SimpleMemory {
         }
     }
 
+    /// 获取所有基因向量
+    pub fn get_all_memory_vec(&self) -> Vec<String> {
+        self.notes.iter().map(|m| m.summary.clone()).collect::<Vec<_>>()
+    }
+
     /// 获取所有记忆
     fn get_all_memory(&self) -> Option<String> {
         if self.notes.is_empty() {
@@ -279,17 +284,23 @@ impl SimpleMemory {
         if hits.is_empty() {
             None
         } else {
-            let mut prompt = "## Memory\nThe following content is from previous tasks. Use it only when relevant to the current issue; if there is a conflict with the current user message, the current user message takes precedence.\n".to_string();
-            prompt.push_str("\n### Memories related to the current issue:\n");
             event!(Level::INFO, "got memory:\n{}", hits.iter().map(|m| format!("- score: {:.4}, memory: {}", m.score, m.note.summary)).collect::<Vec<_>>().join("\n"));
-            for hit in hits {
-                prompt.push_str("- ");
-                prompt.push_str(&hit.note.summary);
-                prompt.push('\n');
-            }
-            Some(prompt)
+            let memory = hits.into_iter().map(|m| m.note.summary).collect();
+            Some(final_memory_prompt(memory))
         }
     }
+}
+
+/// 合并记忆向量，并加上 prompt
+pub fn final_memory_prompt(memory: Vec<String>) -> String {
+    let mut prompt = "## Memory\nThe following content is from previous tasks. Use it only when relevant to the current issue; if there is a conflict with the current user message, the current user message takes precedence.\n".to_string();
+    prompt.push_str("\n### Memories related to the current issue:\n");
+    for m in memory {
+        prompt.push_str("- ");
+        prompt.push_str(&m);
+        prompt.push('\n');
+    }
+    prompt
 }
 
 /// 判断相似度是否>=80%

@@ -19,6 +19,8 @@ pub mod new_instruction; // `GET /嵌套的前缀/instruction`
 pub mod goal; // `GET /嵌套的前缀/goal`
 pub mod speaker; // `GET /嵌套的前缀/speaker`
 pub mod memory; // `GET /嵌套的前缀/memory`
+pub mod systemone; // `GET /嵌套的前缀/systemone`
+pub mod systemone_toggle; // `GET /嵌套的前缀/systemone-toggle`
 pub mod upload; // `POST /嵌套的前缀/upload`
 pub mod usage; // `GET /嵌套的前缀/usage`
 pub mod fallback; // `NOT_FOUND`

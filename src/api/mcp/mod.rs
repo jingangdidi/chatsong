@@ -105,6 +105,9 @@ pub trait MyMcp {
     /// select all tools, return name__id vector
     fn select_all_tools(&self) -> Vec<String>;
 
+    /// get all tools info, return vector of (uuid, name, description)
+    fn get_all_tools_info(&self) -> Vec<(String, String, String)>;
+
     /// select tools by uuid first part, return uuid vector
     fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String>;
 
@@ -210,6 +213,11 @@ impl McpServers {
             );
         }
         Ok(tools)
+    }
+
+    /// get all tools info, return vector of (uuid, name, description)
+    pub fn get_all_tools_info(&self) -> Vec<(String, String, String)> {
+        self.stdio.get_all_tools_info()
     }
 
     /// get approval message

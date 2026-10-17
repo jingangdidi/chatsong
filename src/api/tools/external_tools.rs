@@ -162,6 +162,11 @@ impl MyTools for ExternalTools {
         selected_tools
     }
 
+    /// get all tools info, return vector of (uuid, name, description)
+    fn get_all_tools_info(&self) -> Vec<(String, String, String)> {
+        self.id_map.iter().map(|(k, v)| (k.clone(), v.name.clone(), v.description.clone())).collect()
+    }
+
     /// select tools by uuid first part, return uuid vector
     fn select_multiple_tools(&self, ids: &Vec<String>) -> Vec<String> {
         let mut selected_tools: Vec<String> = Vec::new();
