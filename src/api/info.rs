@@ -37,7 +37,7 @@ pub enum DataType {
     Image(String),                 // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
     Voice,                         // 音频文件
     Normal,                        // 常规问题
-    CallTool(Vec<ChatMessage>),       // 调用工具时，不会把原始调用工具的内容显示在页面，但是发送历史记录时，最好传递原是的工具调用信息，因此这里存储下
+    CallTool(Vec<ChatMessage>),    // 调用工具时，不会把原始调用工具的内容显示在页面，但是发送历史记录时，最好传递原是的工具调用信息，因此这里存储下
     Hide((usize, Option<String>)), // 隐藏该信息，(隐藏前DataType的索引, 隐藏前存储的字符串)，该信息被用户删除了，显示chat记录、获取上下文时忽略该信息
 }
 
@@ -93,18 +93,40 @@ impl DataType {
 
     // 将当前DataType::Hide还原回原始DataType
     // 这个以后可能用到
-    /*
-    fn restore_hide(&mut self) {
+    fn restore_hide(&mut self) -> bool {
         match self {
-            DataType::Hide((0, Some(r))) => *self = DataType::Raw(r.to_owned()),
-            DataType::Hide((1, Some(i))) => *self = DataType::Image(i.to_owned()),
-            DataType::Hide((2, None))    => *self = DataType::Voice,
-            DataType::Hide((3, None))    => *self = DataType::Normal,
-            DataType::Hide((4, _))       => (), // 原始就是隐藏信息，不应该出现这种情况
-            _                            => (), // 不应该出现这种情况
+            DataType::Hide((0, Some(r)))   => {
+                *self = DataType::Raw(r.to_owned());
+                true
+            },
+            DataType::Hide((1, Some(i)))   => {
+                *self = DataType::Image(i.to_owned());
+                true
+            },
+            DataType::Hide((2, None))      => {
+                *self = DataType::Voice;
+                true
+            },
+            DataType::Hide((3, None))      => {
+                *self = DataType::Normal;
+                true
+            },
+            DataType::Hide((4, Some(msg))) => {
+                match serde_json::from_str::<Vec<ChatMessage>>(&msg) {
+                    Ok(m) => {
+                        *self = DataType::CallTool(m);
+                        true
+                    },
+                    Err(e) => {
+                        event!(Level::ERROR, "hided call tool messages to vec error: {:?}", e);
+                        false
+                    },
+                }
+            },
+            DataType::Hide(_) => false, // 原始就是隐藏信息，不应该出现这种情况
+            _                 => false, // 不应该出现这种情况
         }
     }
-    */
 }
 
 /// 问答记录
@@ -625,6 +647,30 @@ impl Info {
                 }
                 // 非Hide的信息数减1
                 self.msg_len -= 1;
+                true
+            } else { // 该信息已经是Hide，没做转换，非Hide的信息数不变，也返回true，因为不是错误
+                true
+            }
+        } else {
+            false
+        }
+    }
+
+    /// 恢复指定idx的信息，已经插入的信息的索引不变，前端id也不需要变，成功则返回true，失败返回false
+    fn restore_msg(&mut self, idx: usize) -> bool {
+        if self.messages.len() > idx {
+            if self.messages[idx].data.restore_hide() {
+                // 比指定idx大的信息的idx_m都要加1，idx_qa要重新计算
+                for i in (0..self.messages.len()).rev() {
+                    if i <= idx {
+                        break
+                    } else if !self.messages[i].data.is_hide() {
+                        self.messages[i].idx_m += 1;
+                        self.messages[i].idx_qa = self.get_qa_num_by_idx(i).0;
+                    }
+                }
+                // 非Hide的信息数减1
+                self.msg_len += 1;
                 true
             } else { // 该信息已经是Hide，没做转换，非Hide的信息数不变，也返回true，因为不是错误
                 true
