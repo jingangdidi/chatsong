@@ -33,12 +33,12 @@ pub const VOICE: &str = include_str!("../../assets/image/voice-one-svgrepo-com.t
 /// 信息类型
 #[derive(Serialize, Deserialize, PartialEq)]
 pub enum DataType {
-    Raw(String),                   // 要进行网络搜索、解析url、解析上传的html、从上传的pdf提取内容、从上传的zip文件提取内容时，存储输入要搜索的问题、url、html文件名、pdf文件名、zip文件名。展示chat记录时展示这个内容，而不是搜索、解析、提取的内容
-    Image(String),                 // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
-    Voice,                         // 音频文件
-    Normal,                        // 常规问题
-    CallTool(Vec<ChatMessage>),    // 调用工具时，不会把原始调用工具的内容显示在页面，但是发送历史记录时，最好传递原是的工具调用信息，因此这里存储下
-    Hide((usize, Option<String>)), // 隐藏该信息，(隐藏前DataType的索引, 隐藏前存储的字符串)，该信息被用户删除了，显示chat记录、获取上下文时忽略该信息
+    Raw(String),                         // 要进行网络搜索、解析url、解析上传的html、从上传的pdf提取内容、从上传的zip文件提取内容时，存储输入要搜索的问题、url、html文件名、pdf文件名、zip文件名。展示chat记录时展示这个内容，而不是搜索、解析、提取的内容
+    Image(String),                       // 图片base64字符串，该图片存储在服务端当前uuid路径下。上传的图片或生成的图片
+    Voice,                               // 音频文件
+    Normal,                              // 常规问题
+    CallTool(Vec<ChatMessage>),          // 调用工具时，不会把原始调用工具的内容显示在页面，但是发送历史记录时，最好传递原是的工具调用信息，因此这里存储下
+    Hide((usize, Option<String>, bool)), // 隐藏该信息，(隐藏前DataType的索引, 隐藏前存储的字符串, 是否删除)，该信息被用户删除了，显示chat记录、获取上下文时忽略该信息
 }
 
 // 实现 Default trait，指定默认值为 Normal
@@ -58,31 +58,40 @@ impl DataType {
         }
     }
 
+    // 该数据类型是否是删除
+    pub fn is_del(&self) -> bool {
+        if let DataType::Hide((_, _, d)) = self {
+            *d
+        } else {
+            false
+        }
+    }
+
     // 将当前DataType转为DataType::Hide，并返回是否做了转换
-    fn to_hide(&mut self) -> bool {
+    fn to_hide(&mut self, del: bool) -> bool {
         match self {
             DataType::Raw(r)   => {
-                *self = DataType::Hide((0, Some(r.to_owned())));
+                *self = DataType::Hide((0, Some(r.to_owned()), del));
                 true
             },
             DataType::Image(i) => {
-                *self = DataType::Hide((1, Some(i.to_owned())));
+                *self = DataType::Hide((1, Some(i.to_owned()), del));
                 true
             },
             DataType::Voice    => {
-                *self = DataType::Hide((2, None));
+                *self = DataType::Hide((2, None, del));
                 true
             },
             DataType::Normal   => {
-                *self = DataType::Hide((3, None));
+                *self = DataType::Hide((3, None, del));
                 true
             },
             DataType::CallTool(messages) => {
                 match serde_json::to_string(messages) {
-                    Ok(call_tool_str) => *self = DataType::Hide((4, Some(call_tool_str))),
+                    Ok(call_tool_str) => *self = DataType::Hide((4, Some(call_tool_str), del)),
                     Err(e) => {
                         event!(Level::ERROR, "hide call tool messages error: {:?}", e);
-                        *self = DataType::Hide((4, Some(format!("{:?}", e))));
+                        *self = DataType::Hide((4, Some(format!("{:?}", e)), del));
                     },
                 }
                 true
@@ -95,23 +104,23 @@ impl DataType {
     // 这个以后可能用到
     fn restore_hide(&mut self) -> bool {
         match self {
-            DataType::Hide((0, Some(r)))   => {
+            DataType::Hide((0, Some(r), _))   => {
                 *self = DataType::Raw(r.to_owned());
                 true
             },
-            DataType::Hide((1, Some(i)))   => {
+            DataType::Hide((1, Some(i), _))   => {
                 *self = DataType::Image(i.to_owned());
                 true
             },
-            DataType::Hide((2, None))      => {
+            DataType::Hide((2, None, _))      => {
                 *self = DataType::Voice;
                 true
             },
-            DataType::Hide((3, None))      => {
+            DataType::Hide((3, None, _))      => {
                 *self = DataType::Normal;
                 true
             },
-            DataType::Hide((4, Some(msg))) => {
+            DataType::Hide((4, Some(msg), _)) => {
                 match serde_json::from_str::<Vec<ChatMessage>>(&msg) {
                     Ok(m) => {
                         *self = DataType::CallTool(m);
@@ -345,6 +354,12 @@ impl Info {
         self.pop_message();
         // 是否保存重置为false，下次加载时就是false
         self.save = false;
+        // 恢复隐藏的信息
+        for i in 0..self.messages.len() {
+            if self.messages[i].data.is_hide() {
+                self.restore_msg(i);
+            }
+        }
         // Info对象转json字符串
         let chat_log_json_str = serde_json::to_string_pretty(&self).map_err(|e| MyError::ToJsonStirngError{uuid: self.uuid.clone(), error: e})?;
         // 加上指定的输出路径
@@ -633,9 +648,9 @@ impl Info {
     */
 
     /// 将指定idx的信息设为隐藏，这样已经插入的信息的索引不变，前端id也不需要变，成功则返回true，失败返回false
-    fn hide_msg(&mut self, idx: usize) -> bool {
+    fn hide_msg(&mut self, idx: usize, del: bool) -> bool {
         if self.messages.len() > idx {
-            if self.messages[idx].data.to_hide() {
+            if self.messages[idx].data.to_hide(del) {
                 // 比指定idx大的信息的idx_m都要减1，idx_qa要重新计算
                 for i in (0..self.messages.len()).rev() {
                     if i <= idx {
@@ -950,7 +965,7 @@ pub fn delete_msg_by_id(uuid: &str, id: &str) -> (bool, Option<String>) {
     if let Some(id_num) = id.strip_prefix("d") { // 含有“d”前缀
         if let Ok(idx) = id_num.parse::<usize>() { // 是数值
             if let Some(info) = data.get_mut(uuid) {
-                if info.hide_msg(idx) {
+                if info.hide_msg(idx, true) {
                     (true, None)
                 } else {
                     (false, Some(format!("index {id} >= total messages number"))) // 索引出界
@@ -963,6 +978,37 @@ pub fn delete_msg_by_id(uuid: &str, id: &str) -> (bool, Option<String>) {
         }
     } else { // 指定id不是以“d”开头
         (false, Some(format!("id {id} not starts with \"d\""))) // id第一个字符不是“d”
+    }
+}
+
+// 从服务端指定uuid中隐藏/恢复指定id的信息，这里id格式是“h”+序号索引，比如“h0”表示第一条信息
+// 成功则第1项返回true，失败第1项返回false，第2项返回错误信息
+pub fn hide_msg_by_id(uuid: &str, id: &str) -> (bool, Option<String>) {
+    let mut data = DATA.lock().unwrap();
+    if let Some(id_num) = id.strip_prefix("h") { // 含有“h”前缀
+        if let Ok(idx) = id_num.parse::<usize>() { // 是数值
+            if let Some(info) = data.get_mut(uuid) {
+                if info.messages[idx].data.is_hide() {
+                    if info.restore_msg(idx) {
+                        (true, None)
+                    } else {
+                        (false, Some(format!("index {id} >= total messages number"))) // 索引出界
+                    }
+                } else {
+                    if info.hide_msg(idx, false) {
+                        (true, None)
+                    } else {
+                        (false, Some(format!("index {id} >= total messages number"))) // 索引出界
+                    }
+                }
+            } else { // 服务端没有该uuid
+                (false, Some(format!("uuid {uuid} not in server"))) // uuid不存在
+            }
+        } else { // 数值id转usize报错
+            (false, Some(format!("convert id {id} to number error"))) // id转usize错误
+        }
+    } else { // 指定id不是以“d”开头
+        (false, Some(format!("id {id} not starts with \"h\""))) // id第一个字符不是“h”
     }
 }
 
@@ -1443,8 +1489,13 @@ pub fn get_log_for_display(uuid: &str, for_template: bool) -> (usize, usize, usi
         data.insert(uuid.to_string(), Info::load_or_init(uuid, None));
     }
     let info = data.get_mut(uuid).unwrap(); // 此时该uuid一定在服务端data中，这里直接unwrap
+    for i in 0..info.messages.len() {
+        if info.messages[i].data.is_hide() {
+            info.restore_msg(i);
+        }
+    }
     for (i, m) in info.messages.iter().enumerate() {
-        if m.data.is_hide() {
+        if m.data.is_del() {
             continue
         }
         let tmp_time = m.time.clone();

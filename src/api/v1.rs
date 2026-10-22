@@ -29,6 +29,7 @@ use crate::api::handlers::{
     usage::usage,
     fallback::fallback,
     delete_message::del_msg,
+    hide_message::hide_msg,
     microphone::microphone,
     incognito::incognito,
     approval::approval,
@@ -64,6 +65,7 @@ pub fn configure() -> Router {
         .route("/save/:id", get(save)) // GET /v1/save/:id，下载生成图片或音频文件
         .route("/safe", get(safe)) // GET /v1/safe，切换安全模式，安全: 调用关键工具需要用户同一，不安全: 调用工具不需要询问
         .route("/delmsg/:id", get(del_msg)) // GET /v1/delmsg/:id，url指定要删除的信息id，从服务端删除
+        .route("/hidemsg/:id", get(hide_msg)) // GET /v1/hidemsg/:id，url指定要隐藏/恢复的信息id
         .route("/microphone", get(microphone)) // GET /v1/microphone，关闭语音模式
         .route("/incognito", get(incognito)) // GET /v1/incognito，更新is_incognito
         .route("/approval", get(approval)) // GET /v1/approval，更新approval

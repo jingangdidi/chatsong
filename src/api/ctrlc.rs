@@ -57,8 +57,8 @@ pub async fn wait_for_signal() {
     //println!("start waiting signal ...");
     wait_for_signal_impl().await;
     //println!("do something ...");
-    save_graph(); // 退出前保存图文件
     save_all_chat(); // 退出前保存每个uuid的chat记录
+    save_graph(); // 退出前保存图文件，先保存html（会恢复隐藏的消息），最后保存图文件
     // kill mcp servers
     PARAS.mcp_servers.close_all().await;
     // save memory

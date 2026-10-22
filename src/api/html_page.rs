@@ -414,6 +414,7 @@ struct PageInfo {
     voice:        LeftInfo,    // 声音
     copy:         String,      // 点击头像复制
     delete:       [String; 2], // 删除问题和回答
+    hide:         [String; 2], // 隐藏/恢复问题和回答
     m_qa_token:   [String; 4], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
     upload:       String,      // 上传文件的title
     textarea:     String,      // 输入框内的提示信息
@@ -585,6 +586,7 @@ impl PageInfo {
                 },
                 copy:       "click to copy".to_string(), // 点击头像复制
                 delete:     ["delete this question".to_string(), "delete this answer".to_string()], // 删除问题和回答
+                hide:       ["hide/restore this question".to_string(), "hide/restore this answer".to_string()], // 隐藏/恢复问题和回答
                 m_qa_token: ["message ".to_string(), ", Q&A pair ".to_string(), ", ".to_string(), " tokens".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "upload files".to_string(), // 上传文件的title
                 textarea:   "Input your query (Press Shift+Enter for line breaks)".to_string(), // 输入框内的提示信息
@@ -753,6 +755,7 @@ impl PageInfo {
                 },
                 copy:       "点击复制".to_string(), // 点击头像复制
                 delete:     ["删除该问题".to_string(), "删除该回答".to_string()], // 删除问题和回答
+                hide:       ["隐藏/恢复该问题".to_string(), "隐藏/恢复该回答".to_string()], // 隐藏/恢复问题和回答
                 m_qa_token: ["第".to_string(), "条信息，第".to_string(), "对问答，".to_string(), "个token".to_string()], // 显示信息数、Q&A对数、token数，4部分，用具体数值拼接
                 upload:     "上传文件".to_string(), // 上传文件的title
                 textarea:   "输入你的问题 (Shift+Enter换行)".to_string(), // 输入框内的提示信息
@@ -1081,6 +1084,9 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             };
             result += &format!("\n            <!-- user -->
             <div class='right-time'>
+                <span id='h{}' class='for_focus_button hide_btn' title='{}'>
+                    {}
+                </span>
                 <span id='d{}' class='for_focus_button del_btn' title='{}'>
                     {}
                 </span>
@@ -1089,7 +1095,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
                     <div class='chat-txt right' id='m{}' title='{}'></div>
-                    <div class='chat-icon'>\n", log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, if log.remembered {"🧠 "} else {""}, log.time, log.id, tmp_title);
+                    <div class='chat-icon'>\n", log.id, page_data.hide[0], ICON_DELETE, log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, if log.remembered {"🧠 "} else {""}, log.time, log.id, tmp_title);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -1107,9 +1113,12 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                 <span id='d{}' class='for_focus_button del_btn' title='{}'>
                     {}
                 </span>
+                <span id='h{}' class='for_focus_button hide_btn' title='{}'>
+                    {}
+                </span>
             </div>
             <div class='gpt-chat-box'>
-                <div class='chat-icon'>\n", log.time, if log.remembered {" 🧠"} else {""}, log.id, page_data.delete[1], ICON_DELETE);
+                <div class='chat-icon'>\n", log.time, if log.remembered {" 🧠"} else {""}, log.id, page_data.delete[1], ICON_DELETE, log.id, page_data.hide[1], ICON_DELETE);
             if log.is_img || log.is_voice {
                 result += &format!("                    <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_CHATGPT);
             } else {
@@ -2255,6 +2264,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             document.getElementById('input_query').focus();
         } else { // 删除消息按钮
             const delBtn = event.target.closest('.del_btn'); // 这里要获取最近的del_btn，否则点击删除图标可能无效
+            const hideBtn = event.target.closest('.hide_btn'); // 这里要获取最近的hide_btn，否则点击图标可能无效
             if (delBtn && isStopped) {
                 const idx_num = Number(delBtn.id.substring(1));
                 if (idx_num < 18446744073709551612) { // rust usize最后4个数是示例信息的id，没记录在服务端，不需要删除
@@ -2279,8 +2289,8 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                         let last_is_answer_new = true;
                         allDivMsg.forEach(div => {
                             // 获取当前信息的id序号
-                            const id_num = Number(div.id.substring(1)); // 'm0' -> 0
-                            if (id_num < 18446744073709551612) { // rust usize最后4个数是示例信息的id，没记录在服务端，忽略
+                            const id_num = BigInt(div.id.substring(1)); // 'm0' -> 0，使用 BigInt 避免大整数精度丢失
+                            if (id_num < 18446744073709551612n) { // rust usize最后4个数是示例信息的id，没记录在服务端，忽略
                                 const msg_l = div.classList.contains('left');
                                 const msg_r = div.classList.contains('right');
                                 m_num_new += 1;
@@ -2307,6 +2317,40 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                         last_is_answer = last_is_answer_new;
                     } else {
                         console.error('delete message error');
+                    }
+                }
+            } else if (hideBtn && isStopped) {
+                const idx_num = Number(hideBtn.id.substring(1));
+                if (idx_num < 18446744073709551612) { // rust usize最后4个数是示例信息的id，没记录在服务端，不需要隐藏
+                    // 向服务端发送隐藏/恢复信息的请求
+"###;
+    result += &format!("                    const response = await fetch('http://{}:{}{}/hidemsg/'+hideBtn.id);\n", PARAS.addr_str, PARAS.port, v);
+    result += r###"                    if (response.ok) {
+                        // 前端隐藏/恢复
+                        const parentDiv = hideBtn.parentNode; // 获取按钮的父div
+                        const nextDiv = parentDiv.nextElementSibling; // 获取下一个相邻的div
+                        // 隐藏/恢复下一个div（如果存在）
+                        const chatTxt = nextDiv?.querySelector('.chat-txt');
+                        if (chatTxt) {
+                            chatTxt.classList.toggle('is-dimmed');
+                        }
+                        // 1. 获取所有class="chat-txt"的div元素
+                        const allDivMsg = document.querySelectorAll('div.chat-txt');
+                        // 2. 遍历每个元素
+                        let last_is_answer_new = false;
+                        for (let i = allDivMsg.length - 1; i >= 0; i--) {
+                            const div = allDivMsg[i];
+                            // 获取当前信息的 id 序号，使用 BigInt 避免大整数精度丢失
+                            const id_num = BigInt(div.id.substring(1)); // 'h0' -> 0n，使用 BigInt 避免大整数精度丢失
+                            if (id_num < 18446744073709551612n) {
+                                // 最后一个有效元素有 left 类为 true，其他为 false
+                                last_is_answer_new = div.classList.contains('left');
+                                break;
+                            }
+                        }
+                        last_is_answer = last_is_answer_new;
+                    } else {
+                        console.error('hide/restore message error');
                     }
                 }
             }
@@ -2609,14 +2653,21 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         let delicon = document.createElement("span");
         delicon.setAttribute("id", "d"+(current_id-1));
         delicon.setAttribute("class", "for_focus_button del_btn");
+        let hideicon = document.createElement("span");
+        hideicon.setAttribute("id", "h"+(current_id-1));
+        hideicon.setAttribute("class", "for_focus_button hide_btn");
 "###;
-    result += &format!("        delicon.setAttribute('title', '{}');", page_data.delete[0]);
+    result += &format!("        delicon.setAttribute('title', '{}');\n        hideicon.setAttribute('title', '{}');", page_data.delete[0], page_data.hide[0]);
     result += r###"
         const parser = new DOMParser(); // 1. 创建一个解析器
 "###;
-    result += &format!("        const svgDoc = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
-    result += r###"        const svgElement = svgDoc.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
-        delicon.appendChild(svgElement);
+    result += &format!("        const svgDocDel = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
+    result += &format!("        const svgDocHide = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
+    result += r###"        const svgElementDel = svgDocDel.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
+        const svgElementHide = svgDocHide.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
+        delicon.appendChild(svgElementDel);
+        hideicon.appendChild(svgElementHide);
+        timeInfo.appendChild(hideicon);
         timeInfo.appendChild(delicon);
         let time_text = document.createTextNode(formatDate(true));
         timeInfo.appendChild(time_text);
@@ -2724,11 +2775,17 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             let delicon = document.createElement("span");
             delicon.setAttribute("id", "d"+(current_id-1));
             delicon.setAttribute("class", "for_focus_button del_btn");
+            let hideicon = document.createElement("span");
+            hideicon.setAttribute("id", "h"+(current_id-1));
+            hideicon.setAttribute("class", "for_focus_button hide_btn");
             const parser = new DOMParser(); // 1. 创建一个解析器
 "###;
-    result += &format!("            const svgDoc = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
-    result += r###"            const svgElement = svgDoc.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
-            delicon.appendChild(svgElement);
+    result += &format!("            const svgDocDel = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
+    result += &format!("            const svgDocHide = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
+    result += r###"            const svgElementDel = svgDocDel.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
+            const svgElementHide = svgDocHide.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
+            delicon.appendChild(svgElementDel);
+            hideicon.appendChild(svgElementHide);
 
             let time_text = document.createTextNode(message_time);
             if (is_web) {
@@ -2738,11 +2795,15 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
     result += &format!("            if (is_left) {{
                 timeInfo.setAttribute('class', 'left-time');
                 delicon.setAttribute('title', '{}');
+                hideicon.setAttribute('title', '{}');
                 timeInfo.appendChild(time_text);
                 timeInfo.appendChild(delicon);
+                timeInfo.appendChild(hideicon);
             }} else {{
                 timeInfo.setAttribute('class', 'right-time');
                 delicon.setAttribute('title', '{}');
+                hideicon.setAttribute('title', '{}');
+                timeInfo.appendChild(hideicon);
                 timeInfo.appendChild(delicon);
                 timeInfo.appendChild(time_text);
             }}
@@ -2792,7 +2853,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                     msg_lr.setAttribute('title', '{}'+m_num+'{}'+qa_num+'{}'+current_token+'{}');
                 }} else {{
                     msg_lr.setAttribute('title', '{}'+m_num+'{}'+qa_num+'{}'); // 这里先不显示token数，等回答完成后再加上
-                }}", page_data.delete[1], page_data.delete[0], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], if page_data.m_qa_token[2].ends_with("，") { page_data.m_qa_token[2].strip_suffix("，").unwrap() } else { "" });
+                }}", page_data.delete[1], page_data.hide[1], page_data.delete[0], page_data.hide[0], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[0], page_data.m_qa_token[1], page_data.m_qa_token[2], page_data.m_qa_token[3], page_data.m_qa_token[0], page_data.m_qa_token[1], if page_data.m_qa_token[2].ends_with("，") { page_data.m_qa_token[2].strip_suffix("，").unwrap() } else { "" });
     result += r###"
                 /* 提问的头像和内容放到一个div右侧对齐 */
                 let q_icon_query_div = document.createElement("div");

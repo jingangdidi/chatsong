@@ -245,15 +245,18 @@
     }
 
     /* 删除message图标，位于消息框上方时间旁边 */
-    .del_btn svg {
-        margin-left: 5px;
-        margin-right: 5px;
+    .del_btn svg, .hide_btn svg {
         margin-bottom: -2px;
         cursor: pointer;
         width: 15px; /*针对图片 */
     }
 
-    .del_btn:hover svg * {
+    .del_btn svg {
+        margin-left: 5px;
+        margin-right: 5px;
+    }
+
+    .del_btn:hover svg *, .hide_btn:hover svg * {
         transform: scale(1.2); /* 放大 */
         transform-origin: 50% 50%; /* 以中心为原点 */
         transition: transform 0.3s, stroke 0.3s;
@@ -706,6 +709,12 @@
             0 0 8px 4px rgba(113, 158, 206, 0.5), /* 外侧阴影 */
             inset 4px 4px 4px #cbced1,            /* 内侧阴影1 */
             inset -4px -4px 4px white;            /* 内侧阴影2 */
+    }
+
+    /* 隐藏消息 */
+    .chat-txt.is-dimmed {
+        opacity: 0.3;
+        background-color: #ddd;
     }
 
     /* 提问 */

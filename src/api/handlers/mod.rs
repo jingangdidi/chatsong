@@ -12,6 +12,7 @@ pub mod chat; // `GET /嵌套的前缀/chat`
 pub mod save; // `GET /嵌套的前缀/save`
 pub mod safe; // `GET /嵌套的前缀/safe`
 pub mod delete_message; // `GET /嵌套的前缀/delmsg/:id`
+pub mod hide_message; // `GET /嵌套的前缀/hidemsg/:id`
 pub mod microphone; // `GET /嵌套的前缀/microphone/:id`
 pub mod incognito; // `GET /嵌套的前缀/incognito`
 pub mod approval; // `GET /嵌套的前缀/approval`
