@@ -256,8 +256,15 @@
         margin-right: 5px;
     }
 
-    .del_btn:hover svg *, .hide_btn:hover svg * {
+    .del_btn:hover svg * {
         transform: scale(1.2); /* 放大 */
+        transform-origin: 50% 50%; /* 以中心为原点 */
+        transition: transform 0.3s, stroke 0.3s;
+        stroke: red;
+    }
+
+    .hide_btn:hover svg * {
+        transform: scale(1.1); /* 放大 */
         transform-origin: 50% 50%; /* 以中心为原点 */
         transition: transform 0.3s, stroke 0.3s;
         stroke: red;

@@ -39,6 +39,7 @@ const ICON_STOP: &str = include_str!("../../assets/image/stop-circle-svgrepo-com
 const ICON_SETTING: &str = include_str!("../../assets/image/setting.txt");
 //const ICON_DELETE: &str = include_str!("../../assets/image/delete.txt");
 const ICON_DELETE: &str = include_str!("../../assets/image/delete-svgrepo-com.svg");
+const ICON_HIDE: &str = include_str!("../../assets/image/hide-svgrepo-com.svg");
 const ICON_INCOGNITO1: &str = include_str!("../../assets/image/incognito-svgrepo-com-1.txt");
 const ICON_INCOGNITO2: &str = include_str!("../../assets/image/incognito-svgrepo-com-2.txt");
 const ICON_COMPRESS: &str = include_str!("../../assets/image/format-space-less-svgrepo-com.txt");
@@ -1095,7 +1096,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             <div class='user-chat-box'>
                 <div class='q_icon_query'>
                     <div class='chat-txt right' id='m{}' title='{}'></div>
-                    <div class='chat-icon'>\n", log.id, page_data.hide[0], ICON_DELETE, log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, if log.remembered {"🧠 "} else {""}, log.time, log.id, tmp_title);
+                    <div class='chat-icon'>\n", log.id, page_data.hide[0], ICON_HIDE, log.id, page_data.delete[0], ICON_DELETE, if log.is_web {"🌐 "} else {""}, if log.remembered {"🧠 "} else {""}, log.time, log.id, tmp_title);
             if log.is_img || log.is_voice {
                 result += &format!("                        <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_USER);
             } else {
@@ -1118,7 +1119,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                 </span>
             </div>
             <div class='gpt-chat-box'>
-                <div class='chat-icon'>\n", log.time, if log.remembered {" 🧠"} else {""}, log.id, page_data.delete[1], ICON_DELETE, log.id, page_data.hide[1], ICON_DELETE);
+                <div class='chat-icon'>\n", log.time, if log.remembered {" 🧠"} else {""}, log.id, page_data.delete[1], ICON_DELETE, log.id, page_data.hide[1], ICON_HIDE);
             if log.is_img || log.is_voice {
                 result += &format!("                    <img class='chatgpt-icon for_focus_button' src='{}' />", ICON_CHATGPT);
             } else {
@@ -2662,7 +2663,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         const parser = new DOMParser(); // 1. 创建一个解析器
 "###;
     result += &format!("        const svgDocDel = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
-    result += &format!("        const svgDocHide = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
+    result += &format!("        const svgDocHide = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_HIDE);
     result += r###"        const svgElementDel = svgDocDel.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
         const svgElementHide = svgDocHide.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
         delicon.appendChild(svgElementDel);
@@ -2781,7 +2782,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             const parser = new DOMParser(); // 1. 创建一个解析器
 "###;
     result += &format!("            const svgDocDel = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
-    result += &format!("            const svgDocHide = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_DELETE);
+    result += &format!("            const svgDocHide = parser.parseFromString(`{}`, 'image/svg+xml'); // 2. 将 SVG 字符串解析为 XML 文档，注意类型是 'image/svg+xml'\n", ICON_HIDE);
     result += r###"            const svgElementDel = svgDocDel.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
             const svgElementHide = svgDocHide.documentElement; // 3. 从解析后的文档中获取根元素，即 <svg> 元素
             delicon.appendChild(svgElementDel);
