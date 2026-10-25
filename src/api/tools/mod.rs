@@ -259,8 +259,8 @@ impl Tools {
 
     /// get all tools info, return vector of (uuid, name, description)
     pub fn get_all_tools_info(&self) -> Vec<(String, String, String)> {
-        let mut tools = PARAS.tools.built_in.get_all_tools_info();
-        let mut external_tools = PARAS.tools.external.get_all_tools_info();
+        let mut tools = self.built_in.get_all_tools_info();
+        let mut external_tools = self.external.get_all_tools_info();
         tools.append(&mut external_tools);
         tools
     }
