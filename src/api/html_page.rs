@@ -424,7 +424,7 @@ struct PageInfo {
     microphone:   [String; 3], // 左下角语音按钮开启和关闭2个状态的title，以及开启的前2个字符
     safe:         [String; 3], // 左下角调用工具的权限开关，默认头盔，调用关键工具需要用户允许，切换为骷髅表示调用任何工具不需要询问
     systemone:    [String; 3], // 左下角通过 system one 自动选择工具的开关
-    wait:         [String; 3], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
+    wait:         [String; 4], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题、等待system one选择工具
 }
 
 impl PageInfo {
@@ -596,7 +596,7 @@ impl PageInfo {
                 microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 safe:       ["The key tool for calling requires user approval".to_string(), "No approval is required for calling all tools".to_string(), "The".to_string()],
                 systemone:  ["Disable automatic selection of related tools".to_string(), "Enable automatic selection of relevant tools".to_string(), "Disable".to_string()],
-                wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
+                wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string(), "Waiting for system one to select tools".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题、等待system one选择工具
             }
         } else {
             PageInfo {
@@ -765,7 +765,7 @@ impl PageInfo {
                 microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 safe:       ["调用关键工具需要用户批准".to_string(), "开放权限，调用所有工具都不需要用户批准".to_string(), "调用".to_string()],
                 systemone:  ["关闭自动选择工具".to_string(), "开启自动选择工具".to_string(), "关闭".to_string()],
-                wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题
+                wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string(), "等待 system one 选择工具".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题、等待system one选择工具
             }
         }
     }
@@ -3064,7 +3064,7 @@ print(b)
         });
     }
     // 获取用户发起提问时提交的信息
-    function get_url(start_microphone) {
+    async function get_url(start_microphone) {
         const inputQuery = document.getElementById('input_query');
         const result = window.extractToolsAndQuestion(inputQuery.value); // 拆分 tool 和问题
 
@@ -3101,21 +3101,27 @@ print(b)
         // 如果没有选择任何工具，使用 system one 自动选择
 "###;
     result += &format!("        if (!current_systemone && req !== '' && para_tool === 'not_select_any_tools') {{
-            fetch('http://{}:{}{}/systemone', {{
+            const res = await fetch('http://{}:{}{}/systemone', {{
                 method: 'POST',
                 headers: {{
                     'Content-Type': 'text/plain;charset=UTF-8',
                 }},
                 body: req,
-            }})
-            .then(res => res.text())
-            .then(text => {{
-                if (text !== '') {{
-                    para_tool = text;
-                }}
-                console.log('tools: '+text);
             }});
-        }}", PARAS.addr_str, PARAS.port, v);
+
+            if (!res.ok) {{
+                console.log(`systemone failed: HTTP ${{res.status}}`);
+            }}
+            document.getElementsByName('Input your query')[0].placeholder = '{} ...';
+            document.getElementById('input_query').disabled = true;
+            const text = await res.text();
+            if (text !== '') {{
+                para_tool = text;
+            }}
+            document.getElementsByName('Input your query')[0].placeholder = '{} ...';
+            document.getElementById('input_query').disabled = false;
+            //console.log('tools: ' + text);
+        }}", PARAS.addr_str, PARAS.port, v, page_data.wait[3], page_data.textarea);
     result += r###"
         // plan mode
         var para_plan = document.getElementById("select-plan").checked;
@@ -3201,7 +3207,7 @@ print(b)
     result += r###"        isStopped = false;
         // 由于EventSource不支持post，因此无法将问题通过body传递，只能放到url中通过url参数传递，但url有长度限制（好像大部分浏览器是2k），因此输入内容长度不能太长
         // 这里用fetch发送post，将问题字符串通过body传递，其他简单参数通过url传递
-        let [req, req2] = get_url(start_microphone);
+        let [req, req2] = await get_url(start_microphone);
         controller = new AbortController();
         const response = await fetch(address+req2, {
             method: 'POST',

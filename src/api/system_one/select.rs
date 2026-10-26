@@ -136,7 +136,7 @@ async fn evaluate(url: &str, question: &str, criteria: &Criteria, items: &[Item]
     }
 
     let client = Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(3600))
         .build()
         .map_err(|e| MyError::SendRequestError { url: url.to_owned(), error: e })?;
 
