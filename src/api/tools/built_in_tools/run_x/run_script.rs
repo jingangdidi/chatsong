@@ -159,14 +159,16 @@ impl BuiltIn for RunScript {
     }
 
     /// get approval message
-    fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
+    fn get_approval(&self, args: &str, _info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
         //let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
         let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: Some(vec!["args".to_string()]), object_fields: None })?;
         let interpreter = get_interpreter(&params.script)?;
         if is_en {
-            Ok(Some(format!("Do you allow running this script: {} {} {}?{}", interpreter, params.script, params.args.unwrap_or_default().join(" "), info.unwrap_or_default())))
+            //Ok(Some(format!("Do you allow running this script: {} {} {}?{}", interpreter, params.script, params.args.unwrap_or_default().join(" "), info.unwrap_or_default())))
+            Ok(Some(format!("Do you allow running this script: {} {} {}?", interpreter, params.script, params.args.unwrap_or_default().join(" "))))
         } else {
-            Ok(Some(format!("是否允许调用该脚本：{} {} {}？{}", interpreter, params.script, params.args.unwrap_or_default().join(" "), info.unwrap_or_default())))
+            //Ok(Some(format!("是否允许调用该脚本：{} {} {}？{}", interpreter, params.script, params.args.unwrap_or_default().join(" "), info.unwrap_or_default())))
+            Ok(Some(format!("是否允许调用该脚本：{} {} {}？", interpreter, params.script, params.args.unwrap_or_default().join(" "))))
         }
     }
 }

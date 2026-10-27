@@ -262,7 +262,7 @@ impl SimpleMemory {
                     (Some(vec_a), Some(vec_b)) => cosine_similarity(&vec_a, &vec_b), // 有 embedding 模型，使用 embedding 计算相似度
                     _ => score_note(query, &note.summary), // 没有 embedding 模型，使用关键词占比计算相似度
                 };
-                (score > 0.0).then_some((index, RelevantMemory { note: note.clone(), score }))
+                (score > 0.6).then_some((index, RelevantMemory { note: note.clone(), score }))
             })
             .collect::<Vec<_>>();
 

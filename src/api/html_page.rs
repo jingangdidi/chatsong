@@ -962,7 +962,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
             <select id='select-effort' class='left_para for_focus' name='effort'>
                 <option disabled>--{}--</option>
                 <optgroup label='Low'>
-                    <option value='1' selected title='{}'>Low-{}</option>
+                    <option value='1' title='{}'>Low-{}</option>
                     <option value='2' title='{}'>Low-{}</option>
                 </optgroup>
                 <optgroup label='Minimal'>
@@ -970,7 +970,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                     <option value='4' title='{}'>Minimal-{}</option>
                 </optgroup>
                 <optgroup label='Medium'>
-                    <option value='5' title='{}'>Medium-{}</option>
+                    <option value='5' selected title='{}'>Medium-{}</option>
                     <option value='6' title='{}'>Medium-{}</option>
                 </optgroup>
                 <optgroup label='High'>
