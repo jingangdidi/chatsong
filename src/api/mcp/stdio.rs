@@ -319,12 +319,12 @@ impl MyMcp for StdIoServers {
         selected_tools
     }
 
-    /// get all tools info, return vector of (uuid, name, description)
+    /// get all tools info, return vector of (name_id, name, description)
     fn get_all_tools_info(&self) -> Vec<(String, String, String)> {
         let mut tools: Vec<(String, String, String)> = Vec::with_capacity(self.tools.len());
         for tool in self.tools.iter() {
             let name_id: Vec<&str> = tool.name_id.split("__").collect(); // name_id --> ["name", "id"]
-            tools.push((name_id[1].to_string(), name_id[0].to_string(), tool.description.clone().unwrap_or(String::new())));
+            tools.push((tool.name_id.clone(), name_id[0].to_string(), tool.description.clone().unwrap_or(String::new())));
         }
         tools
     }

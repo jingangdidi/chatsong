@@ -170,6 +170,10 @@ struct Paras {
     #[argh(option, short = 'O')]
     systemone: Option<String>,
 
+    /// system one probability threshold, default: 0.5
+    #[argh(option, short = 't')]
+    threshold: Option<f64>,
+
     /// output path, default: ./chat-log
     #[argh(option, short = 'o')]
     outpath: Option<String>,
@@ -214,6 +218,7 @@ pub struct ParsedParas {
     pub skills:       Skills,                      // skills
     pub memory_dir:   String,                      // memory.json 存储路径，默认存储在-o指定的输出路径下
     pub systemone:    Option<String>,              // system one 决策模型的 url
+    pub threshold:    f64,                         // system one 阈值，默认0.5，最大概率的选项小于该阈值则舍弃
     pub time:         NaiveDateTime,               // 开启服务时的时间戳，多个电脑同时开启服务，最后保存 graph 时会丢失其他电脑问答的节点，所以每次关闭服务保存 graph 文件时，还要检查下是否有比这个时间戳晚的 graph 文件，有则需要读取这些 graph 文件，将其中的 local 的 uuid 合并到当前 graph 再保存
     pub deepseek_search_api_key: String,           // 用于 search 和 fetch
 }
@@ -430,6 +435,13 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
             other_para.systemone
         } else {
             para.systemone
+        },
+        threshold: match para.threshold {
+            Some(t) => t,
+            None => match other_para.threshold {
+                Some(t) => t,
+                None => 0.5,
+            }
         },
         time: Local::now().naive_local(),
         deepseek_search_api_key,
@@ -699,6 +711,8 @@ struct Para {
     memory_path:       Option<String>,          // memory路径
     #[serde(default, skip_serializing_if = "Option::is_none")]
     systemone:         Option<String>,          // system one url
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    threshold:         Option<f64>,             // system one 阈值，默认0.5，最大概率的选项小于该阈值则舍弃
     bgc:               String,                  // 页面背景色
     outpath:           String,                  // 问答结果输出路径
     model_config:      Vec<Config>,             // 模型参数
@@ -722,6 +736,7 @@ struct OptherPara {
     skills_path:       Option<String>,              // skills路径
     memory_path:       Option<String>,              // memory路径
     systemone:         Option<String>,              // system one url
+    threshold:         Option<f64>,                 // system one 阈值，默认0.5，最大概率的选项小于该阈值则舍弃
     bgc:               String,                      // 页面背景色
     outpath:           String,                      // 问答结果输出路径
     prompt:            HashMap<usize, [String; 2]>, // key: 序号，value: [prompt名称, prompt内容]
@@ -864,6 +879,7 @@ impl Api {
                     skills_path:       all_para.skills_path,                        // skills路径
                     memory_path:       all_para.memory_path,                        // memory路径
                     systemone:         all_para.systemone,                          // system one url
+                    threshold:         all_para.threshold,                          // system one 阈值，默认0.7，最大概率的选项小于该阈值则舍弃
                     bgc:               all_para.bgc,                                // 页面背景色
                     outpath:           all_para.outpath,                            // 问答结果输出路径
                     maxage:            all_para.maxage,                             // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK

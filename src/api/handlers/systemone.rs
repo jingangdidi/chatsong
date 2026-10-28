@@ -18,7 +18,12 @@ pub async fn systemone(uri: OriginalUri, jar: CookieJar, body: String) -> String
             if let Some(url) = PARAS.systemone.as_ref() {
                 match get_relevant_tools(url, &body).await {
                     Ok(tools) => {
-                        event!(Level::INFO, "{} relevant tools: {}", uuid, tools.iter().map(|t| format!("{}({})", t.1, t.2)).collect::<Vec<_>>().join(", "));
+                        let t = tools.iter().map(|t| format!("{}({})", t.1, t.2)).collect::<Vec<_>>();
+                        if t.is_empty() {
+                            event!(Level::INFO, "{} relevant tools: None", uuid);
+                        } else {
+                            event!(Level::INFO, "{} relevant tools: {}", uuid, t.join(", "));
+                        }
                         result = tools.into_iter().map(|t| t.0).collect::<Vec<_>>().join(",");
                     },
                     Err(e) => event!(Level::ERROR, "{} system one decision error: {}", uuid, e),

@@ -2067,6 +2067,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
     var multiple_tools = '';
     var not_select_uuid = true;
     var current_systemone = true;
+    let systemone_selected_tools = [];
     // 左侧下拉菜单选取完成后，自动focus到问题输入框
     document.querySelectorAll('.for_focus').forEach(select => {
         select.addEventListener('change', function() {
@@ -3090,38 +3091,47 @@ print(b)
             document.getElementById("select-tool").value = 'select_multiple';
             multiple_tools = result.tools.join(',');
             para_tool = multiple_tools;
+            systemone_selected_tools = [];
         } else if (para_tool === 'select_multiple') {
             if (multiple_tools == '') {
                 document.getElementById("select-tool").value = 'not_select_any_tools';
                 para_tool = 'not_select_any_tools';
             } else {
                 para_tool = multiple_tools;
+                systemone_selected_tools = [];
             }
         }
         // 如果没有选择任何工具，使用 system one 自动选择
 "###;
-    result += &format!("        if (!current_systemone && req !== '' && para_tool === 'not_select_any_tools') {{
-            const res = await fetch('http://{}:{}{}/systemone', {{
-                method: 'POST',
-                headers: {{
-                    'Content-Type': 'text/plain;charset=UTF-8',
-                }},
-                body: req,
-            }});
+    result += &format!("        if (!current_systemone && para_tool === 'not_select_any_tools') {{
+            if (req !== '') {{
+                document.getElementsByName('Input your query')[0].placeholder = '{} ...';
+                document.getElementById('input_query').disabled = true;
+                const res = await fetch('http://{}:{}{}/systemone', {{
+                    method: 'POST',
+                    headers: {{
+                        'Content-Type': 'text/plain;charset=UTF-8',
+                    }},
+                    body: req,
+                }});
 
-            if (!res.ok) {{
-                console.log(`systemone failed: HTTP ${{res.status}}`);
+                if (!res.ok) {{
+                    console.log(`systemone failed: HTTP ${{res.status}}`);
+                }}
+                const text = await res.text();
+                if (text !== '') {{
+                    systemone_selected_tools.push(...text.split(',')); // 累积连续提问选择的相关工具
+                }}
+                document.getElementsByName('Input your query')[0].placeholder = '{} ...';
+                document.getElementById('input_query').disabled = false;
+                //console.log('tools: ' + text);
+            }} else {{
+                para_tool = [...new Set(systemone_selected_tools.map(item => item.trim()).filter(item => item !== ''))].join(','); // 使用提问时已经选好的工具，去除空字符串、去重，并重新拼接
+                systemone_selected_tools = []; // 本次提问完的给你带答案时，这里要清空，避免之后提问用了这次选择的工具，但是下次如果不输入问题直接继续提问将不会带上任何工具
             }}
-            document.getElementsByName('Input your query')[0].placeholder = '{} ...';
-            document.getElementById('input_query').disabled = true;
-            const text = await res.text();
-            if (text !== '') {{
-                para_tool = text;
-            }}
-            document.getElementsByName('Input your query')[0].placeholder = '{} ...';
-            document.getElementById('input_query').disabled = false;
-            //console.log('tools: ' + text);
-        }}", PARAS.addr_str, PARAS.port, v, page_data.wait[3], page_data.textarea);
+        }} else {{
+            systemone_selected_tools = [];
+        }}", page_data.wait[3], PARAS.addr_str, PARAS.port, v, page_data.textarea);
     result += r###"
         // plan mode
         var para_plan = document.getElementById("select-plan").checked;

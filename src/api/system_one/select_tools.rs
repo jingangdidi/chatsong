@@ -26,5 +26,5 @@ pub async fn get_relevant_tools(url: &str, question: &str) -> Result<Vec<(String
     );
     let picked = evaluate_matched(url, question, &criteria, &items).await?;
     // sub_agent 由调用方固定提供，不参与选择
-    Ok(picked.into_iter().filter(|p| p.1 != "sub_agent").map(|p| p).collect())
+    Ok(picked.into_iter().filter(|p| p.1 != "sub_agent" && p.2 > PARAS.threshold).map(|p| p).collect())
 }
