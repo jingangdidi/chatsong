@@ -112,9 +112,10 @@ impl BuiltIn for EditImage {
 
 /// 调用模型绘图
 /// https://developers.openai.com/api/reference/python/resources/images/methods/edit
-pub async fn edit_image(uuid: &str, facial_feature: bool, image_path: Vec<String>, prompt: &str, m: &str) -> Result<String, MyError> {
+pub async fn edit_image(uuid: &str, facial_feature: bool, image_path: Vec<String>, prompt: &str/*, m: &str*/) -> Result<String, MyError> {
     // 根据模型名称获取(api_key, endpoint, 模型名称, 是否支持深度思考)
-    let (api_key, endpoint, model, _) = PARAS.api.get_model_by_name(m)?;
+    //let (api_key, endpoint, model, _) = PARAS.api.get_model_by_name(m)?;
+    let (api_key, endpoint, model) = PARAS.gpt_image_api_key.clone().ok_or_else(|| MyError::OtherError{info: "not found image model".to_string()})?;
     // 使用api key初始化
     let mut client = Client::new(api_key);
     client.set_base_url(&endpoint); // 从0.7.0开始舍弃了new_with_base

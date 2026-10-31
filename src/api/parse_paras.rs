@@ -221,6 +221,7 @@ pub struct ParsedParas {
     pub threshold:    f64,                         // system one 阈值，默认0.5，最大概率的选项小于该阈值则舍弃
     pub time:         NaiveDateTime,               // 开启服务时的时间戳，多个电脑同时开启服务，最后保存 graph 时会丢失其他电脑问答的节点，所以每次关闭服务保存 graph 文件时，还要检查下是否有比这个时间戳晚的 graph 文件，有则需要读取这些 graph 文件，将其中的 local 的 uuid 合并到当前 graph 再保存
     pub deepseek_search_api_key: String,           // 用于 search 和 fetch
+    pub gpt_image_api_key: Option<(String, String, String)>, // 用于绘图和改图, (api key, base url, model name)
 }
 
 /// 解析参数
@@ -247,6 +248,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
         },
     };
     let deepseek_search_api_key = api.get_deepseek_api_key();
+    let gpt_image_api_key = api.get_gpt_image_api_key();
     let out: ParsedParas = ParsedParas{
         api: api,
         addr: match &para.addr { // 要监听的地址，默认127.0.0.1，解析为[127, 0, 0, 1]
@@ -445,6 +447,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
         },
         time: Local::now().naive_local(),
         deepseek_search_api_key,
+        gpt_image_api_key,
     };
     // 输出路径不存在则创建，已存在则删除其中的空uuid文件夹
     let tmp_outpath = Path::new(&out.outpath);
@@ -947,5 +950,21 @@ impl Api {
             }
         }
         api_key
+    }
+
+    /// 获取 gpt image 的 (api key, base url, model name)
+    fn get_gpt_image_api_key(&self) -> Option<(String, String, String)> {
+        let mut url_key = None;
+        'outer: for i in ["openai", "OpenAI"] {
+            if let Some(c) = &self.config.get(i) {
+                for j in &c.models {
+                    if j.name.starts_with("gpt-image") {
+                        url_key = Some((c.api_key.clone(), c.endpoint.clone(), j.name.clone()));
+                        break 'outer;
+                    }
+                }
+            }
+        }
+        url_key
     }
 }

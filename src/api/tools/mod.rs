@@ -82,14 +82,16 @@ use built_in_tools::{
         edit_file::Params,
         read_file::Params as ReadFileParams,
         read_multiple_files::Params as ReadMultipleFilesParams,
-        image_generation::image_generation,
-        edit_image::edit_image,
     },
     hacker_news::hacker_news_summaries,
     schedule::run_schedule_task,
     goal::{
         Goal,
         GoalStatus,
+    },
+    image::{
+        image_generation::image_generation,
+        edit_image::edit_image,
     },
     deepseek_search::{
         search::deepseek_search,
@@ -1207,7 +1209,7 @@ async fn try_call_tool(
         match name_id[0] {
             "image_generation" => match PARAS.tools.run(name_id[1], paras) {
                 Ok((image_prompt, _)) => {
-                    match image_generation(uuid, image_prompt, "gpt-image-2").await {
+                    match image_generation(uuid, image_prompt/*, "gpt-image-2"*/).await {
                         Ok(image_path) => Ok(Ok((image_path, None))),
                         Err(e) => Ok(Err(e)),
                     }
@@ -1217,7 +1219,7 @@ async fn try_call_tool(
             "edit_image" => match PARAS.tools.run(name_id[1], paras) {
                 Ok((facial_prompt_image, _)) => {
                     let parts: Vec<&str> = facial_prompt_image.splitn(3, "---srx---").collect(); // [是否强调面部特征, prompt, 图片路径]
-                    match edit_image(uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1], "gpt-image-2").await {
+                    match edit_image(uuid, parts[0] == "true", parts[2].split("---srx---").map(|img| img.to_string()).collect::<Vec<String>>(), parts[1]/*, "gpt-image-2"*/).await {
                         Ok(image_path) => Ok(Ok((image_path, None))),
                         Err(e) => Ok(Err(e)),
                     }

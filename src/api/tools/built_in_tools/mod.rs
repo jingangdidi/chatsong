@@ -18,6 +18,7 @@ pub mod run_x;
 pub mod hacker_news;
 pub mod schedule;
 pub mod sub_agent;
+pub mod image;
 pub mod goal;
 pub mod memory;
 pub mod chat_log;
@@ -29,9 +30,7 @@ use filesystem::{
     CreateDirectory,
     DirectoryTree,
     EditFile,
-    EditImage,
     GetFileInfo,
-    ImageGeneration,
     ListAllowedDirectories,
     ListDirectory,
     ListDirectoryWithSizes,
@@ -67,6 +66,10 @@ use web::GetWebPageContent;
 use run_x::{
     RunCommand,
     RunScript,
+};
+use image::{
+    EditImage,
+    ImageGeneration,
 };
 use hacker_news::HackerNews;
 use schedule::ScheduleTask;
@@ -105,6 +108,7 @@ pub enum Group {
     Codebase,
     Web,
     RunX,
+    Image,
     HackerNews,
     ScheduleTask,
     SubAgent,
@@ -122,6 +126,7 @@ impl Group {
             Group::Codebase => "codebase".to_string(),
             Group::Web => "web".to_string(),
             Group::RunX => "run_x".to_string(),
+            Group::Image => "image".to_string(),
             Group::HackerNews => "Hacker News".to_string(),
             Group::ScheduleTask => "schedule task".to_string(),
             Group::SubAgent => "sub-agent".to_string(),
@@ -139,6 +144,7 @@ impl Group {
             "codebase" => Ok(Group::Codebase),
             "web" => Ok(Group::Web),
             "run_x" => Ok(Group::RunX),
+            "image" => Ok(Group::Image),
             "Hacker News" => Ok(Group::HackerNews),
             "schedule task" => Ok(Group::ScheduleTask),
             "sub-agent" => Ok(Group::SubAgent),
@@ -174,9 +180,7 @@ impl BuiltInTools {
             (Arc::new(CreateDirectory::new()), Group::FileSystem),
             (Arc::new(DirectoryTree::new()), Group::FileSystem),
             (Arc::new(EditFile::new()), Group::FileSystem),
-            (Arc::new(EditImage::new()), Group::FileSystem),
             (Arc::new(GetFileInfo::new()), Group::FileSystem),
-            (Arc::new(ImageGeneration::new()), Group::FileSystem),
             (Arc::new(ListAllowedDirectories::new()), Group::FileSystem),
             (Arc::new(ListDirectory::new()), Group::FileSystem),
             (Arc::new(ListDirectoryWithSizes::new()), Group::FileSystem),
@@ -214,6 +218,9 @@ impl BuiltInTools {
             // run_x
             (Arc::new(RunCommand::new()), Group::RunX),
             (Arc::new(RunScript::new()), Group::RunX),
+            // image
+            (Arc::new(EditImage::new()), Group::FileSystem),
+            (Arc::new(ImageGeneration::new()), Group::FileSystem),
             // Hacker News
             (Arc::new(HackerNews::new()), Group::HackerNews),
             // schedule task
