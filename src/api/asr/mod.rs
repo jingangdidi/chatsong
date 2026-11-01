@@ -43,6 +43,11 @@ use crate::{
     parse_paras::PARAS,
     error::MyError,
     openai::for_chat::not_use_stream,
+    tools::{
+        SelectedTools,
+        built_in_tools::schedule::run_tools,
+    },
+    system_one::select_tools::get_relevant_tools,
 };
 
 mod microphone;
@@ -368,6 +373,12 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
     // receive string from asr
     let role = format!("扮演{}", PARAS.role);
     let outpath = PARAS.outpath.clone();
+    let systemone_url = PARAS.systemone.clone();
+    let model_for_tts = if let Ok(m) = PARAS.api.get_model_by_usize(2) {
+        Some(m) // (api_key, endpoint, model, thinking)
+    } else {
+        None
+    };
     let wake_words: Vec<String> = PARAS.wake_words.iter().flat_map(|w| format_word(w, true)).collect();
     let stop_words: Vec<String> = PARAS.stop_words.iter().flat_map(|w| format_word(w, false)).collect();
     event!(Level::INFO, "wake words: {}", PARAS.wake_words.iter().map(|w| format!("\"{}\"", w)).collect::<Vec<_>>().join(", "));
@@ -376,6 +387,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
         let mut start = false;
         let mut run_llm_tts = false;
         let mut with_history = true;
+        let mut with_tool = false;
         let mut audio_id = get_audio_id(); // 音频问答编号
         let mut whole_string = String::new(); // 存储提问的字符串数据
         let mut whole_uer_audio: Vec<f32> = Vec::new(); // 存储提问的音频数据
@@ -497,6 +509,22 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         with_history = true;
                         event!(Level::INFO, "change to history mode successfully");
                         true
+                    } else if whole_string.contains("调用工具") || whole_string.contains("with tool") {
+                        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+                        if let Err(_) = tx_tts_string.send(("好的，已开启调用工具".to_string(), None, Some("Chinese".to_string()))).await {
+                            event!(Level::ERROR, "tts receiver dropped");
+                        }
+                        with_tool = true;
+                        event!(Level::INFO, "change to tool mode successfully");
+                        true
+                    } else if whole_string.contains("不调用工具") || whole_string.contains("without tool") {
+                        #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
+                        if let Err(_) = tx_tts_string.send(("好的，已停止调用工具".to_string(), None, Some("Chinese".to_string()))).await {
+                            event!(Level::ERROR, "tts receiver dropped");
+                        }
+                        with_tool = false;
+                        event!(Level::INFO, "change to no tool mode successfully");
+                        true
                     } else {
                         false
                     };
@@ -561,7 +589,56 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                                 },
                             ];
                         }
-                        if let Ok(answer) = run_llm(history_msg.clone()).await {
+                        let answer_option = if with_tool {
+                            if let Some((api_key, endpoint, model, thinking)) = &model_for_tts {
+                                let select_tools = if let Some(url) = &systemone_url {
+                                    match get_relevant_tools(url, &whole_string).await {
+                                        Ok(tools) => {
+                                            let t = tools.iter().map(|t| format!("{}({})", t.1, t.2)).collect::<Vec<_>>();
+                                            if t.is_empty() {
+                                                event!(Level::INFO, "tts relevant tools: None");
+                                            } else {
+                                                event!(Level::INFO, "tts relevant tools: {}", t.join(", "));
+                                            }
+                                            let tools_vec = tools.into_iter().map(|t| t.0).collect::<Vec<_>>();
+                                            Some(SelectedTools::Multiple(tools_vec))
+                                        },
+                                        Err(e) => {
+                                            event!(Level::ERROR, "tts system one decision error: {}", e);
+                                            None
+                                        },
+                                    }
+                                } else {
+                                    None
+                                };
+                                if let Ok((answer, _)) = run_tools(
+                                    "tts-uuid", // uuid
+                                    whole_string.clone(), // prompt
+                                    model.to_string(),
+                                    api_key.to_string(),
+                                    endpoint.to_string(),
+                                    *thinking,
+                                    ReasoningEffort::Low,
+                                    select_tools, // Option<SelectedTools>
+                                    None, // Option<SelectedSkills>
+                                    history_msg[..history_msg.len() - 1].to_vec(), // Vec<ChatMessage>
+                                ).await {
+                                    Some(answer)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            if let Ok(answer) = run_llm(history_msg.clone()).await {
+                                Some(answer)
+                            } else {
+                                event!(Level::ERROR, "no modle for tts");
+                                None
+                            }
+                        };
+                        if let Some(answer) = answer_option {
                             event!(Level::INFO, "llm: {}", answer);
                             if with_history {
                                 history_msg.push(

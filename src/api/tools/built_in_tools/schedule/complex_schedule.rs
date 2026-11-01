@@ -481,7 +481,7 @@ pub async fn run_tools(
         }
     }
     // 加上 sub_agent 工具
-    {
+    if !tool_schema.is_empty() || !mcp_schema.is_empty() {
         let sub_agent_schema: Vec<_> = PARAS
             .tools
             .built_in
