@@ -71,7 +71,8 @@ arboard = { version = "3.6.1", optional = true }
 
 # asr
 #qwen3-asr = { version = "0.2.2", default-features = false, optional = true }
-qwen3-asr = { git = "https://github.com/jingangdidi/qwen3-asr-rs.git", default-features = false, rev = "a645b9fed05c95e2b0b984605368f09a22c5da64", optional = true }
+#qwen3-asr = { git = "https://github.com/jingangdidi/qwen3-asr-rs.git", default-features = false, rev = "a645b9fed05c95e2b0b984605368f09a22c5da64", optional = true }
+qwen3-asr = { git = "https://github.com/jingangdidi/qwen3-asr-rs.git", default-features = false, rev = "75ad542f09a9043fe8e59b65d195b0e137850c92", optional = true } # branch candle-0.11
 tokenizers = { version = "0.22", features = ["onig"], optional = true }
 rodio = { version = "0.21.1", optional = true }
 cpal = { version = "0.16", optional = true }
@@ -79,9 +80,12 @@ hound = { version = "3.5.1", optional = true }
 rubato = { version = "0.16.2", optional = true }
 
 # tts OmniVoice
-candle-core = { git = "https://github.com/jingangdidi/candle", package = "candle-core", branch = "main", optional = true }
-candle-nn = { git = "https://github.com/jingangdidi/candle", package = "candle-nn", branch = "main", optional = true }
-candle-transformers = { git = "https://github.com/jingangdidi/candle", package = "candle-transformers", branch = "main", optional = true }
+#candle-core = { git = "https://github.com/jingangdidi/candle", package = "candle-core", branch = "main", optional = true }
+candle-core = { version = "0.11", package = "candle-core", optional = true }
+#candle-nn = { git = "https://github.com/jingangdidi/candle", package = "candle-nn", branch = "main", optional = true }
+candle-nn = { version = "0.11", package = "candle-nn", optional = true }
+#candle-transformers = { git = "https://github.com/jingangdidi/candle", package = "candle-transformers", branch = "main", optional = true }
+candle-transformers = { version = "0.11", package = "candle-transformers", optional = true }
 ##tokenizers = { version = "0.22", optional = true }
 rand = { version = "0.10", optional = true }
 isolang = { version = "2.4", features = ["english_names", "lowercase_names"], optional = true }

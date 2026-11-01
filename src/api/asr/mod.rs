@@ -498,6 +498,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         if let Err(_) = tx_tts_string.send(("好的，已停止记录对话历史".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
+                        run_llm_tts = false;
                         with_history = false;
                         event!(Level::INFO, "change to no history mode successfully");
                         true
@@ -506,6 +507,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         if let Err(_) = tx_tts_string.send(("好的，已开始记录对话历史".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
+                        run_llm_tts = false;
                         with_history = true;
                         event!(Level::INFO, "change to history mode successfully");
                         true
@@ -514,6 +516,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         if let Err(_) = tx_tts_string.send(("好的，已开启调用工具".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
+                        run_llm_tts = false;
                         with_tool = true;
                         event!(Level::INFO, "change to tool mode successfully");
                         true
@@ -522,6 +525,7 @@ pub async fn auto_speech_rec() -> Result<(), MyError> {
                         if let Err(_) = tx_tts_string.send(("好的，已停止调用工具".to_string(), None, Some("Chinese".to_string()))).await {
                             event!(Level::ERROR, "tts receiver dropped");
                         }
+                        run_llm_tts = false;
                         with_tool = false;
                         event!(Level::INFO, "change to no tool mode successfully");
                         true
