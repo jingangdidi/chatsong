@@ -13,6 +13,8 @@ use crate::{
         built_in_tools::{
             BuiltIn,
             schedule::{
+                SimpleComplex,
+                ScheduleConfig,
                 ScheduledJob,
                 SchedulerCmd,
                 ScheduleType,
@@ -21,19 +23,6 @@ use crate::{
         },
     },
 };
-
-/// 定时任务的参数
-#[derive(Debug, Deserialize)]
-struct ScheduleConfig {
-    //#[serde(rename = "jobType")]
-    job_type: String,      // 类型
-    #[serde(default)]
-    hour:     Option<u8>,  // 时，指定时间执行
-    #[serde(default)]
-    minute:   Option<u8>,  // 分，指定时间执行
-    #[serde(default)]
-    secs:     Option<u64>, // 秒，间隔几秒运行一次
-}
 
 #[derive(Debug, Deserialize)]
 struct Params {
@@ -53,18 +42,18 @@ struct Params {
     job_id:    Option<String>,         // 删除任务要用
 }
 
-pub struct ScheduleTask;
+pub struct SimpleScheduleTask;
 
-impl ScheduleTask {
+impl SimpleScheduleTask {
     pub fn new() -> Self {
-        ScheduleTask
+        SimpleScheduleTask
     }
 }
 
-impl BuiltIn for ScheduleTask {
+impl BuiltIn for SimpleScheduleTask {
     /// get tool name
     fn name(&self) -> String {
-        "schedule_task".to_string()
+        "simple_schedule".to_string()
     }
 
     /// get tool description
@@ -73,9 +62,11 @@ impl BuiltIn for ScheduleTask {
 
 **Important:** When creating a task (action='create'), you MUST specify:
 - `name`: a unique task name.
-- `schedule` with `job_type` set to either 'interval' (runs every N seconds) or 'daily' (runs at a fixed time each day).
+
+- `schedule` with `job_type` set to 'interval' (runs every N seconds), 'daily' (runs at a fixed time each day), or 'daily_range' (runs every N seconds within a daily time window).
    - For 'interval': provide `secs` (e.g., 60 for 1 minute, 300 for 5 minutes, 3600 for 1 hour).
    - For 'daily': provide `hour` (0-23) and optionally `minute` (0-59, default 0).
+   - For 'daily_range': provide `start_hour` (0-23), `end_hour` (0-23, inclusive) and `secs` (the interval in seconds within the window), optionally `minute` (0-59, default 0). Example: every day 7:00-18:00 run every hour → {job_type='daily_range', start_hour=7, end_hour=18, secs=3600}.
 - `tool_name`: the exact name of the tool to invoke when the task fires. This tool must already exist in the system.
 - `tool_args` (optional): a JSON object with arguments to pass to that tool.
 
@@ -87,6 +78,9 @@ impl BuiltIn for ScheduleTask {
 
 **Example 3:** User says 'Daily summary of Hacker News at 6:00 AM'
 → action='create', name='hacker_news_summary', schedule={job_type='daily', hour=6, minute=0}, tool_name='hacker_news', tool_args={\"save_html\": true}
+
+**Example 4:** User says 'Run check.py every hour between 7 and 18 o'clock every day'
+→ action='create', name='daytime_check', schedule={job_type='daily_range', start_hour=7, end_hour=18, secs=3600}, tool_name='run_script', tool_args={\"script\":\"check.py\", \"args\": \"null\"}
 
 **For deletion:** action='delete', job_id='<the task's ID>'
 **For listing:** action='list'
@@ -112,20 +106,28 @@ impl BuiltIn for ScheduleTask {
                     "properties": {
                         "job_type": {
                             "type": "string",
-                            "enum": ["interval", "daily"],
-                            "description": "Schedule job type. 'interval' runs every N seconds; 'daily' runs at a fixed time each day"
+                            "enum": ["interval", "daily", "daily_range"],
+                            "description": "Schedule type. 'interval' runs every N seconds; 'daily' runs at a fixed time each day; 'daily_range' runs every N seconds within a daily time window"
                         },
                         "secs": {
                             "type": "integer",
-                            "description": "Number of seconds between intervals. Required when job type is 'interval'"
+                            "description": "Number of seconds between intervals. Required when job_type is 'interval' or 'daily_range'. Example: 60 (1 min), 300 (5 min), 3600 (1 hour)"
                         },
                         "hour": {
                             "type": "integer",
-                            "description": "Hour (0–23). Required when type is 'daily'"
+                            "description": "Hour of the day (0–23). Required when job_type is 'daily'"
                         },
                         "minute": {
                             "type": "integer",
-                            "description": "Minute (0–59, optional, defaults to 0) when type is 'daily'"
+                            "description": "Minute of the hour (0–59). Optional, defaults to 0. Used by 'daily' (the fixed trigger time) and 'daily_range' (alignment anchor for the window start/end)"
+                        },
+                        "start_hour": {
+                            "type": "integer",
+                            "description": "Hour (0–23) when the daily time window starts. Required when job_type is 'daily_range'"
+                        },
+                        "end_hour": {
+                            "type": "integer",
+                            "description": "Hour (0–23, inclusive) when the daily time window ends. Required when job_type is 'daily_range'"
                         }
                     },
                     "required": ["job_type"]
@@ -159,15 +161,15 @@ impl BuiltIn for ScheduleTask {
     fn get_approval(&self, args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
         let params: Params = parse_tool_args(args, ArgFixSpec{ array_fields: None, object_fields: None })?;
         if is_en {
-            Ok(Some(format!("Do you allow calling the schedule_task tool {} method ?{}", params.action, info.unwrap_or_default())))
+            Ok(Some(format!("Do you allow calling the simple_schedule tool {} method ?{}", params.action, info.unwrap_or_default())))
         } else {
-            Ok(Some(format!("是否允许调用 schedule_task 工具 {} 方法？{}", params.action, info.unwrap_or_default())))
+            Ok(Some(format!("是否允许调用 simple_schedule 工具 {} 方法？{}", params.action, info.unwrap_or_default())))
         }
     }
 }
 
 /// 向后台任务调度器发送任务，并等待结果
-pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), MyError> {
+pub async fn run_simple_schedule_task(args: &str) -> Result<(String, Option<String>), MyError> {
     let params: Params = serde_json::from_str(args).map_err(|e| MyError::SerdeJsonFromStrError{error: e})?;
     let cmd_tx = get_cmd_tx().unwrap();
 
@@ -188,15 +190,40 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                         .secs
                         .ok_or(MyError::OtherError{info: "interval need secs".to_string()})?;
                     ScheduleType::Interval { secs }
-                }
+                },
                 "daily" => {
                     let hour = schedule_cfg
                         .hour
                         .ok_or(MyError::OtherError{info: "daily need hour".to_string()})?;
                     let minute = schedule_cfg.minute.unwrap_or(0);
                     ScheduleType::Daily { hour, minute }
-                }
-                other => return Err(MyError::OtherError{info: format!("schedule type only support 'interval' and 'daily', not {other}")}),
+                },
+                "daily_range" => {
+                    let start_hour = schedule_cfg
+                        .start_hour
+                        .ok_or(MyError::OtherError{info: "daily_range need start_hour".to_string()})?;
+                    let end_hour = schedule_cfg
+                        .end_hour
+                        .ok_or(MyError::OtherError{info: "daily_range need end_hour".to_string()})?;
+                    if start_hour > 23 || end_hour > 23 {
+                        return Err(MyError::OtherError{info: format!("daily_range start_hour and end_hour must be 0-23, not {start_hour} and {end_hour}")});
+                    }
+                    if start_hour > end_hour {
+                        return Err(MyError::OtherError{info: format!("daily_range start_hour {start_hour} should not be greater than end_hour {end_hour}")});
+                    }
+                    let every_secs = schedule_cfg
+                        .secs
+                        .ok_or(MyError::OtherError{info: "daily_range need secs (interval seconds within the time range)".to_string()})?;
+                    if every_secs == 0 {
+                        return Err(MyError::OtherError{info: "daily_range secs must be greater than 0".to_string()});
+                    }
+                    let minute = schedule_cfg.minute.unwrap_or(0);
+                    if minute > 59 {
+                        return Err(MyError::OtherError{info: format!("daily_range minute must be 0-59, not {minute}")});
+                    }
+                    ScheduleType::DailyRange { start_hour, end_hour, minute, every_secs }
+                },
+                other => return Err(MyError::OtherError{info: format!("schedule type only support 'interval', 'daily' and 'daily_range', not {other}")}),
             };
 
             let (tool_name, tool_id) = match tool_name.split_once("__") {
@@ -211,9 +238,7 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                 id: String::new(), // 空字符串，会生成一个 uuid
                 name,
                 schedule,
-                tool_name,
-                tool_id,
-                tool_args: params.tool_args.and_then(|v| to_string(&v).ok()).unwrap_or_default(),
+                task: SimpleComplex::new_simple(tool_name, tool_id, params.tool_args.and_then(|v| to_string(&v).ok()).unwrap_or_default()),
                 enabled: true,
                 next_run: None,
             };
@@ -254,15 +279,25 @@ pub async fn run_schedule_task(args: &str) -> Result<(String, Option<String>), M
                 Ok(("No schedule job".to_string(), None))
             } else {
                 let jobs_view: Vec<Value> = jobs.iter().map(|job| {
-                    json!({
-                        "id": job.id,
-                        "name": job.name,
-                        "schedule": job.schedule,
-                        "tool_name": job.tool_name,
-                        "tool_args": job.tool_args,
-                        "enabled": job.enabled,
-                        "next_run": job.next_run.map(|t| t.with_timezone(&Local)), // 这里将 UTC 时间转为 Local 时间
-                    })
+                    match &job.task {
+                        SimpleComplex::Simple{tool_name, tool_args, ..} => json!({
+                            "id": job.id,
+                            "name": job.name,
+                            "schedule": job.schedule,
+                            "tool_name": tool_name,
+                            "tool_args": tool_args,
+                            "enabled": job.enabled,
+                            "next_run": job.next_run.map(|t| t.with_timezone(&Local)), // 这里将 UTC 时间转为 Local 时间
+                        }),
+                        SimpleComplex::Complex{prompt, ..} => json!({
+                            "id": job.id,
+                            "name": job.name,
+                            "schedule": job.schedule,
+                            "prompt": prompt,
+                            "enabled": job.enabled,
+                            "next_run": job.next_run.map(|t| t.with_timezone(&Local)), // 这里将 UTC 时间转为 Local 时间
+                        }),
+                    }
                 }).collect();
 
                 let json = serde_json::to_string_pretty(&jobs_view).unwrap_or_default();

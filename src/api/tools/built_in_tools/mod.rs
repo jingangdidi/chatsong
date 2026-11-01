@@ -19,6 +19,7 @@ pub mod hacker_news;
 pub mod schedule;
 pub mod sub_agent;
 pub mod image;
+pub mod other;
 pub mod goal;
 pub mod memory;
 pub mod chat_log;
@@ -71,8 +72,12 @@ use image::{
     EditImage,
     ImageGeneration,
 };
+use other::Timestamp;
 use hacker_news::HackerNews;
-use schedule::ScheduleTask;
+use schedule::{
+    SimpleScheduleTask,
+    ComplexScheduleTask,
+};
 use sub_agent::SubAgent;
 use goal::UpdateGoalStatus;
 use memory::GetAllMemory;
@@ -116,6 +121,7 @@ pub enum Group {
     Memory,
     ChatLog,
     DeepseekSearch,
+    Other,
 }
 
 impl Group {
@@ -134,6 +140,7 @@ impl Group {
             Group::Memory => "memory".to_string(),
             Group::ChatLog => "chat log".to_string(),
             Group::DeepseekSearch => "DeepSeek search".to_string(),
+            Group::Other => "other".to_string(),
         }
     }
 
@@ -152,6 +159,7 @@ impl Group {
             "memory" => Ok(Group::Memory),
             "chat log" => Ok(Group::ChatLog),
             "DeepSeek search" => Ok(Group::DeepseekSearch),
+            "other" => Ok(Group::Other),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
         }
     }
@@ -224,7 +232,8 @@ impl BuiltInTools {
             // Hacker News
             (Arc::new(HackerNews::new()), Group::HackerNews),
             // schedule task
-            (Arc::new(ScheduleTask::new()), Group::ScheduleTask),
+            (Arc::new(SimpleScheduleTask::new()), Group::ScheduleTask),
+            (Arc::new(ComplexScheduleTask::new()), Group::ScheduleTask),
             // sub-agent
             (Arc::new(SubAgent::new()), Group::SubAgent),
             // Update Goal Status
@@ -236,6 +245,8 @@ impl BuiltInTools {
             // DeepSeek search
             (Arc::new(DeepseekSearch::new()), Group::DeepseekSearch),
             (Arc::new(DeepseekFetch::new()), Group::DeepseekSearch),
+            // other
+            (Arc::new(Timestamp::new()), Group::Other),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool
         let mut groups: HashSet<Group> = HashSet::new(); // tool groups

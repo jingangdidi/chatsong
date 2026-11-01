@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::write;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Mutex;
 
 use axum::{
     body::Body,
@@ -9,6 +10,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 use chrono::Local;
+use once_cell::sync::Lazy;
 use openai_dive::v1::{
     api::Client,
     resources::{
@@ -26,7 +28,7 @@ use openai_dive::v1::{
         shared::ReasoningEffort,
     },
 };
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use serde_json::json;
 use tokio::sync::mpsc::channel;
 use tracing::{event, Level};
@@ -96,6 +98,52 @@ use crate::{
         running_goal,
     },
 };
+
+/// 复杂定时任务所需的信息
+pub static SCHEDULE: Lazy<Mutex<HashMap<String, ForComplex>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// 复杂定时任务所需的信息
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ForComplex {
+    pub uuid: String,
+    pub model: String,
+    pub api_key: String,
+    pub endpoint: String,
+    pub reasoning: bool,
+    pub effort: ReasoningEffort,
+    pub tools: Option<SelectedTools>,
+    pub skills: Option<SelectedSkills>,
+}
+
+/// 获取指定 uuid 的复杂定时任务信息
+pub fn get_complex_info(uuid: &str) -> Option<ForComplex> {
+    let data = SCHEDULE.lock().unwrap();
+    match data.get(uuid) {
+        Some(s) => Some(s.clone()),
+        None => None,
+    }
+}
+
+/// 插入或更新指定uuid
+fn update_schedule_complex(
+    uuid: String,
+    model: String,
+    api_key: String,
+    endpoint: String,
+    reasoning: bool,
+    effort: ReasoningEffort,
+    tools: Option<SelectedTools>,
+    skills: Option<SelectedSkills>,
+) {
+    let for_complex = ForComplex{uuid: uuid.clone(), model, api_key, endpoint, reasoning, effort, tools, skills};
+    let mut data = SCHEDULE.lock().unwrap();
+    match data.get_mut(&uuid) {
+        Some(s) => *s = for_complex,
+        None => {
+            data.insert(uuid.clone(), for_complex);
+        },
+    }
+}
 
 /// https://github.com/plandex-ai/plandex/blob/main/app/server/model/prompts/summary.go
 const COMPRESSION_PROMPT: &str = r###"
@@ -781,6 +829,18 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     (None, err_str) => (None, err_str),
                 }
             } else { // 常规问题
+                if client_para.selected_tools.is_some() {
+                    update_schedule_complex(
+                        client_para.uuid.clone(),
+                        client_para.model.clone(),
+                        client_para.api_key,
+                        client_para.endpoint,
+                        client_para.reasoning,
+                        client_para.effort,
+                        client_para.selected_tools,
+                        client_para.selected_skills,
+                    );
+                }
                 (
                     Some(ChatMessage::User{
                         content: ChatMessageContent::Text(body.clone()),

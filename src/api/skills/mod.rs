@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::MyError;
 
@@ -76,6 +76,7 @@ impl Skills {
 }
 
 /// 下拉选择的skills
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SelectedSkills {
     All,
     Group(String),

@@ -84,7 +84,10 @@ use built_in_tools::{
         read_multiple_files::Params as ReadMultipleFilesParams,
     },
     hacker_news::hacker_news_summaries,
-    schedule::run_schedule_task,
+    schedule::{
+        run_simple_schedule_task,
+        run_complex_schedule_task,
+    },
     goal::{
         Goal,
         GoalStatus,
@@ -105,7 +108,7 @@ use built_in_tools::filesystem::screen_capture::Params as ScreenCaptureParams;
 use external_tools::ExternalTools;
 
 /// html pulldown option selected tools
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SelectedTools {
     All,                   // all tools
     AllBuiltIn,            // all built-in tools
@@ -1128,7 +1131,7 @@ async fn run_sub_agent(
     }
 }
 
-const LARGE_FILE_PROMPT: &str = r###"The main agent is delegating this work to preserve its context window. The requested work may require reading a large file, multiple files, long logs, generated output, structured data, source code, documentation, or other context-heavy material.
+pub const LARGE_FILE_PROMPT: &str = r###"The main agent is delegating this work to preserve its context window. The requested work may require reading a large file, multiple files, long logs, generated output, structured data, source code, documentation, or other context-heavy material.
 
 Your job is to inspect the relevant material using the available tools and return a compact, evidence-backed report. Do not include unnecessary raw content. Do not solve unrelated parts of the task.
 
@@ -1137,7 +1140,7 @@ Original main agent task:
 
 /// 调用的skill
 #[derive(Deserialize)]
-struct SkillParams {
+pub struct SkillParams {
     skill_name: String,
 }
 
@@ -1226,8 +1229,12 @@ async fn try_call_tool(
                 },
                 Err(e) => Ok(Err(e)),
             },
-            "schedule_task" => match PARAS.tools.run(name_id[1], paras) {
-                Ok(_) => Ok(run_schedule_task(paras).await),
+            "simple_schedule" => match PARAS.tools.run(name_id[1], paras) {
+                Ok(_) => Ok(run_simple_schedule_task(paras).await),
+                Err(e) => Ok(Err(e)),
+            },
+            "complex_schedule" => match PARAS.tools.run(name_id[1], paras) {
+                Ok(_) => Ok(run_complex_schedule_task(uuid, paras).await),
                 Err(e) => Ok(Err(e)),
             },
             "sub_agent" => run_sub_agent(
@@ -2179,7 +2186,7 @@ const FILE_EXT_LANGUAGE: &[(&str, &str)] = &[
 ];
 
 /// 根据文件后缀获取所属语言
-fn get_file_language(file: Option<String>) -> String {
+pub fn get_file_language(file: Option<String>) -> String {
     if let Some(f) = file {
         let path = Path::new(&f);
         match path.extension() {
@@ -2200,7 +2207,7 @@ fn get_file_language(file: Option<String>) -> String {
 
 /// tool名称加了`_uuid第一部分`保证不重复，但是上下文很长时可能导致模型返回的要调用的模型丢失了`_uuid第一部分`，导致调用模型失败
 /// 这里把不含`_uuid第一部分`的tool名称作为key，将对应的完整tool名称作为value，存入HashMap，当`_uuid第一部分`丢失，也能确认具体要调用的模型
-fn get_tool_hashmap(tools: &Vec<ChatCompletionTool>) -> HashMap<String, Vec<String>> {
+pub fn get_tool_hashmap(tools: &Vec<ChatCompletionTool>) -> HashMap<String, Vec<String>> {
     let mut out = HashMap::new();
     for t in tools {
         let real_name = t.function.name.clone();
@@ -2277,7 +2284,7 @@ where
 /// 就尝试把它解析成真正的 JSON array/object
 /// `accept` 用来限制只接受目标类型：
 /// array 字段只接受 array，object 字段只接受 object
-fn fix_string_field_to_json_type(
+pub fn fix_string_field_to_json_type(
     map: &mut serde_json::Map<String, Value>,
     field: &str,
     accept: impl Fn(&Value) -> bool,
