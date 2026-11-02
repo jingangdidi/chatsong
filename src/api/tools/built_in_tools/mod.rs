@@ -227,8 +227,8 @@ impl BuiltInTools {
             (Arc::new(RunCommand::new()), Group::RunX),
             (Arc::new(RunScript::new()), Group::RunX),
             // image
-            (Arc::new(EditImage::new()), Group::FileSystem),
-            (Arc::new(ImageGeneration::new()), Group::FileSystem),
+            (Arc::new(EditImage::new()), Group::Image),
+            (Arc::new(ImageGeneration::new()), Group::Image),
             // Hacker News
             (Arc::new(HackerNews::new()), Group::HackerNews),
             // schedule task

@@ -68,6 +68,9 @@ use crate::{
     },
 };
 
+#[cfg(feature = "screen-capture")]
+use crate::tools::built_in_tools::filesystem::screen_capture::Params as ScreenCaptureParams;
+
 #[derive(Debug, Deserialize)]
 struct Params {
     action: String,                   // create, delete, list

@@ -955,10 +955,10 @@ impl Api {
     /// 获取 gpt image 的 (api key, base url, model name)
     fn get_gpt_image_api_key(&self) -> Option<(String, String, String)> {
         let mut url_key = None;
-        'outer: for i in ["openai", "OpenAI"] {
+        'outer: for i in ["OpenAI-geneseeq", "openai", "OpenAI"] {
             if let Some(c) = &self.config.get(i) {
                 for j in &c.models {
-                    if j.name.starts_with("gpt-image") {
+                    if j.name.starts_with("gpt-image-2.5") {
                         url_key = Some((c.api_key.clone(), c.endpoint.clone(), j.name.clone()));
                         break 'outer;
                     }
