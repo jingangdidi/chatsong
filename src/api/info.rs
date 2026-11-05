@@ -2147,7 +2147,8 @@ pub fn get_file_for_download(uuid: &str, idx: usize) -> Option<(String, bool)> {
             DataType::Image(_) | DataType::Voice => { // 图片或音频文件
                 if let ChatMessage::Assistant{content, ..} = &info.messages[idx].message { // 这里是Assistant，即只提供下载Assistant生成的图片，用户上传的图片不需要下载
                     if let Some(ChatMessageContent::Text(c)) = content {
-                        Some((format!("{}/{}/{}", PARAS.outpath, uuid, c), info.messages[idx].data == DataType::Voice)) // 返回：(图片或音频文件名称, 是否是音频)，该文件存储在服务端当前uuid路径下
+                        //Some((format!("{}/{}/{}", PARAS.outpath, uuid, c), info.messages[idx].data == DataType::Voice)) // 返回：(图片或音频文件名称, 是否是音频)，该文件存储在服务端当前uuid路径下
+                        Some((c.to_string(), info.messages[idx].data == DataType::Voice)) // 返回：(图片或音频文件名称, 是否是音频)，该文件存储在服务端当前uuid路径下
                     } else {
                         None
                     }

@@ -812,21 +812,39 @@
 
     /* 左侧问题索引栏：固定在窗口左侧，里面每一条短线对应一轮用户提问 */
     .chat-question-rail {
+        top: 50%;
+        bottom: auto;
+        height: min(80vh, calc(100vh - 96px));
+        transform: translateY(-50%);
+
+        padding: 8px 8px 8px 2px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior-y: contain;
+        scrollbar-width: thin;
+        direction: rtl;
+        align-items: flex-end; /* RTL 下保持短线靠物理左侧排列 */
+
         position: fixed;
         left: 14.5%;
-        top: 24px;
-        bottom: 24px;
-        width: 34px;
+        /*top: 24px;*/
+        /*bottom: 24px;*/
+        width: 54px;
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        align-items: flex-start;
+        justify-content: flex-start; /*center;*/
+        /*align-items: flex-start;*/
         gap: 14px;
         z-index: 9999;
     }
 
+    /* 有余量时上下 auto margin 实现居中；溢出时归零，首尾短线均可滚动到达。 */
+    .chat-question-marker:first-child { margin-top: auto; }
+    .chat-question-marker:last-child { margin-bottom: auto; }
+
     /* 左侧短线本体：用 button 便于点击和键盘聚焦 */
     .chat-question-marker {
+        direction: ltr;
         position: relative;
         left: 0px;
         flex: 0 0 auto;
@@ -877,7 +895,7 @@
     /* hover 预览浮层：显示问题和回答的开头 */
     .chat-question-preview {
         position: fixed;
-        left: 17%;
+        left: 17.5%;
         max-width: 420px;
         padding: 10px 12px;
         border-radius: 8px;

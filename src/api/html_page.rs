@@ -266,6 +266,7 @@ const BAR: &str = r###"// 初始化左侧问题索引。
 
                 currentActiveIndex = Math.min(currentActiveIndex, Math.max(0, pairs.length - 1));
                 layoutMarkers();
+                rail.scrollTop = rail.scrollHeight;
             }
 
             function scheduleQuestionMarkerRebuild() {
@@ -365,6 +366,11 @@ const BAR: &str = r###"// 初始化左侧问题索引。
             }
 
             scroller.addEventListener('scroll', updateActiveMarker, { passive: true });
+            // 索引栏滚动时关闭旧预览，避免浮层还停留在滚动前的位置。
+            rail.addEventListener('scroll', () => {
+                clearHoverMarker();
+                hidePreview();
+            }, { passive: true });
             window.addEventListener('resize', layoutMarkers);
 
             // 监听动态问答增删或内容填充：新增一对问答后，左侧短线会自动增加。
