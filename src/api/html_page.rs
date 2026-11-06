@@ -2002,8 +2002,8 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                         return '';
                     }
                 )
-                .replace(/[ \t]+/g, ' ')
-                .replace(/\n[ \t]+/g, '\n')
+                //.replace(/[ \t]+/g, ' ')
+                //.replace(/\n[ \t]+/g, '\n')
                 .trim();
 
             return {
@@ -2755,7 +2755,8 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                     }
                 } else { // 文本问题
                     msg_lr.setAttribute("class", "chat-txt right");
-                    msg_lr.textContent = message_content.replaceAll('srxtzn', '\n').replaceAll('\\n', '\n'); // 不要使用innerHTML，innerHTML会识别标签将内容解析为html，textContent只是文本，innerText会受到css影响，https://stackoverflow.com/questions/31002593/type-new-line-character-in-element-textcontent
+                    //msg_lr.textContent = message_content.replaceAll('srxtzn', '\n').replaceAll('\\n', '\n'); // 不要使用innerHTML，innerHTML会识别标签将内容解析为html，textContent只是文本，innerText会受到css影响，https://stackoverflow.com/questions/31002593/type-new-line-character-in-element-textcontent
+                    msg_lr.textContent = message_content.replaceAll('srxtzn', '\n'); // 不要使用innerHTML，innerHTML会识别标签将内容解析为html，textContent只是文本，innerText会受到css影响，https://stackoverflow.com/questions/31002593/type-new-line-character-in-element-textcontent
                 }
             }
             /* 头像 */
