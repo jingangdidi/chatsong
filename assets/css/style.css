@@ -822,6 +822,7 @@
         overflow-x: hidden;
         overscroll-behavior-y: contain;
         scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
         direction: rtl;
         align-items: flex-end; /* RTL 下保持短线靠物理左侧排列 */
 
@@ -836,6 +837,28 @@
         /*align-items: flex-start;*/
         gap: 14px;
         z-index: 9999;
+    }
+
+    .chat-question-rail:hover {
+    scrollbar-color: #999 transparent;
+}
+
+    /* 兼容使用 WebKit 滚动条样式的浏览器 */
+    .chat-question-rail::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .chat-question-rail::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .chat-question-rail::-webkit-scrollbar-thumb {
+        background: transparent;
+        border-radius: 4px;
+    }
+
+    .chat-question-rail:hover::-webkit-scrollbar-thumb {
+        background: #999;
     }
 
     /* 有余量时上下 auto margin 实现居中；溢出时归零，首尾短线均可滚动到达。 */
