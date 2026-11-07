@@ -81,7 +81,7 @@ use built_in_tools::{
     filesystem::{
         edit_file::Params,
         read_file::Params as ReadFileParams,
-        read_multiple_files::Params as ReadMultipleFilesParams,
+        //read_multiple_files::Params as ReadMultipleFilesParams,
     },
     hacker_news::hacker_news_summaries,
     schedule::{
@@ -1302,6 +1302,7 @@ async fn try_call_tool(
                     ).await
                 }
             },
+            /*
             "read_multiple_files" if is_main_agent => { // 读取多个文件时转为调用 sub-agent
                 let read_multiple_files_para: ReadMultipleFilesParams = parse_tool_args(paras, ArgFixSpec{ array_fields: Some(vec!["paths".to_string()]), object_fields: None })?;
                 let sub_agent_id = PARAS.tools.get_tool_id_by_name("sub_agent").unwrap();
@@ -1319,6 +1320,7 @@ async fn try_call_tool(
                     is_local,
                 ).await
             },
+            */
             "get_all_memory" => match PARAS.tools.run(name_id[1], paras) { // 获取所有记忆
                 Ok(_) => Ok(Ok((get_all_memory(if is_local { "local" } else { uuid }), None))),
                 Err(e) => Ok(Err(e)),
