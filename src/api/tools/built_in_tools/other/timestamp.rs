@@ -1,26 +1,10 @@
 use chrono::Local;
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
     error::MyError,
-    tools::{
-        parse_tool_args,
-        ArgFixSpec,
-        built_in_tools::BuiltIn,
-    },
+    tools::built_in_tools::BuiltIn,
 };
-
-/// 默认格式：可作为文件名，无空格/冒号等非法字符
-const DEFAULT_FORMAT: &str = "%Y-%m-%d_%H-%M-%S";
-
-/// params for timestamp
-#[derive(Deserialize)]
-pub struct Params {
-    /// 可选的 strftime 格式串，缺省为 DEFAULT_FORMAT
-    #[serde(default)]
-    pub format: Option<String>,
-}
 
 /// built-in tool
 pub struct Timestamp;
@@ -40,36 +24,22 @@ impl BuiltIn for Timestamp {
 
     /// get tool description
     fn description(&self) -> String {
-        format!("Returns the current local timestamp. Optionally accepts a strftime `format` string; defaults to `{DEFAULT_FORMAT}` which yields strings such as `2025-01-19_15-21-56` (safe to use as a filename).")
+        "Returns the current local timestamp with timezone, e.g. `2025-01-19 15:21:56 +08:00`.".to_string()
     }
 
     /// get tool schema
     fn schema(&self) -> Value {
         json!({
-            "properties": {
-                "format": {
-                    "type": "string",
-                    "description": "Optional strftime / chrono format string. Defaults to '%Y-%m-%d_%H-%M-%S'.",
-                },
-            },
+            "properties": {},
             "required": [],
             "type": "object",
         })
     }
 
     /// run tool
-    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        let params: Params = parse_tool_args(args, ArgFixSpec {array_fields: None, object_fields: None})?;
-
-        let format = params.format.as_deref().unwrap_or(DEFAULT_FORMAT);
-        // 例：2025-01-19_15-21-56
-        let timestamp = Local::now().format(format).to_string();
-
-        // 如果需要反向校验/解析（比如走默认格式），可以这样做：
-        // let dt = chrono::NaiveDateTime::parse_from_str(&timestamp, format)
-        //     .map_err(|e| MyError::OtherError { error: format!("invalid format: {e}") })?;
-        // let _: chrono::NaiveDateTime = dt;
-
+    fn run(&self, _args: &str) -> Result<(String, Option<String>), MyError> {
+        // 带时区、年月日时分秒，如：2025-01-19 15:21:56 +08:00
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S %:z").to_string();
         Ok((timestamp, None))
     }
 
