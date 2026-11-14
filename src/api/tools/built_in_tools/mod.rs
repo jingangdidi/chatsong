@@ -72,7 +72,10 @@ use image::{
     EditImage,
     ImageGeneration,
 };
-use other::Timestamp;
+use other::{
+    Timestamp,
+    CodeSearch,
+};
 use hacker_news::HackerNews;
 use schedule::{
     SimpleScheduleTask,
@@ -247,6 +250,7 @@ impl BuiltInTools {
             (Arc::new(DeepseekFetch::new()), Group::DeepseekSearch),
             // other
             (Arc::new(Timestamp::new()), Group::Other),
+            (Arc::new(CodeSearch::new()), Group::Other),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool
         let mut groups: HashSet<Group> = HashSet::new(); // tool groups
