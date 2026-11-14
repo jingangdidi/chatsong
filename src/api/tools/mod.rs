@@ -99,6 +99,7 @@ use built_in_tools::{
     deepseek_search::{
         search::deepseek_search,
         fetch::deepseek_fetch,
+        ocr::deepseek_ocr,
     },
 };
 
@@ -1343,6 +1344,16 @@ async fn try_call_tool(
                 Ok((url, _)) => {
                     match deepseek_fetch(&url).await {
                         Ok(fetch_result) => Ok(Ok((fetch_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "ocr" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((file_purpose, _)) => {
+                    let parts: Vec<&str> = file_purpose.splitn(2, "---srx---").collect(); // [文件, text_recognition/rich_layout_recognition]
+                    match deepseek_ocr(parts[0], parts[1]).await {
+                        Ok(ocr_result) => Ok(Ok((ocr_result, None))),
                         Err(e) => Ok(Err(e)),
                     }
                 },

@@ -88,6 +88,7 @@ use chat_log::LoadChatLog;
 use deepseek_search::{
     DeepseekSearch,
     DeepseekFetch,
+    DeepseekOcr,
 };
 
 /// trait for built-in tools
@@ -248,6 +249,7 @@ impl BuiltInTools {
             // DeepSeek search
             (Arc::new(DeepseekSearch::new()), Group::DeepseekSearch),
             (Arc::new(DeepseekFetch::new()), Group::DeepseekSearch),
+            (Arc::new(DeepseekOcr::new()), Group::DeepseekSearch),
             // other
             (Arc::new(Timestamp::new()), Group::Other),
             (Arc::new(CodeSearch::new()), Group::Other),
