@@ -100,6 +100,7 @@ use built_in_tools::{
         search::deepseek_search,
         fetch::deepseek_fetch,
         ocr::deepseek_ocr,
+        asr::deepseek_asr,
     },
 };
 
@@ -1354,6 +1355,15 @@ async fn try_call_tool(
                     let parts: Vec<&str> = file_purpose.splitn(2, "---srx---").collect(); // [文件, text_recognition/rich_layout_recognition]
                     match deepseek_ocr(parts[0], parts[1]).await {
                         Ok(ocr_result) => Ok(Ok((ocr_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "asr" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((audio_file, _)) => {
+                    match deepseek_asr(&audio_file).await {
+                        Ok(asr_result) => Ok(Ok((asr_result, None))),
                         Err(e) => Ok(Err(e)),
                     }
                 },
