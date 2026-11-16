@@ -49,9 +49,12 @@ use crate::{
                 image_generation::image_generation,
                 edit_image::edit_image,
             },
-            deepseek_search::{
+            deepseek::{
                 search::deepseek_search,
                 fetch::deepseek_fetch,
+                ocr::deepseek_ocr,
+                asr::deepseek_asr,
+                tts::deepseek_tts,
             },
         },
         get_tool_hashmap,
@@ -1012,6 +1015,36 @@ async fn try_call_tool(
                 Ok((url, _)) => {
                     match deepseek_fetch(&url).await {
                         Ok(fetch_result) => Ok(Ok((fetch_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "ocr" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((file_purpose, _)) => {
+                    let parts: Vec<&str> = file_purpose.splitn(2, "---srx---").collect(); // [文件, text_recognition/rich_layout_recognition]
+                    match deepseek_ocr(parts[0], parts[1]).await {
+                        Ok(ocr_result) => Ok(Ok((ocr_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "asr" => match PARAS.tools.run(name_id[1], paras) {
+                Ok((audio_file, _)) => {
+                    match deepseek_asr(&audio_file).await {
+                        Ok(asr_result) => Ok(Ok((asr_result, None))),
+                        Err(e) => Ok(Err(e)),
+                    }
+                },
+                Err(e) => Ok(Err(e)),
+            },
+            "tts" => match PARAS.tools.run(name_id[1], paras) {
+                Ok(_) => {
+                    let tmp_time = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string(); // 回答的当前时间，例如：2024-10-21_16-35-47
+                    let tts_path = format!("{}/{}/deepseek_tts_{}", PARAS.outpath, uuid, tmp_time); // 将输出路径固定到当前uuid输出路径，不含格式后缀
+                    match deepseek_tts(paras, &tts_path).await {
+                        Ok(tts_result) => Ok(Ok((tts_result, None))),
                         Err(e) => Ok(Err(e)),
                     }
                 },

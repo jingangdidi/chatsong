@@ -23,7 +23,7 @@ pub mod other;
 pub mod goal;
 pub mod memory;
 pub mod chat_log;
-pub mod deepseek_search;
+pub mod deepseek;
 
 //use sum::Sum;
 use filesystem::{
@@ -85,11 +85,12 @@ use sub_agent::SubAgent;
 use goal::UpdateGoalStatus;
 use memory::GetAllMemory;
 use chat_log::LoadChatLog;
-use deepseek_search::{
+use deepseek::{
     DeepseekSearch,
     DeepseekFetch,
     DeepseekOcr,
     DeepseekAsr,
+    DeepseekTts,
 };
 
 /// trait for built-in tools
@@ -125,7 +126,7 @@ pub enum Group {
     UpdateGoalStatus,
     Memory,
     ChatLog,
-    DeepseekSearch,
+    Deepseek,
     Other,
 }
 
@@ -144,7 +145,7 @@ impl Group {
             Group::UpdateGoalStatus => "Update Goal Status".to_string(),
             Group::Memory => "memory".to_string(),
             Group::ChatLog => "chat log".to_string(),
-            Group::DeepseekSearch => "DeepSeek search".to_string(),
+            Group::Deepseek => "DeepSeek".to_string(),
             Group::Other => "other".to_string(),
         }
     }
@@ -163,7 +164,7 @@ impl Group {
             "Update Goal Status" => Ok(Group::UpdateGoalStatus),
             "memory" => Ok(Group::Memory),
             "chat log" => Ok(Group::ChatLog),
-            "DeepSeek search" => Ok(Group::DeepseekSearch),
+            "DeepSeek" => Ok(Group::Deepseek),
             "other" => Ok(Group::Other),
             _ => Err(MyError::OtherError{info: format!("can not convert \"{}\" to Group", g)})
         }
@@ -247,11 +248,12 @@ impl BuiltInTools {
             (Arc::new(GetAllMemory::new()), Group::Memory),
             // chat log
             (Arc::new(LoadChatLog::new()), Group::ChatLog),
-            // DeepSeek search
-            (Arc::new(DeepseekSearch::new()), Group::DeepseekSearch),
-            (Arc::new(DeepseekFetch::new()), Group::DeepseekSearch),
-            (Arc::new(DeepseekOcr::new()), Group::DeepseekSearch),
-            (Arc::new(DeepseekAsr::new()), Group::DeepseekSearch),
+            // DeepSeek
+            (Arc::new(DeepseekSearch::new()), Group::Deepseek),
+            (Arc::new(DeepseekFetch::new()), Group::Deepseek),
+            (Arc::new(DeepseekOcr::new()), Group::Deepseek),
+            (Arc::new(DeepseekAsr::new()), Group::Deepseek),
+            (Arc::new(DeepseekTts::new()), Group::Deepseek),
             // other
             (Arc::new(Timestamp::new()), Group::Other),
             (Arc::new(CodeSearch::new()), Group::Other),

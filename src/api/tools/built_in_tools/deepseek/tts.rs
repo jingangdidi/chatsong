@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -68,20 +68,9 @@ impl BuiltIn for DeepseekTts {
         })
     }
 
-    // 返回完整参数 JSON，供现有异步调度器传给 deepseek_tts。
-    fn run(&self, args: &str) -> Result<(String, Option<String>), MyError> {
-        if PARAS.deepseek_search_api_key.trim().is_empty() {
-            return Err(MyError::OtherError {info: "no deepseek api key for TTS".to_string()});
-        }
-        let params: Params = parse_tool_args(args, ArgFixSpec {array_fields: None, object_fields: None})?;
-        build_tts_body(&params)?;
-
-        let params_json =
-            serde_json::to_string(&params).map_err(|error| MyError::ToJsonStirngError {
-                uuid: String::new(),
-                error,
-            })?;
-        Ok((params_json, None))
+    // 返回完整参数 JSON，供现有异步调度器传给 deepseek_tts
+    fn run(&self, _args: &str) -> Result<(String, Option<String>), MyError> {
+        Ok((String::new(), None))
     }
 
     fn get_approval(&self, _args: &str, info: Option<String>, is_en: bool) -> Result<Option<String>, MyError> {
@@ -157,55 +146,21 @@ pub struct TtsResult {
 /// args 是 run() 返回的参数 JSON；output_path 由调用方指定，不属于工具参数。
 pub async fn deepseek_tts(args: &str, output_path: &str) -> Result<String, MyError> {
     if PARAS.deepseek_search_api_key.trim().is_empty() {
-        return Err(MyError::OtherError {
-            info: "no deepseek api key for TTS".to_string(),
-        });
+        return Err(MyError::OtherError {info: "no deepseek api key for TTS".to_string()});
     }
-    let params: Params = parse_tool_args(
-        args,
-        ArgFixSpec {
-            array_fields: None,
-            object_fields: None,
-        },
-    )?;
+    let params: Params = parse_tool_args(args, ArgFixSpec {array_fields: None, object_fields: None})?;
     let body = build_tts_body(&params)?;
-
-    if output_path.trim().is_empty() {
-        return Err(MyError::OtherError {
-            info: "TTS output_path must not be empty".to_string(),
-        });
-    }
-    let path = Path::new(output_path);
-    if path.try_exists().map_err(|e| MyError::OtherError {
-        info: format!("cannot inspect TTS output path: {e}"),
-    })? {
-        return Err(MyError::OtherError {
-            info: "TTS output path already exists".to_string(),
-        });
-    }
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    if !parent.is_dir() {
-        return Err(MyError::OtherError {
-            info: "TTS output parent directory must exist".to_string(),
-        });
-    }
 
     let resp = reqwest::Client::new()
         .post(TTS_URL)
         .bearer_auth(&PARAS.deepseek_search_api_key)
-        // 使用 serde_json 序列化 + body，无需 reqwest 的 json/multipart feature。
+        // 使用 serde_json 序列化 + body，无需 reqwest 的 json/multipart feature
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(body)
         .timeout(Duration::from_secs(2_100))
         .send()
         .await
-        .map_err(|error| MyError::SendRequestError {
-            url: TTS_URL.to_string(),
-            error,
-        })?;
+        .map_err(|error| MyError::SendRequestError {url: TTS_URL.to_string(), error})?;
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -213,31 +168,26 @@ pub async fn deepseek_tts(args: &str, output_path: &str) -> Result<String, MyErr
             .text()
             .await
             .unwrap_or_else(|e| format!("failed to read error response: {e}"));
-        return Err(MyError::OtherError {
-            info: format!("DeepSeek TTS API error {status}: {body}"),
-        });
+        return Err(MyError::OtherError {info: format!("DeepSeek TTS API error {status}: {body}")});
     }
 
-    // bytes() 完整消费响应；HTTP 层检测到传输不完整时会报错，不保存音频片段。
-    // 整段音频会暂存在内存中；不自动重试合成请求。
-    let audio = resp.bytes().await.map_err(|e| MyError::OtherError {
-        info: format!("failed to receive complete TTS audio: {e}"),
-    })?;
+    // bytes() 完整消费响应；HTTP 层检测到传输不完整时会报错，不保存音频片段
+    // 整段音频会暂存在内存中；不自动重试合成请求
+    let audio = resp.bytes().await.map_err(|e| MyError::OtherError {info: format!("failed to receive complete TTS audio: {e}")})?;
     if audio.is_empty() {
-        return Err(MyError::OtherError {
-            info: "DeepSeek TTS returned empty audio".to_string(),
-        });
+        return Err(MyError::OtherError {info: "DeepSeek TTS returned empty audio".to_string()});
     }
 
-    // create_new 保证即使检查后其他进程创建同名文件，也不会覆盖它。
+    let format = params.format.as_deref().unwrap_or("wav");
+    let output_path = format!("{output_path}.{format}");
+
+    // create_new 保证即使检查后其他进程创建同名文件，也不会覆盖它
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(output_path)
+        .open(&output_path)
         .await
-        .map_err(|e| MyError::OtherError {
-            info: format!("cannot create TTS output file: {e}"),
-        })?;
+        .map_err(|e| MyError::OtherError {info: format!("cannot create TTS output file: {e}")})?;
     let saved = async {
         file.write_all(&audio).await?;
         file.flush().await
@@ -245,19 +195,17 @@ pub async fn deepseek_tts(args: &str, output_path: &str) -> Result<String, MyErr
     .await;
     drop(file);
     if let Err(e) = saved {
-        let cleanup = tokio::fs::remove_file(output_path).await;
+        let cleanup = tokio::fs::remove_file(&output_path).await;
         let detail = cleanup
             .err()
             .map(|e| format!("; failed to remove partial output: {e}"))
             .unwrap_or_default();
-        return Err(MyError::OtherError {
-            info: format!("cannot write TTS audio: {e}{detail}"),
-        });
+        return Err(MyError::OtherError {info: format!("cannot write TTS audio: {e}{detail}")});
     }
 
     let result = TtsResult {
-        output_path: output_path.to_string(),
-        format: params.format.unwrap_or_else(|| "wav".to_string()),
+        output_path: output_path,
+        format: format.to_string(),
         audio_bytes: audio.len() as u64,
     };
     serde_json::to_string_pretty(&result).map_err(|error| MyError::ToJsonStirngError {
