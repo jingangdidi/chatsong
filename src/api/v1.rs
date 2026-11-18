@@ -37,6 +37,7 @@ use crate::api::handlers::{
     memory::memory,
     systemone::systemone,
     systemone_toggle::systemone_toggle,
+    deepseek_web::deepseek_web,
 };
 
 /// 创建version1的路由
@@ -73,6 +74,7 @@ pub fn configure() -> Router {
         .route("/memory", get(memory)) // GET /v1/memory，记忆
         .route("/systemone", post(systemone)) // POST /v1/systemone，system one 决策自动选工具
         .route("/systemone-toggle", get(systemone_toggle)) // GET /v1/systemone-toggle，切换 system one 决策自动选工具
+        .route("/deepseek-web", get(deepseek_web)) // GET /v1/deepseek-web，启用 DeepSeek 后端的联网能力
         .route("/goal", get(goal)) // GET /v1/goal，goal模式
         .route("/speaker", get(speaker)) // GET /v1/speaker，speaker模式
         .route("/upload", post(upload)) // POST /v1/upload，上传文件

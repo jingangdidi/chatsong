@@ -22,6 +22,7 @@ pub mod speaker; // `GET /嵌套的前缀/speaker`
 pub mod memory; // `GET /嵌套的前缀/memory`
 pub mod systemone; // `GET /嵌套的前缀/systemone`
 pub mod systemone_toggle; // `GET /嵌套的前缀/systemone-toggle`
+pub mod deepseek_web; // `GET /嵌套的前缀/deepseek-web`
 pub mod upload; // `POST /嵌套的前缀/upload`
 pub mod usage; // `GET /嵌套的前缀/usage`
 pub mod fallback; // `NOT_FOUND`

@@ -8,7 +8,7 @@ use tracing::{event, Level};
 
 static SYSTEMONE: Lazy<Mutex<HashMap<String, bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-/// Handler for `/嵌套的前缀/systemone` GET
+/// Handler for `/嵌套的前缀/systemone-toggle` GET
 pub async fn systemone_toggle(Query(params): Query<HashMap<String, String>>, uri: OriginalUri, jar: CookieJar) {
     // 获取uuid
     if let Some(c) = jar.get("srx-tzn") { // 获取cookie

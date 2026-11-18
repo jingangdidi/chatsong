@@ -72,10 +72,10 @@ use image::{
     EditImage,
     ImageGeneration,
 };
-use other::{
-    Timestamp,
-    CodeSearch,
-};
+use other::Timestamp;
+#[cfg(feature = "systemone-code-search")]
+use other::CodeSearch;
+
 use hacker_news::HackerNews;
 use schedule::{
     SimpleScheduleTask,
@@ -256,6 +256,7 @@ impl BuiltInTools {
             (Arc::new(DeepseekTts::new()), Group::Deepseek),
             // other
             (Arc::new(Timestamp::new()), Group::Other),
+            #[cfg(feature = "systemone-code-search")]
             (Arc::new(CodeSearch::new()), Group::Other),
         ];
         let mut id_map: HashMap<String, SingleBuiltInTool> = HashMap::new(); // key: tool id, value: SingleBuiltInTool

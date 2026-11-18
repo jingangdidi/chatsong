@@ -55,6 +55,8 @@ const ICON_SAFE0: &str = include_str!("../../assets/image/helmet-svgrepo-com.txt
 const ICON_SAFE1: &str = include_str!("../../assets/image/skull-outline-of-halloween-svgrepo-com.txt"); // 不询问直接调用任何工具
 const ICON_SYSTEMONE0: &str = include_str!("../../assets/image/decide-svgrepo-off.txt"); // 使用 system one 自动选择工具
 const ICON_SYSTEMONE1: &str = include_str!("../../assets/image/decide-svgrepo-on.txt");
+const ICON_DS_WEB0: &str = include_str!("../../assets/image/web-svgrepo-com-0.txt");
+const ICON_DS_WEB1: &str = include_str!("../../assets/image/web-svgrepo-com-1.txt"); // 启用 DeepSeek 后端的联网能力
 
 /// 将marked.min.js下载下来，不需要每次联网加载
 const MARKED_MIN_JS: &str = include_str!("../../assets/js/marked.min.js");
@@ -430,6 +432,7 @@ struct PageInfo {
     microphone:   [String; 3], // 左下角语音按钮开启和关闭2个状态的title，以及开启的前2个字符
     safe:         [String; 3], // 左下角调用工具的权限开关，默认头盔，调用关键工具需要用户允许，切换为骷髅表示调用任何工具不需要询问
     systemone:    [String; 3], // 左下角通过 system one 自动选择工具的开关
+    ds_web:       [String; 3], // 左下角启用 DeepSeek 后端联网能力的开关
     wait:         [String; 4], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题、等待system one选择工具
 }
 
@@ -602,6 +605,7 @@ impl PageInfo {
                 microphone: ["Activate the voice mode, and you can input questions through the microphone".to_string(), "Disable the voice mode, you can only input questions through the keyboard".to_string(), "Ac".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 safe:       ["The key tool for calling requires user approval".to_string(), "No approval is required for calling all tools".to_string(), "The".to_string()],
                 systemone:  ["Disable automatic selection of related tools".to_string(), "Enable automatic selection of relevant tools".to_string(), "Disable".to_string()],
+                ds_web:     ["Disable deepseek deepseek_web_search and deepseek_read_url, only valid for Deepseek models".to_string(), "Enable deepseek deepseek_web_search and deepseek_read_url, only valid for Deepseek models".to_string(), "Disable".to_string()], // 左下角启用 DeepSeek 后端联网能力的开关
                 wait:       ["Waiting for answer".to_string(), "Waiting for search".to_string(), "Sending query".to_string(), "Waiting for system one to select tools".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题、等待system one选择工具
             }
         } else {
@@ -771,6 +775,7 @@ impl PageInfo {
                 microphone: ["开启语音模式，你可以通过麦克风输入问题".to_string(), "关闭语音模式，你只能通过键盘输入问题".to_string(), "开启".to_string()], // 左下角语音模式按钮开启和关闭2个状态的title，以及开启的前2个字符
                 safe:       ["调用关键工具需要用户批准".to_string(), "开放权限，调用所有工具都不需要用户批准".to_string(), "调用".to_string()],
                 systemone:  ["关闭自动选择工具".to_string(), "开启自动选择工具".to_string(), "关闭".to_string()],
+                ds_web:     ["开启 deepseek 的 deepseek_web_search 和 deepseek_read_url，仅对 deepseek 模型有效".to_string(), "关闭 deepseek 的 deepseek_web_search 和 deepseek_read_url，仅对 deepseek 模型有效".to_string(), "开启".to_string()], // 左下角启用 DeepSeek 后端联网能力的开关
                 wait:       ["等待回答".to_string(), "等待搜索".to_string(), "发送问题".to_string(), "等待 system one 选择工具".to_string()], // 发送问题后等待时，输入框内显示的内容：等待回答、等待搜索、发送问题、等待system one选择工具
             }
         }
@@ -1225,7 +1230,10 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         </div>
         <div id='left-systemone' class='left-bottom' title='{}'>
             <img src='{}' id='systemone' aria-hidden='true' />
-        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY, page_data.button[7], ICON_SPEAKER0, page_data.safe[0], ICON_SAFE0, page_data.systemone[1], ICON_SYSTEMONE0);
+        </div>
+        <div id='left-ds-web' class='left-bottom' title='{}'>
+            <img src='{}' id='ds-web' aria-hidden='true' />
+        </div>", page_data.button[0], ICON_SETTING, PARAS.addr_str, PARAS.port, v, page_data.button[1], ICON_DOWNLOAD, PARAS.addr_str, PARAS.port, v, page_data.button[2], ICON_HELP, page_data.button[3], ICON_COMPRESS, if is_incognito { &page_data.incognito[1] } else { &page_data.incognito[0] }, if is_incognito { ICON_INCOGNITO2 } else { ICON_INCOGNITO1 }, page_data.microphone[0], ICON_MICROPHONE0, page_data.button[4], ICON_INSERT_MSG, page_data.button[5], ICON_GOAL0, page_data.button[6], ICON_MEMORY, page_data.button[7], ICON_SPEAKER0, page_data.safe[0], ICON_SAFE0, page_data.systemone[1], ICON_SYSTEMONE0, page_data.ds_web[0], ICON_DS_WEB0);
     result += r###"
         <!-- <div>&copy; 2025 Copyright srx</div> -->
         <a href='https://github.com/jingangdidi'>https://github.com/jingangdidi</a>
@@ -2240,6 +2248,28 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         systemone_toggle();
     }})
     ", page_data.systemone[2], ICON_SYSTEMONE0, page_data.systemone[1], ICON_SYSTEMONE1, page_data.systemone[0], PARAS.addr_str, PARAS.port, v);
+    result += &format!("
+    // 切换启用 DeepSeek 后端的联网能力
+    function ds_web_toggle() {{
+        const dswebDiv = document.getElementById('left-ds-web');
+        const dswebImg = document.getElementById('ds-web');
+        const current_ds_web = dswebDiv.title.substring(0, 2) === '{}';
+        if (current_ds_web) {{ // 转为骷髅
+            dswebImg.src = '{}';
+            dswebDiv.title = '{}';
+        }} else {{ // 转为头盔
+            dswebImg.src = '{}';
+            dswebDiv.title = '{}';
+        }}
+        fetch('http://{}:{}{}/deepseek-web?dsweb='+current_ds_web).catch(error => {{
+            console.error('Failed toggle deepseek web:', error);
+        }});
+    }}
+    // 监听点击切换 DeepSeek 后端联网能力按钮
+    document.getElementById('left-ds-web').addEventListener('click', function(event) {{
+        ds_web_toggle();
+    }})
+    ", page_data.ds_web[2], ICON_DS_WEB1, page_data.ds_web[1], ICON_DS_WEB0, page_data.ds_web[0], PARAS.addr_str, PARAS.port, v);
     result += r###"
     // 监听点击停止对话按钮
     document.getElementById('submit_span').addEventListener('click', function(event) {

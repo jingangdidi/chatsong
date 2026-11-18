@@ -511,8 +511,57 @@ pub async fn run_tools(
     // tool名称加了`_uuid第一部分`保证不重复，但是上下文很长时可能导致模型返回的要调用的模型丢失了`_uuid第一部分`，导致调用模型失败
     // 这里把不含`_uuid第一部分`的tool名称作为key，将对应的完整tool名称作为value，存入HashMap，当`_uuid第一部分`丢失，也能确认具体要调用的模型
     let tool_map = get_tool_hashmap(&tool_schema);
-    let para_builder_for_sub_agent = para_builder.clone();
-    para_builder.tools(tool_schema.clone());
+    // sub-agent 目前不添加 deepseek_web_search 和 deepseek_read_url
+    let mut para_builder_for_sub_agent = para_builder.clone();
+    if let Some(mut extra_body) = para_builder_for_sub_agent.build().map_err(|e| MyError::ChatCompletionError{error: e})?.extra_body {
+        if let Some(body) = extra_body.as_object_mut() {
+            body.remove("tools");
+        }
+        para_builder_for_sub_agent.extra_body(extra_body);
+    }
+    // 如果 extra_body 有 tools，则把指定的 tools 加到 extra_body 的 tools 中，否则还是使用 para_builder.tools() 方法
+    let mut extra_body = para_builder
+        .build()
+        .map_err(|e| MyError::ChatCompletionError{error: e})?
+        .extra_body
+        .unwrap_or_else(|| json!({}));
+    if extra_body.get("tools").is_some() {
+        let existing_tools = extra_body.get("tools").and_then(Value::as_array);
+        let has_tool = |name: &str| {
+            existing_tools.is_some_and(|tools| {
+                tools.iter().any(|tool| {
+                    tool.get("type").and_then(Value::as_str) == Some(name)
+                })
+            })
+        };
+        let has_deepseek_search = has_tool("deepseek_web_search");
+        let has_deepseek_read_url = has_tool("deepseek_read_url");
+        // 如果 extra_body 指定了 deepseek_web_search，则忽略 tool_schema 中的 web_search__
+        // 如果 extra_body 指定了 deepseek_read_url tool_schema 中的 fetch_url__
+        let mut all_tools: Vec<Value> = tool_schema
+            .iter()
+            .filter(|tool| {
+                let name = &tool.function.name;
+                if has_deepseek_search && name.starts_with("web_search__") || has_deepseek_read_url && name.starts_with("fetch_url__") {
+                    event!(Level::WARN, "{} {} has been enabled, ignoring {}", uuid, if has_deepseek_search { "deepseek_web_search" } else { "deepseek_read_url" }, name);
+                    false
+                } else {
+                    true
+                }
+            })
+            .map(serde_json::to_value)
+            .collect::<Result<_, _>>()
+            .map_err(|e| MyError::StructToJsonValueError { error: e })?;
+        // 保留 extra_body 中所有已声明的工具
+        if let Some(existing_tools) = existing_tools {
+            all_tools.extend(existing_tools.iter().cloned());
+        }
+        extra_body["tools"] = Value::Array(all_tools);
+        para_builder.extra_body(extra_body);
+    } else {
+        // 原流程不变，已有 extra_body 配置也保持不变
+        para_builder.tools(tool_schema.clone());
+    }
     let mut history_messages: Vec<ChatMessage> = get_messages(&uuid); // store all messages as context log, this is temp history, will not add to the user's main history
     // 如果只有用户提问，则提取用户的问题，获取记忆并注入
     if history_messages.iter().all(|m| matches!(m, ChatMessage::User { .. })) {

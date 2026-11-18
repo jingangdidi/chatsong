@@ -126,3 +126,5 @@ bot = ["serenity"]
 pdf = ["pdf-extract"]
 
 screen-capture = ["xcap"]
+
+systemone-code-search = []

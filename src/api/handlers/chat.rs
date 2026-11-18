@@ -92,10 +92,13 @@ use crate::{
         built_in_tools::goal::render_init_goal_prompt,
     },
     skills::SelectedSkills,
-    api::handlers::goal::{
-        append_goal,
-        get_goal,
-        running_goal,
+    api::handlers::{
+        goal::{
+            append_goal,
+            get_goal,
+            running_goal,
+        },
+        deepseek_web::allow_deepseek_web,
     },
 };
 
@@ -536,7 +539,18 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     // 开启思考，不同模型思考的设置不同
                     if lowercase_model.starts_with("deepseek") {
                         // deepseek: https://api-docs.deepseek.com/
-                        para_builder.extra_body(json!({"thinking": {"type": "enabled"}}));
+                        if allow_deepseek_web(&client_para.uuid) {
+                            event!(Level::INFO, "{} enable deepseek_web_search and deepseek_read_url", client_para.uuid);
+                            para_builder.extra_body(json!({
+                                "thinking": {"type": "enabled"},
+                                "tools": [ // https://api-docs.deepseek.com/zh-cn/guides/web_tools
+                                    {"type": "deepseek_web_search"},
+                                    {"type": "deepseek_read_url"}
+                                ]
+                            }));
+                        } else {
+                            para_builder.extra_body(json!({"thinking": {"type": "enabled"}}));
+                        }
                     } else if lowercase_model.starts_with("qwen") {
                         // Qwen: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions#05cfceb898csa
                         para_builder.extra_body(json!({"enable_thinking": true}));
@@ -555,7 +569,18 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                     // 关闭思考，不同模型思考的设置不同
                     if lowercase_model.starts_with("deepseek") {
                         // deepseek: https://api-docs.deepseek.com/
-                        para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                        if allow_deepseek_web(&client_para.uuid) {
+                            event!(Level::INFO, "{} enable deepseek_web_search and deepseek_read_url", client_para.uuid);
+                            para_builder.extra_body(json!({
+                                "thinking": {"type": "disabled"},
+                                "tools": [ // https://api-docs.deepseek.com/zh-cn/guides/web_tools
+                                    {"type": "deepseek_web_search"},
+                                    {"type": "deepseek_read_url"}
+                                ]
+                            }));
+                        } else {
+                            para_builder.extra_body(json!({"thinking": {"type": "disabled"}}));
+                        }
                     } else if lowercase_model.starts_with("qwen") {
                         if client_para.endpoint.starts_with("http://") { // local model
                             // https://modelscope.cn/models/Qwen/Qwen3.5-397B-A17B
