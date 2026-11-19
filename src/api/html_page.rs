@@ -1325,7 +1325,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
         }
     }
     result += &format!("        }}
-        window.onload = markhigh();
+        markhigh();
         document.getElementById('show-prompt').value = '{}';
         document.getElementById('show-uuid').value = '{}';
         document.getElementById('show-in-token').value = '{}';
@@ -2572,7 +2572,7 @@ pub fn create_main_page(uuid: &str, v: String, is_local: bool) -> String {
                     let new_id = 'm'+(current_id-1);
                     const msg_req_right = document.getElementById(new_id);
                     formData.append('files', file);
-                    if (file.type.startsWith('image/')) { // 插入显示上传的图片或文件名
+                    if (file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(file.name)) { // 插入显示上传的图片或文件名
                         // 生成临时URL并设置为图片的src
                         const objectURL = URL.createObjectURL(file);
                         let right_img = document.createElement("img");
