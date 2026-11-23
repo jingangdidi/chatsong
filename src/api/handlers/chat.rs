@@ -102,6 +102,9 @@ use crate::{
     },
 };
 
+#[cfg(feature = "alarm")]
+use crate::alarm;
+
 /// 复杂定时任务所需的信息
 pub static SCHEDULE: Lazy<Mutex<HashMap<String, ForComplex>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -705,6 +708,8 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                             if let Err(e) = use_stream(tmp_uuid.clone(), sender, client, para_builder, &client_para.model, client_para.show_thought, client_para.qa_msg_p, is_local, client_para.microphone).await {
                                 event!(Level::ERROR, "{} receive stream error: {}", tmp_uuid, e);
                             }
+                            #[cfg(feature = "alarm")]
+                            alarm::flash();
                         });
                         // 创建stream对象，接收管道传递的数据
                         let tmp_uuid = client_para.uuid.clone();

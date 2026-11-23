@@ -106,6 +106,9 @@ pdf-extract = { version = "0.7.9", optional = true }
 # screen capture
 xcap = { version = "0.9.8", optional = true }
 
+# floating alarm
+eframe = { version = "=0.33.3", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"], optional = true }
+
 [features]
 default = []
 
@@ -128,3 +131,5 @@ pdf = ["pdf-extract"]
 screen-capture = ["xcap"]
 
 systemone-code-search = []
+
+alarm = ["eframe"]

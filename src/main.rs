@@ -40,6 +40,9 @@ use chatsong::code_completion::{listen_hotkey, ModelForCompletion, KeySignal};
 #[cfg(any(feature = "asr", feature = "asr-cuda", feature = "asr-metal"))]
 use chatsong::asr::auto_speech_rec;
 
+#[cfg(feature = "alarm")]
+use chatsong::alarm;
+
 /// 参考：https://github.com/joelparkerhenderson/demo-rust-axum
 
 #[tokio::main]
@@ -153,12 +156,41 @@ async fn main() {
             exit(1);
         },
     };
+
+    /*
     // 开启http服务
     //if let Err(e) = axum::serve(listener, router.into_make_service()).await {
     if let Err(e) = axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>()).await {
         println!("{}", e); // 这里不要用`{:?}`，会打印结构体而不是打印指定的错误信息
         exit(1);
     }
+    */
+
+    let serve_http = async move {
+        let service = router.into_make_service_with_connect_info::<SocketAddr>();
+        if let Err(e) = axum::serve(listener, service).await {
+            eprintln!("{e}");
+            exit(1);
+        }
+    };
+    #[cfg(feature = "alarm")]
+    {
+        // 先让 HTTP 服务在 Tokio 后台运行。
+        let http_task = task::spawn(serve_http);
+
+        // 悬浮球的窗口事件循环留在主线程。
+        if let Err(e) = alarm::run() {
+            eprintln!("悬浮球启动失败：{e}");
+        }
+
+        // 关闭悬浮球后，HTTP 服务继续运行。
+        if let Err(e) = http_task.await {
+            eprintln!("HTTP 任务异常退出：{e}");
+            exit(1);
+        }
+    }
+    #[cfg(not(feature = "alarm"))]
+    serve_http.await;
 }
 
 /// 每天凌晨0点保存一次chat记录和记忆

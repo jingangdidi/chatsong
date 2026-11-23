@@ -25,6 +25,8 @@ pub mod asr;
 #[cfg(any(feature = "tts", feature = "tts-cuda", feature = "tts-metal"))]
 pub mod tts;
 pub mod system_one;
+#[cfg(feature = "alarm")]
+pub mod alarm;
 
 mod handlers;
 mod v1;
