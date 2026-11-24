@@ -652,6 +652,10 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 insert_message(&tmp_uuid, message, None, tmp_time, false, DataType::Normal, None, &client_para.model, None, false);
                             }
                         }
+                        #[cfg(feature = "alarm")]
+                        if is_local {
+                            alarm::flash();
+                        }
                     });
                     // 创建stream对象，接收管道传递的数据
                     //let tmp_uuid = client_para.uuid.clone();
@@ -709,7 +713,9 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                                 event!(Level::ERROR, "{} receive stream error: {}", tmp_uuid, e);
                             }
                             #[cfg(feature = "alarm")]
-                            alarm::flash();
+                            if is_local {
+                                alarm::flash();
+                            }
                         });
                         // 创建stream对象，接收管道传递的数据
                         let tmp_uuid = client_para.uuid.clone();
@@ -762,6 +768,10 @@ pub async fn chat(Query(params): Query<HashMap<String, String>>, uri: OriginalUr
                         let parameters = para_builder.build().map_err(|e| MyError::ChatCompletionError{error: e})?;
                         // 从openai接收完整答案字符串
                         let (whole_answer, thinking_content) = not_use_stream(client_para.uuid.clone(), client, parameters, &client_para.model, true).await?;
+                        #[cfg(feature = "alarm")]
+                        if is_local {
+                            alarm::flash();
+                        }
                         // 创建stream对象，接收管道传递的数据
                         let tmp_uuid = client_para.uuid.clone();
                         let tmp_stream = async_stream::stream! {

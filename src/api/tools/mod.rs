@@ -110,6 +110,9 @@ use built_in_tools::filesystem::screen_capture::Params as ScreenCaptureParams;
 
 use external_tools::ExternalTools;
 
+#[cfg(feature = "alarm")]
+use crate::alarm;
+
 /// html pulldown option selected tools
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SelectedTools {
@@ -1245,6 +1248,10 @@ async fn try_call_tool(
                 } else {
                     approval_msg
                 };
+                #[cfg(feature = "alarm")]
+                if is_local {
+                    alarm::flash();
+                }
                 match ask_approval(uuid, approval_msg, name_id[0] == "edit_file", sender.clone()).await?.as_ref() {
                     "true" => (), // 允许
                     "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this tool: {}", name_id[0])}), // 不允许
@@ -1252,6 +1259,10 @@ async fn try_call_tool(
                     new_prompt => return Err(MyError::PlanModeError{info: format!("skip, this tool has not been executed: {}\n{}", name_id[0], new_prompt)}), // 跳过的新指示
                 }
             } else if let Some(approval_msg) = PARAS.mcp_servers.get_approval(name_id, paras, info, PARAS.english)? { // 所有 MCP 工具都需要允许
+                #[cfg(feature = "alarm")]
+                if is_local {
+                    alarm::flash();
+                }
                 match ask_approval(uuid, approval_msg, false, sender.clone()).await?.as_ref() {
                     "true" => (), // 允许
                     "false" => return Err(MyError::PlanModeError{info: format!("Not allowed to call this mcp tool: {}", name_id[0])}), // 不允许

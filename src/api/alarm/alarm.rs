@@ -6,7 +6,7 @@ use eframe::egui::{self, Color32, Sense, Stroke, ViewportCommand};
 const BALL_SIZE: [f32; 2] = [64.0, 64.0];
 const BALL_RADIUS: f32 = 29.0;
 const RIPPLE_COUNT: u128 = 3;
-const RIPPLE_SPACING_MS: u128 = 420;
+const RIPPLE_SPACING_MS: u128 = 900; // 420
 const RIPPLE_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 const IDLE_FILL: Color32 = Color32::from_rgb(16, 25, 43);
 const IDLE_ICON: Color32 = Color32::from_rgb(114, 218, 255);
@@ -48,6 +48,7 @@ pub fn run() -> eframe::Result {
             .with_resizable(false)
             .with_transparent(true)
             .with_has_shadow(false)
+            .with_taskbar(false) // 不在任务栏显示
             .with_always_on_top(),
         ..Default::default()
     };
