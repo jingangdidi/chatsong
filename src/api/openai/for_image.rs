@@ -212,8 +212,24 @@ pub async fn create_edit_image(uuid: &str, uploaded_image: Option<String>, q: St
 
 /// 文件转base64
 pub fn image_to_base64_helper(file: impl AsRef<Path>) -> Result<String, MyError> {
+    let path = file.as_ref();
+    let ext = path.extension().and_then(|ext| ext.to_str()).map(str::to_ascii_lowercase);
+
+    let mime_type = match ext.as_deref() {
+        Some("png") => "png",
+        Some("jpg" | "jpeg") => "jpeg",
+        Some("gif") => "gif",
+        Some("webp") => "webp",
+        Some("svg") => "svg+xml",
+        Some("bmp") => "bmp",
+        Some("ico") => "vnd.microsoft.icon",
+        Some("avif") => "avif",
+        Some("tif" | "tiff") => "tiff",
+        _ => "png",
+    };
+
     let data: Vec<u8> = read(file)?; // 相当于`File::open`+`read_to_end`，返回`Result<Vec<u8>>`
-    Ok(format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(data)))
+    Ok(format!("data:image/{};base64,{}", mime_type, general_purpose::STANDARD.encode(data)))
 }
 
 /// 图片转base64，返回base64编码的字符串
