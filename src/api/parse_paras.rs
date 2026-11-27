@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::env::{current_dir, current_exe};
 use std::fs::{write, read_to_string, create_dir_all, remove_dir_all}; // remove_dir只删除空文件夹
+use std::net::IpAddr; // 判断字符串 ip 地址是否有效
 use std::path::{Path, PathBuf};
 use std::ops::Deref;
 
@@ -99,6 +100,10 @@ struct Paras {
     #[argh(option, short = 'w')]
     allowed_path: Option<String>,
 
+    /// allowed ip, default no limit
+    #[argh(option, short = 'i')]
+    allowed_ip: Vec<String>,
+
     /// graph file, default: search for the latest *.graph file in the output path
     #[argh(option, short = 'g')]
     graph: Option<String>,
@@ -191,6 +196,7 @@ pub struct ParsedParas {
     #[cfg(feature = "bot")]
     pub channels:     Vec<Channel>,                // 要连接的机器人，当前只支持discord，需要bot的token和guild-id，多个channel`::`间隔，示例：`-C discord:token:guild_id`
     pub allowed_path: Vec<(PathBuf, PathBuf)>,     // allowed path (absolute path (may be not exist), normalized path) for tools, multiple paths separated by commas, default: ./
+    pub allowed_ip:   Option<Vec<String>>,         // allowed ip, 默认 None 表示不限制，可指定自己电脑的ip，只允许自己使用
     pub prompt:       HashMap<usize, [String; 2]>, // 存储prompt
     pub graph:        String,                      // 图文件，默认在指定输出路径下搜索最新的“时间戳.graph”，指定的文件不存在或没有搜索到则创建空图结构，每次使用`ctrl-c`停止服务时程序会自动保存图文件
     pub maxage:       Duration,                    // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
@@ -247,6 +253,7 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
             }
         },
     };
+    let allowed_ip = if !para.allowed_ip.is_empty() { Some(para.allowed_ip) } else { other_para.allowed_ip };
     let deepseek_search_api_key = api.get_deepseek_api_key();
     let gpt_image_api_key = api.get_gpt_image_api_key();
     let out: ParsedParas = ParsedParas{
@@ -315,6 +322,20 @@ pub async fn parse_para() -> Result<ParsedParas, MyError> {
                     get_allowed_path(&other_para.allowed_path)?
                 }
             },
+        },
+        allowed_ip: match allowed_ip { // allowed ip, 默认 None 表示不限制，可指定自己电脑的ip，只允许自己使用
+            Some(ips) => {
+                let mut valid_ips = Vec::new();
+                for ip in ips {
+                    if ip.trim().parse::<IpAddr>().is_ok() {
+                        valid_ips.push(ip);
+                    } else{
+
+                    }
+                }
+                Some(valid_ips)
+            },
+            None => None,
         },
         prompt: if other_para.prompt.len() == 0 {
             create_prompt() // 参数文件没指定prompt，则使用默认prompt，使用索引获取
@@ -706,6 +727,8 @@ struct Para {
     google_engine_key: String,                  // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     google_search_key: String,                  // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     allowed_path:      String,                  // allowed path for tools, multiple paths separated by commas, default: ./
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allowed_ip:        Option<Vec<String>>,     // allowed ip, 默认 None 表示不限制，可指定自己电脑的ip，只允许自己使用
     maxage:            String,                  // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                    // true展示英文界面，false展示中文界面
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -734,6 +757,7 @@ struct OptherPara {
     google_engine_key: String,                      // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     google_search_key: String,                      // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
     allowed_path:      String,                      // allowed path for tools, multiple paths separated by commas, default: ./
+    allowed_ip:        Option<Vec<String>>,         // allowed ip, 默认 None 表示不限制，可指定自己电脑的ip，只允许自己使用
     maxage:            String,                      // cookie过期时间，默认1DAY，支持的单位：SECOND、MINUTE、HOUR、DAY、WEEK
     show_english:      bool,                        // true展示英文界面，false展示中文界面
     skills_path:       Option<String>,              // skills路径
@@ -879,6 +903,7 @@ impl Api {
                     google_engine_key: all_para.google_engine_key,                  // 搜索引擎的key，去google开启并免费获取，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
                     google_search_key: all_para.google_search_key,                  // 搜索api的key，去google开启并免费获取，每天免费100次搜索，使用google api进行搜索时要用，可以输入密码使用srx的search engine key
                     allowed_path:      all_para.allowed_path,                       // allowed path for tools, multiple paths separated by commas, default: ./
+                    allowed_ip:        all_para.allowed_ip,                         // allowed ip, 默认 None 表示不限制，可指定自己电脑的ip，只允许自己使用
                     skills_path:       all_para.skills_path,                        // skills路径
                     memory_path:       all_para.memory_path,                        // memory路径
                     systemone:         all_para.systemone,                          // system one url

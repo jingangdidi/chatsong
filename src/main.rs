@@ -3,6 +3,12 @@ use std::process::exit;
 
 #[cfg(feature = "code-completion")]
 use arboard::Clipboard;
+use axum::{
+    extract::{ConnectInfo, Request, State},
+    http::StatusCode,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
+};
 use chrono::{Days, Local, TimeZone};
 use tokio::net::TcpListener;
 #[cfg(feature = "code-completion")]
@@ -147,7 +153,10 @@ async fn main() {
     // 定义监听地址和端口
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(PARAS.addr[0], PARAS.addr[1], PARAS.addr[2], PARAS.addr[3])), PARAS.port);
     // 创建路由
-    let router = configure();
+    //let router = configure();
+    // 限制允许访问的 ip
+    let router = configure().layer(middleware::from_fn_with_state(PARAS.allowed_ip.clone(), ip_whitelist));
+
     // 开启TCP，也可以直接使用字符串：let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
     let listener = match TcpListener::bind(addr).await {
         Ok(l) => l,
@@ -234,5 +243,27 @@ async fn run_daily_at_midnight() {
                 let _ = memory.save_to_file();
             }
         }
+    }
+}
+
+/// allowed_ips: 允许哪些 ip 访问，None 表示不限制
+async fn ip_whitelist(
+    State(allowed_ips): State<Option<Vec<String>>>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let client_ip = client_addr.ip().to_string();
+
+    let allowed = match allowed_ips {
+        None => true,
+        Some(ips) => ips.iter().any(|ip| ip == &client_ip),
+    };
+
+    if allowed {
+        next.run(request).await
+    } else {
+        event!(Level::WARN, "Reject access from this IP: {}", client_ip);
+        (StatusCode::FORBIDDEN, format!("This IP {} does not have access permission", client_ip)).into_response()
     }
 }
